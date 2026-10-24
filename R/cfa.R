@@ -418,7 +418,7 @@ create_lav_from_fitplFA <- function(fit0, fit1, vars, D, idx_plFA2lav) {
   timing_test <- as.numeric(difftime(end_time, start_time, units = 'secs')[1])
 
   # Change baseline slot -------------------------------------------------------
-  fit0@baseline <- lavaan___lav_lavaan_step15_baseline(
+  fit0@baseline <- lavaan___lav_step15_baseline(
     lavoptions = fit0@Options,
     lavsamplestats = fit0@SampleStats,
     lavdata = fit0@Data,
@@ -446,7 +446,7 @@ create_lav_from_fitplFA <- function(fit0, fit1, vars, D, idx_plFA2lav) {
 }
 
 # Export lavaan functions
-lavaan___lav_lavaan_step15_baseline <-
-  utils::getFromNamespace("lav_lavaan_step15_baseline", "lavaan")
+lavaan___lav_step15_baseline <-
+  utils::getFromNamespace("lav_step15_baseline", "lavaan")
 lavaan___lav_model_test <-
   utils::getFromNamespace("lav_model_test", "lavaan")

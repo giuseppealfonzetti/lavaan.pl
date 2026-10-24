@@ -3,11 +3,10 @@
 #define EIGEN_DONT_PARALLELIZE
 #include <RcppEigen.h>
 #include <RcppParallel.h>
-#include <RcppClock.h>
 #include <random>
 #include <math.h>
 
-// [[Rcpp::depends(RcppEigen, RcppParallel, RcppClock)]]
+// [[Rcpp::depends(RcppEigen, RcppParallel)]]
 #include "genericUtils.h"
 #include "frequencies.h"
 #include "pairs.h"
@@ -111,7 +110,6 @@ Rcpp::List cpp_plSA2(
     const bool VERBOSE,
     bool VERBOSE_ITER=false
 ){
-  // Set up clock monitor to export to R session trough RcppClock
 
   if(!VERBOSE) VERBOSE_ITER=false;
 

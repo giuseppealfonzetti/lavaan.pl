@@ -23,7 +23,6 @@ Imports:
     mvtnorm,
     numDeriv,
     Rcpp (>= 1.0.11),
-    RcppClock (>= 1.1),
     RcppEigen (>= 0.3.3.9.3),
     RcppParallel (>= 5.1.7),
     rlang,
@@ -44,7 +43,6 @@ Suggests:
     ggplot2
 LinkingTo: 
     Rcpp,
-    RcppClock,
     RcppEigen,
     RcppParallel
 VignetteBuilder: 

@@ -1,5 +1,4 @@
 ## usethis namespace: start
-#' @import RcppClock
 #' @import RcppEigen
 #' @import RcppParallel
 #' @importFrom cli col_blue

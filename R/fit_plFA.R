@@ -1,5 +1,3 @@
-utils::globalVariables(c("clock"))
-
 #'Fit factor models for ordinal data with pairwise likelihood methods
 #'
 #'@description
