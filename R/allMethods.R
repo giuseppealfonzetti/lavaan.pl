@@ -162,7 +162,6 @@ setMethod('computeVar', 'PlFaFit',
                        DATA        = DATA,
                        METHOD      = OBJ@method,
                        NUMDERIV    = NUMDERIV,
-                       INVHAPPRX   = OBJ@numFit$invhessian,
                        NCORES      = OBJ@cores,
                        VERBOSE     = VERBOSE)
           }else{
@@ -183,7 +182,6 @@ setMethod('computeVar', 'PlFaFit',
                        DATA        = DATA,
                        METHOD      = OBJ@method,
                        NUMDERIV    = NUMDERIV,
-                       INVHAPPRX   = NULL,
                        NCORES      = OBJ@cores,
                        VERBOSE     = VERBOSE)
           }}
@@ -191,7 +189,7 @@ setMethod('computeVar', 'PlFaFit',
 
 compute_var <- function(THETA, C_VEC, N, IT = NULL, PAIRS = NULL, PPI = NULL,
                         CONSTRMAT, CONSTRLOGSD, LLC, NTHR, NLOAD, NCORR, NVAR,
-                        FREQ, DATA, METHOD, NUMDERIV = F, INVHAPPRX=NULL, NCORES=1,
+                        FREQ, DATA, METHOD, NUMDERIV = F, NCORES=1,
                         VERBOSE = FALSE){
 
   start_time <- Sys.time()
@@ -217,7 +215,7 @@ compute_var <- function(THETA, C_VEC, N, IT = NULL, PAIRS = NULL, PPI = NULL,
   if (isTRUE(VERBOSE)) message('Done! (', round(totaltime, 2),' secs)')
 
   # Sample estimation of of J (and H)
-  if (isTRUE(VERBOSE)) message('- Estimating J...')
+  if (isTRUE(VERBOSE)) message('- Estimating H and J...')
   RcppParallel::setThreadOptions(numThreads = NCORES)
   HJ <- cpp_sample_estimators_HJ(
     THETA = THETA,
@@ -242,7 +240,7 @@ compute_var <- function(THETA, C_VEC, N, IT = NULL, PAIRS = NULL, PPI = NULL,
 
   # Compute H if needed
   opt_noise <- NA
-  Hhat <- NA
+  Hhat <- HJ$H
   if(NUMDERIV){
     if (isTRUE(VERBOSE)) message('- Computing H numerically...')
     # function for gradient
@@ -270,20 +268,11 @@ compute_var <- function(THETA, C_VEC, N, IT = NULL, PAIRS = NULL, PPI = NULL,
     end_time <- Sys.time()
     totaltime <- as.numeric(difftime(end_time, start_time, units = 'secs')[1])
     if (isTRUE(VERBOSE)) message('Done! (', round(totaltime, 2),' secs)')
-  }else{
-    if(is.null(INVHAPPRX)){
-      if (isTRUE(VERBOSE)) message('- Estimating H...')
-      Hhat <- HJ$H
-    }
-
   }
 
-  invH <- INVHAPPRX
-  if(NUMDERIV | is.null(INVHAPPRX)){
-    if (isTRUE(VERBOSE)) message('- Inverting H...')
-    if(!(det(Hhat)>0)) stop('H not invertible.')
-    invH <- solve(Hhat)
-  }
+  if (isTRUE(VERBOSE)) message('- Inverting H...')
+  if(!(det(Hhat)>0)) stop('H not invertible.')
+  invH <- solve(Hhat)
 
 
   vcov <- trJacob %*% invH %*% Jhat %*% invH %*% t(trJacob)

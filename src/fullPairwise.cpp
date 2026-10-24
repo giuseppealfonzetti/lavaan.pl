@@ -80,12 +80,8 @@ Rcpp::List fullPairwise::multiThreadSamplEstHJ(
   const int d  = THETA.size();
   const int pp = FREQ.cols();
   const int n  = DATA.rows();
-  // Initialize vector of indexes for entries in pairs_table
-  std::vector<int> idx(pp) ;
-  std::iota (std::begin(idx), std::end(idx), 0);
+  const int p  = CONSTRMAT.rows();
 
-  // Rcpp::Rcout << "v|theta:\n";
-  // Rcpp::Rcout << THETA.transpose()<<"\n";
   Eigen::MatrixXd gradmat = Eigen::MatrixXd::Zero(d, pp);
   parallelWorkers::patternwiseOuterProd estH(
       CONSTRMAT,
@@ -102,7 +98,7 @@ Rcpp::List fullPairwise::multiThreadSamplEstHJ(
       gradmat
   );
 
-  RcppParallel::parallelReduce(0, pp, estH);
+  RcppParallel::parallelReduce(0, p * (p - 1) / 2, estH);
   Eigen::VectorXd gradH = estH.gradient;
   Eigen::MatrixXd H = estH.hessian;
 

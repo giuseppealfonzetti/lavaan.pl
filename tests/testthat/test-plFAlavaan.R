@@ -160,10 +160,10 @@ test_that("Hinv is the same", {
     )
 
     if (type == "observed")
-      out <- do.call("lav_model_information_observed", lavargs,
+      out <- do.call("lav_model_info_observed", lavargs,
                      envir = asNamespace("lavaan"))
     else if (type == "expected")
-      out <- do.call("lav_model_information_expected", lavargs,
+      out <- do.call("lav_model_info_expected", lavargs,
                      envir = asNamespace("lavaan"))
     else stop("Invalid type")
     return(out)
@@ -172,7 +172,6 @@ test_that("Hinv is the same", {
   # From lavaan.pl
   mod <- "eta1 =~ y1 + y2 + y3 + y4 + y5"
 
-  # Getting Hinv from ucminf for free
   fit <- cfa(mod, LSAT, std.lv = TRUE)
   Hinv1 <- with(fit@external, computeVar(lavaan.pl, D)$invH[idx_plFA2lav, idx_plFA2lav])
 
@@ -184,8 +183,8 @@ test_that("Hinv is the same", {
   # Gtting Hinv from lavaan, which also uses numDeriv
   Hinv3 <- solve(information_matrix(fit, "observed"))
 
-  expect_false(isTRUE(all.equal(Hinv1, Hinv2, tolerance = 1e-5)))  # ucminf vs numDeriv
-  expect_equal(Hinv2, Hinv3, tolerance = 1e-5)  # ucminf vs lavaan
+  expect_equal(Hinv1, Hinv2, tolerance = 1e-5)
+  expect_equal(Hinv1, Hinv3, tolerance = 1e-5)
 
 })
 
@@ -194,9 +193,8 @@ test_that("Jmat is the same", {
   fit1 <- cfa(mod, LSAT, std.lv = TRUE)
   fit2 <- lavaan::cfa(mod, LSAT, std.lv = TRUE, estimator = "PML")
 
-  # Getting Hinv from ucminf for free
   J1 <- with(fit1@external, computeVar(lavaan.pl, D)$J[idx_plFA2lav, idx_plFA2lav])
-  J2 <- lavaan:::lav_model_information_firstorder(
+  J2 <- lavaan:::lav_model_info_firstorder(
     lavmodel =fit2@Model,
     lavsamplestats = fit2@SampleStats,
     lavdata = fit2@Data,

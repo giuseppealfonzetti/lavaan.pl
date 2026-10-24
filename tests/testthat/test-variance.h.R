@@ -121,3 +121,53 @@ if(1){
   })
 
 }
+
+hessian_setups <- list(
+  list(stdlv = FALSE, corrflag = TRUE,  llc = NULL),
+  list(stdlv = TRUE,  corrflag = TRUE,  llc = NULL),
+  list(stdlv = TRUE,  corrflag = FALSE, llc = NULL),
+  list(stdlv = TRUE,  corrflag = TRUE,  llc = list(list(c(2, 1), c(0.5, 3, 1), c(0.25, 1, 1))))
+)
+for (setup in hessian_setups) {
+  set.seed(1)
+  p <- 9; q <- 3; n <- 1000
+  thr <- c(-1, 0.2, 1.4)
+  cat <- rep(length(thr) + 1, p)
+  constrvar <- if (setup$stdlv) NULL else rep(NA, q)
+
+  A <- check_cnstr_loadings(build_constrMat(P = p, Q = q, STRUCT = "crossed", CROSS = 1),
+                            STDLV = setup$stdlv, LLC = setup$llc)
+  Load <- gen_loadings(CONSTRMAT = A, STDLV = setup$stdlv, LLC = setup$llc, LB = .3, UB = .6)
+  ncorr <- if (setup$corrflag) q * (q - 1) / 2 else 0
+  R <- cpp_latvar_vec2cmat(VEC = rnorm(q * (q - 1) / 2) * setup$corrflag, NCORR = ncorr, Q = q)
+  lsd <- check_cnstr_latvar(constrvar, q, setup$stdlv)
+  lsd[is.na(lsd)] <- rnorm(sum(is.na(lsd)), -.3, .1)
+  S <- diag(exp(lsd), q) %*% R %*% diag(exp(lsd), q)
+
+  dat <- sim_data(SAMPLE_SIZE = n, LOADINGS = Load, THRESHOLDS = thr, LATENT_COV = S)
+  constr_list <- check_cnstr(list(CONSTRMAT = A, CORRFLAG = setup$corrflag, CONSTRVAR = constrvar,
+                                  STDLV = setup$stdlv, LLC = setup$llc))
+  dims <- check_dims(dat, constr_list)
+  f <- compute_frequencies(Y = dat, C_VEC = cat)
+
+  theta <- get_theta(THRESHOLDS = rep(thr, p), LOADINGS = Load, LATENT_COV = S, CAT = cat, CONSTRMAT = A,
+                     CONSTRVAR = constrvar, CORRFLAG = setup$corrflag, STDLV = setup$stdlv)
+  theta <- theta + rnorm(length(theta), 0, .05)
+
+  RcppParallel::setThreadOptions(numThreads = 2)
+  HJ <- cpp_sample_estimators_HJ(
+    THETA = theta, FREQ = f, DATA = dat, C_VEC = cat,
+    CONSTRMAT = constr_list$CONSTRMAT, CONSTRLOGSD = constr_list$CONSTRLOGSD, LLC = constr_list$LLC,
+    N = n, CORRFLAG = constr_list$CORRFLAG,
+    NTHR = dims$nthr, NLOAD = dims$nload, NCORR = dims$ncorr, NVAR = dims$nvar
+  )
+  Hnum <- numDeriv::jacobian(full_ngr, theta)
+
+  test_that(paste0("analytic observed Hessian, STDLV:", setup$stdlv, ", CORRFLAG:", setup$corrflag,
+                   ", LLC:", !is.null(setup$llc)), {
+    expect_equal(-HJ$gradH / n, full_ngr(theta))
+    expect_equal(HJ$H, t(HJ$H))
+    expect_equal(HJ$H, (Hnum + t(Hnum)) / 2, tolerance = 1e-4)
+  })
+}
+RcppParallel::setThreadOptions(numThreads = 1)
