@@ -15,7 +15,10 @@
 #'  estimation.
 #'@param VERBOSE `TRUE` for verbose output
 #'
-#'@return Object of class `plFaFit`.
+#'@return Object of class `PlFaFit`: a list with the inputs `data`, `model` and
+#'  `control`, the starting values `init`, the estimates `theta` (use
+#'  [getPar()]), the dimensions `dims`, the optimiser output `numFit` (ucminf)
+#'  or `stoFit` (SA), and the timing `RTime`.
 #'@export
 fit_plFA <- function(
     DATA,

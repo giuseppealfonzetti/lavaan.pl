@@ -43,9 +43,9 @@ for more details. Possible options are:
 \item{\code{computevar_numderiv}}{If \code{TRUE}, the asymptotic variance-covariance matrix is computed using numerical derivatives.}
 }}
 
-\item{start}{A vector of starting values to use (in the order of free
-loadings, thresholds, and then factor correlations). If not provided, the
-starting point is computed according to \code{estimator.args$init}.}
+\item{start}{A vector of starting values in lavaan's free-parameter order
+(as returned by \code{coef()}). If not provided, lavaan's starting values are
+used and refined according to \code{estimator.args$init}.}
 
 \item{control}{Control object of the estimation algorithm: \code{\link[=set_ucminf_control]{set_ucminf_control()}}
 for the quasi-Newton BFGS optimiser (default), \code{\link[=set_sa_control]{set_sa_control()}} for stochastic
@@ -57,9 +57,10 @@ process.}
 \item{...}{Additional arguments to be passed to \code{\link[lavaan:lavaan]{lavaan()}}.}
 }
 \value{
-A \code{plFAlavaan} object, which is a subclass of the \code{lavaan} class.
-Therefore, all methods available for \code{lavaan} objects are expected to be
-compatible with \code{plFAlavaan} objects.
+A \link[lavaan:lavaan]{lavaan::lavaan} object. The lavaan.pl fit, from \code{\link[=fit_plFA]{fit_plFA()}}, and
+its variance components, from \code{\link[=computeVar]{computeVar()}}, are stored in
+\verb{@external$lavaan.pl} and \verb{@external$vars}. Methods for \code{lavaan} objects
+work as usual.
 }
 \description{
 Fit a Confirmatory Factor Analysis (CFA) model using the \code{lavaan.pl()} engine
@@ -73,7 +74,7 @@ interest are:
 \describe{
 \item{\code{information}}{The information matrix to use. Only \code{"observed"} is currently supported.}
 \item{\code{se}}{The standard error method to use. Only \code{"robust.huber.white"} is currently supported.}
-\item{\code{test}}{No GOF tests are available as of now, so this is set to \code{"none"}.}
+\item{\code{test}}{Default \code{"none"}. \code{"standard"} and \code{"mean.var.adjusted"} are computed by lavaan from the lavaan.pl estimates.}
 }
 }
 \examples{

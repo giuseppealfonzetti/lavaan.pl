@@ -7,7 +7,7 @@
 \method{print}{PlFaFit}(x, ...)
 }
 \arguments{
-\item{x}{Object of class StoFit}
+\item{x}{Object of class PlFaFit}
 
 \item{...}{Additional arguments}
 }

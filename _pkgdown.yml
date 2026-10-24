@@ -25,13 +25,18 @@ reference:
   - title: lavaan wrapper
     contents:
       - cfa
+      - as_lavaan
 
   - title: Original functions
     contents:
       - fit_plFA
+      - print.PlFaFit
       - getPar
       - contains("compute")
-      - contains("show")
+
+  - title: Inputs and controls
+    contents:
+      - starts_with("set_")
 
   - title: Generating data
     contents:
@@ -42,10 +47,8 @@ reference:
     contents:
       - build_constrMat
       - contains("get")
-      - contains("estimate")
       - extract_par
       - pairs_freq
-      - contains("extract")
 
   - title: C++ exports
     contents:
@@ -55,7 +58,3 @@ reference:
     contents:
       - LSAT
       - bfi
-
-  - title: S4 classes
-    contents:
-      - contains("class")

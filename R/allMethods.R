@@ -1,5 +1,5 @@
 #' Show method for the output of fit_plFA()
-#' @param x Object of class StoFit
+#' @param x Object of class PlFaFit
 #' @param ... Additional arguments
 #' @export
 print.PlFaFit <- function(x, ...){
@@ -79,7 +79,7 @@ print.plfa_model <- function(x, ...) {
 
 #' Extract parameters
 #'
-#' @param OBJ Object of class StoFit, PlFaFit. Also usable on raw theta vector to extract \code{'transformed'} and \code{'list'}.
+#' @param OBJ Object of class PlFaFit. Also usable on raw theta vector to extract \code{'transformed'} and \code{'list'}.
 #' @param ... Additional arguments
 #' @export
 getPar <- function(OBJ, ...) UseMethod('getPar')
@@ -172,19 +172,25 @@ extract_par <- function(THETA, OPTION = c('list', 'raw', 'transformed'),
 }
 
 #' Compute variance of the estimates
-#' @param OBJ Object of class plFaFit
+#' @param OBJ Object of class PlFaFit
 #' @param NUMDERIV TRUE if the hessian must be computed using \link[numDeriv]{jacobian}
-#' @param OPTION `transformed` if correlations are of interest. `raw` for inference on the reparametrised level.
 #' @param VERBOSE TRUE if the function must print messages
+#' @return A list with the Jacobian `trJacob` of the transformation to
+#'   interpretable parameters, `H`, `J`, the sandwich `vcov` and its diagonal
+#'   `asymptotic_variance` on the transformed scale, `optimisation_noise` (SA
+#'   fits only) and the timing `RTime`.
 #' @export
-computeVar <- function(OBJ, NUMDERIV = F, OPTION = 'transformed', VERBOSE = FALSE) UseMethod('computeVar')
+computeVar <- function(OBJ, NUMDERIV = F, VERBOSE = FALSE) UseMethod('computeVar')
 #' Compute variance of the estimates
-#' @param OBJ Object of class plFaFit
+#' @param OBJ Object of class PlFaFit
 #' @param NUMDERIV TRUE if the hessian must be computed using \link[numDeriv]{jacobian}
-#' @param OPTION `transformed` if correlations are of interest. `raw` for inference on the reparametrised level.
 #' @param VERBOSE TRUE if the function must print messages
+#' @return A list with the Jacobian `trJacob` of the transformation to
+#'   interpretable parameters, `H`, `J`, the sandwich `vcov` and its diagonal
+#'   `asymptotic_variance` on the transformed scale, `optimisation_noise` (SA
+#'   fits only) and the timing `RTime`.
 #' @export
-computeVar.PlFaFit <- function(OBJ, NUMDERIV = F, OPTION = 'transformed', VERBOSE = FALSE){ if(OBJ$method == 'ucminf'){
+computeVar.PlFaFit <- function(OBJ, NUMDERIV = F, VERBOSE = FALSE){ if(OBJ$method == 'ucminf'){
             compute_var(THETA      = OBJ$theta,
                        C_VEC       = OBJ$dims$cat,
                        N           = OBJ$dims$n,

@@ -4,16 +4,20 @@
 \alias{computeVar.PlFaFit}
 \title{Compute variance of the estimates}
 \usage{
-\method{computeVar}{PlFaFit}(OBJ, NUMDERIV = F, OPTION = "transformed", VERBOSE = FALSE)
+\method{computeVar}{PlFaFit}(OBJ, NUMDERIV = F, VERBOSE = FALSE)
 }
 \arguments{
-\item{OBJ}{Object of class plFaFit}
+\item{OBJ}{Object of class PlFaFit}
 
 \item{NUMDERIV}{TRUE if the hessian must be computed using \link[numDeriv]{jacobian}}
 
-\item{OPTION}{\code{transformed} if correlations are of interest. \code{raw} for inference on the reparametrised level.}
-
 \item{VERBOSE}{TRUE if the function must print messages}
+}
+\value{
+A list with the Jacobian \code{trJacob} of the transformation to
+interpretable parameters, \code{H}, \code{J}, the sandwich \code{vcov} and its diagonal
+\code{asymptotic_variance} on the transformed scale, \code{optimisation_noise} (SA
+fits only) and the timing \code{RTime}.
 }
 \description{
 Compute variance of the estimates

@@ -30,7 +30,10 @@ estimation.}
 \item{VERBOSE}{\code{TRUE} for verbose output}
 }
 \value{
-Object of class \code{plFaFit}.
+Object of class \code{PlFaFit}: a list with the inputs \code{data}, \code{model} and
+\code{control}, the starting values \code{init}, the estimates \code{theta} (use
+\code{\link[=getPar]{getPar()}}), the dimensions \code{dims}, the optimiser output \code{numFit} (ucminf)
+or \code{stoFit} (SA), and the timing \code{RTime}.
 }
 \description{
 Fit latent variable models for ordinal variable using pairwise likelihood

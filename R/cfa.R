@@ -10,7 +10,7 @@
 #' \describe{
 #'   \item{\code{information}}{The information matrix to use. Only `"observed"` is currently supported.}
 #'   \item{\code{se}}{The standard error method to use. Only `"robust.huber.white"` is currently supported.}
-#'   \item{\code{test}}{No GOF tests are available as of now, so this is set to `"none"`.}
+#'   \item{\code{test}}{Default `"none"`. `"standard"` and `"mean.var.adjusted"` are computed by lavaan from the lavaan.pl estimates.}
 #' }
 #'
 #' @param model A description of the user-specified model. Typically, the model
@@ -23,9 +23,9 @@
 #'   fixing their (residual) variances to 1.0. If `FALSE`, the metric of each
 #'   latent variable is determined by fixing the factor loading of the first
 #'   indicator to 1.0.
-#' @param start A vector of starting values to use (in the order of free
-#'   loadings, thresholds, and then factor correlations). If not provided, the
-#'   starting point is computed according to `estimator.args$init`.
+#' @param start A vector of starting values in lavaan's free-parameter order
+#'   (as returned by `coef()`). If not provided, lavaan's starting values are
+#'   used and refined according to `estimator.args$init`.
 #' @param estimator The estimator is `PML`. If any other estimator is provided,
 #'   then [`lavaan::cfa()`] is used.
 #' @param estimator.args A list of arguments for [fit_plFA()]--see the help file
@@ -43,9 +43,10 @@
 #'   process.
 #' @param ... Additional arguments to be passed to [lavaan()].
 #'
-#' @returns A `plFAlavaan` object, which is a subclass of the `lavaan` class.
-#'   Therefore, all methods available for `lavaan` objects are expected to be
-#'   compatible with `plFAlavaan` objects.
+#' @returns A [lavaan::lavaan] object. The lavaan.pl fit, from [fit_plFA()], and
+#'   its variance components, from [computeVar()], are stored in
+#'   `@external$lavaan.pl` and `@external$vars`. Methods for `lavaan` objects
+#'   work as usual.
 #'
 #' @references
 #'
@@ -161,7 +162,6 @@ cfa <- function(
     vars <- computeVar(
       OBJ = fit,
       NUMDERIV = computevar_numderiv,
-      OPTION = "transformed",
       VERBOSE = verbose
     )
   }
