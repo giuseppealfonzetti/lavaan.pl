@@ -6,70 +6,26 @@
 \usage{
 fit_plFA(
   DATA,
-  CONSTR_LIST,
-  METHOD = c("ucminf", "SA"),
-  INIT_METHOD = c("standard", "custom", "SA"),
+  MODEL,
+  CONTROL = set_ucminf_control(),
+  INIT = set_init(),
   NCORES = 1,
-  VALDATA = NULL,
-  CONTROL = list(),
-  CPP_CONTROL_MAIN = NULL,
-  CPP_CONTROL_INIT = NULL,
-  INIT = NULL,
   VERBOSE = FALSE
 )
 }
 \arguments{
-\item{DATA}{Integer data matrix of dimension \eqn{n*p}. Categories must be
-coded starting from zero.}
+\item{DATA}{Data object from \code{\link[=set_plfa_data]{set_plfa_data()}}.}
 
-\item{CONSTR_LIST}{List of constraints. It must contain \tabular{ll}{
-\code{CONSTRMAT} \tab \eqn{p*q}-dimensional matrix. Elements set to \code{NA}
-refers to free loading parameters. Elements set to numerical values denote
-fixed values constraints. \cr \tab \cr \code{CONSTRVAR} \tab
-\eqn{q}-dimensional vector. Elements set to \code{NA} refers to free latent
-variance parameters. Elements set to numerical values denote fixed values
-constraints. \cr \tab \cr \code{CORRFLAG} \tab Logical indicator. Set it to
-\code{FALSE} if the latent variables are assumed to be independent. Set it \code{TRUE}
-otherwise. \cr \tab \cr \code{STDLV} \tab Logical indicator. Set it to
-\code{TRUE} to fix latent variables scale. Set it \code{FALSE} to fix loadings scale.
-\cr    \tab \cr \code{LLC} \tab Linear loadings constraints. Expects a list
-of constraints. See DETAILS. \cr }}
+\item{MODEL}{Model object from \code{\link[=set_plfa_model]{set_plfa_model()}}.}
 
-\item{METHOD}{Label for the method chosen. Possible values are: \tabular{ll}{
-\code{'ucminf'} \tab for estimation via the quasi-Newton BFGS optimiser from
-the \code{ucminf} package. Used as default method. \cr \tab \cr \code{'SA'}
-\tab for estimation via Stochastic Approximations. \cr }}
+\item{CONTROL}{Control object of the main optimiser: \code{\link[=set_ucminf_control]{set_ucminf_control()}}
+for the quasi-Newton BFGS optimiser from the \code{ucminf} package,
+\code{\link[=set_sa_control]{set_sa_control()}} for Stochastic Approximations.}
 
-\item{INIT_METHOD}{\tabular{ll}{ \code{'custom'} \tab Uses the vector provided
-via \code{INIT} as starting point. \cr \tab \cr \code{'standard'} \tab Uses cold
-initialisation where loadings are initialised at \code{0.5} and the latent
-covariance matrix as an Identity matrix. \cr \tab \cr \code{'SA'} \tab
-Computes the starting point using a short chain of stochastic updates.
-Updates start from the \code{standard} initialisation point. Set as default
-method. \cr }}
+\item{INIT}{Starting values object from \code{\link[=set_init]{set_init()}}.}
 
 \item{NCORES}{Integer value setting the number of threads to carry out the
 estimation.}
-
-\item{VALDATA}{Validation data used to monitor convergence of stochastic
-approximations. If \code{NULL}, data passed via \code{DATA} is used for monitoring
-purposes.}
-
-\item{CONTROL}{List of control options to pass to \code{ucminf}. See
-\link[ucminf:ucminf]{ucminf::ucminf} documentation.}
-
-\item{CPP_CONTROL_MAIN}{List of control options to pass to the \code{SA} optimiser
-when \code{METHOD="SA"}: \tabular{ll}{ \code{PAIRS_PER_ITERATION} \tab  Number of
-pairs to draw at each iteration.   \cr \tab \cr \code{MAXT} \tab  Maximum
-number of iterations.\cr \tab \cr \code{BURN} \tab  Maximum number of
-iterations to burn before trajectory averaging.\cr \tab \cr \code{STEP0}
-\tab  Initial step length.\cr }}
-
-\item{CPP_CONTROL_INIT}{List of control options to pass to the \code{SA} optimiser
-when \code{INIT_METHOD="SA"}. See \code{CPP_CONTROL_MAIN} for details.}
-
-\item{INIT}{Initialising vector. If not provided, the starting point is
-computed according to \code{INIT_METHOD}}
 
 \item{VERBOSE}{\code{TRUE} for verbose output}
 }
@@ -79,14 +35,4 @@ Object of class \code{plFaFit}.
 \description{
 Fit latent variable models for ordinal variable using pairwise likelihood
 methods running via quasi-Newton BFGS or stochastic approximations.
-}
-\details{
-The argument CONSTR_LIST$LLC is expected to be a list of constraints,
-e.g. \code{CONSTR_LIST$LLC <- list(constraint_1, constraint2, ...)}, where each
-constraint is defined by a list itself. For example, to impose the
-constraint "L_(2,1)=0.5L_(5,2)+0.25L_(9,3)" you have to write \code{constraint_1 <- list(c(2,1), c(0.5,5,2), c(0.25, 9,3))}. That is: the first vector of the
-list is 2-dimensional and stores the coordinates of the constrained loading.
-Each of the successive triplets represent a linear coefficient followed by
-the coordinates of the loading of reference. You can set up an arbitrary
-number of triplets in each constraint.
 }

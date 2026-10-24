@@ -19,8 +19,7 @@ The LSAT is a classical example in educational testing for measuring
   latent ability scale.
 }
 \examples{
-library(tidyverse)
-glimpse(LSAT)
+str(LSAT)
 
 }
 \references{

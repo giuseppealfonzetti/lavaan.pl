@@ -24,8 +24,7 @@ retains only complete cases of all variables.
 The bfi data set and items should not be confused with the BFI (Big Five Inventory) of Oliver John and colleagues (John, O. P., Donahue, E. M., & Kentle, R. L. (1991). The Big Five Inventory--Versions 4a and 54. Berkeley, CA: University of California,Berkeley, Institute of Personality and Social Research.)
 }
 \examples{
-library(tidyverse)
-glimpse(bfi)
+str(bfi)
 
 }
 \references{

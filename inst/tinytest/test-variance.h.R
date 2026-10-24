@@ -8,7 +8,7 @@ nthr <- sum(cat)-p
 
 full_ngr <- function(par_vec){
   n <- dims$n
-  mod <- cpp_multiThread_completePairwise(
+  mod <- lavaan.pl:::cpp_multiThread_completePairwise(
     N          = dims$n,
     C_VEC      = dims$cat,
     CONSTRMAT  = constr_list$CONSTRMAT,
@@ -38,7 +38,7 @@ if(1){
   # Simple loading matrix constraints
   A <- build_constrMat(P = p, Q = q, STRUCT = 'simple')
   llc <- NULL
-  A <- check_cnstr_loadings(A, STDLV=stdlv, LLC = llc)
+  A <- lavaan.pl:::check_cnstr_loadings(A, STDLV=stdlv, LLC = llc)
 
 
   # Draw some random loadings according to constraints
@@ -48,12 +48,12 @@ if(1){
   # Generate random latent correlation matrix
   tcorrvec <- rep(0, q*(q-1)/2); if(corrflag) tcorrvec <- rnorm(q*(q-1)/2)
   ncorr <- if(corrflag)q*(q-1)/2 else 0
-  R <- cpp_latvar_vec2cmat(VEC=tcorrvec, NCORR=ncorr, Q=q)
+  R <- lavaan.pl:::cpp_latvar_vec2cmat(VEC=tcorrvec, NCORR=ncorr, Q=q)
 
 
   # Generate random latent variances
   constr_var <- rep(NA, q)
-  constr_lsd <- check_cnstr_latvar(constr_var, q, stdlv)
+  constr_lsd <- lavaan.pl:::check_cnstr_latvar(constr_var, q, stdlv)
   nvar  <- sum(is.na(constr_lsd))
   tsdvec <- constr_lsd
   tsdvec[is.na(constr_lsd)] <- rnorm(sum(is.na(constr_lsd)), -.5, .1)
@@ -87,12 +87,12 @@ if(1){
     LATENT_COV = S)
   f <- compute_frequencies(Y = dat, C_VEC = cat)
 
-  dat <- check_data(dat)
-  constr_list <- check_cnstr(list(CONSTRMAT=A, CORRFLAG=corrflag, CONSTRVAR=exp(constr_lsd)^2, STDLV=stdlv, LLC=llc))
-  dims <- check_dims(dat, constr_list)
+  dat <- lavaan.pl:::check_data(dat)
+  constr_list <- lavaan.pl:::check_cnstr(list(CONSTRMAT=A, CORRFLAG=corrflag, CONSTRVAR=exp(constr_lsd)^2, STDLV=stdlv, LLC=llc))
+  dims <- lavaan.pl:::check_dims(dat, constr_list)
 
   RcppParallel::setThreadOptions(numThreads = 1)
-  HJ <- cpp_sample_estimators_HJ(
+  HJ <- lavaan.pl:::cpp_sample_estimators_HJ(
     THETA = theta,
     FREQ = f,
     DATA = dat,
@@ -108,7 +108,8 @@ if(1){
     NVAR = dims$nvar
   )
 
-  test_that("check total gradient", {
+  # check total gradient
+  local({
     expect_equal(
       -HJ$gradH/n,
       full_ngr(theta)
@@ -137,19 +138,19 @@ for (setup_name in names(hessian_setups)) {
   cat <- rep(length(thr) + 1, p)
   constrvar <- if (setup$stdlv) NULL else rep(NA, q)
 
-  A <- check_cnstr_loadings(build_constrMat(P = p, Q = q, STRUCT = "crossed", CROSS = 1),
+  A <- lavaan.pl:::check_cnstr_loadings(build_constrMat(P = p, Q = q, STRUCT = "crossed", CROSS = 1),
                             STDLV = setup$stdlv, LLC = setup$llc)
   Load <- gen_loadings(CONSTRMAT = A, STDLV = setup$stdlv, LLC = setup$llc, LB = .3, UB = .6)
   ncorr <- if (setup$corrflag) q * (q - 1) / 2 else 0
-  R <- cpp_latvar_vec2cmat(VEC = rnorm(q * (q - 1) / 2) * setup$corrflag, NCORR = ncorr, Q = q)
-  lsd <- check_cnstr_latvar(constrvar, q, setup$stdlv)
+  R <- lavaan.pl:::cpp_latvar_vec2cmat(VEC = rnorm(q * (q - 1) / 2) * setup$corrflag, NCORR = ncorr, Q = q)
+  lsd <- lavaan.pl:::check_cnstr_latvar(constrvar, q, setup$stdlv)
   lsd[is.na(lsd)] <- rnorm(sum(is.na(lsd)), -.3, .1)
   S <- diag(exp(lsd), q) %*% R %*% diag(exp(lsd), q)
 
   dat <- sim_data(SAMPLE_SIZE = n, LOADINGS = Load, THRESHOLDS = thr, LATENT_COV = S)
-  constr_list <- check_cnstr(list(CONSTRMAT = A, CORRFLAG = setup$corrflag, CONSTRVAR = constrvar,
+  constr_list <- lavaan.pl:::check_cnstr(list(CONSTRMAT = A, CORRFLAG = setup$corrflag, CONSTRVAR = constrvar,
                                   STDLV = setup$stdlv, LLC = setup$llc))
-  dims <- check_dims(dat, constr_list)
+  dims <- lavaan.pl:::check_dims(dat, constr_list)
   f <- compute_frequencies(Y = dat, C_VEC = cat)
 
   theta <- get_theta(THRESHOLDS = rep(thr, p), LOADINGS = Load, LATENT_COV = S, CAT = cat, CONSTRMAT = A,
@@ -157,7 +158,7 @@ for (setup_name in names(hessian_setups)) {
   theta <- theta + rnorm(length(theta), 0, .05)
 
   RcppParallel::setThreadOptions(numThreads = 2)
-  HJ <- cpp_sample_estimators_HJ(
+  HJ <- lavaan.pl:::cpp_sample_estimators_HJ(
     THETA = theta, FREQ = f, DATA = dat, C_VEC = cat,
     CONSTRMAT = constr_list$CONSTRMAT, CONSTRLOGSD = constr_list$CONSTRLOGSD, LLC = constr_list$LLC,
     N = n, CORRFLAG = constr_list$CORRFLAG,
@@ -165,7 +166,7 @@ for (setup_name in names(hessian_setups)) {
   )
   Hnum <- numDeriv::jacobian(full_ngr, theta)
 
-  test_that(paste0("analytic observed Hessian: ", setup_name), {
+  local({
     expect_equal(-HJ$gradH / n, full_ngr(theta))
     expect_equal(HJ$H, t(HJ$H))
     expect_equal(HJ$H, (Hnum + t(Hnum)) / 2, tolerance = 1e-4)

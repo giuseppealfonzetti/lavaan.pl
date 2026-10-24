@@ -16,7 +16,7 @@ if(1){
 
   # Simple loading matrix constraints
   A <- build_constrMat(P = p, Q = q, STRUCT = 'simple')
-  A <- check_cnstr_loadings(A, stdlv)
+  A <- lavaan.pl:::check_cnstr_loadings(A, stdlv)
 
   # Draw some random loadings according to constraints
   Load <- gen_loadings(CONSTRMAT = A, STDLV = stdlv)
@@ -25,12 +25,12 @@ if(1){
   # Generate random latent correlation matrix
   tcorrvec <- rep(0, q*(q-1)/2); if(corrflag) tcorrvec <- rnorm(q*(q-1)/2)
   ncorr <- if(corrflag)q*(q-1)/2 else 0
-  R <- cpp_latvar_vec2cmat(VEC=tcorrvec, NCORR=ncorr, Q=q)
+  R <- lavaan.pl:::cpp_latvar_vec2cmat(VEC=tcorrvec, NCORR=ncorr, Q=q)
 
 
   # Generate random latent variances
   constr_var <- rep(NA, q)
-  constr_lsd <- check_cnstr_latvar(constr_var, q, stdlv)
+  constr_lsd <- lavaan.pl:::check_cnstr_latvar(constr_var, q, stdlv)
   nvar  <- sum(is.na(constr_lsd))
   tsdvec <- constr_lsd
   tsdvec[is.na(constr_lsd)] <- rnorm(sum(is.na(constr_lsd)), -.25, .1)
@@ -59,15 +59,15 @@ if(1){
     LOADINGS = Load,
     THRESHOLDS = thr,
     LATENT_COV = S)
-  constr_list <- check_cnstr(list(CONSTRMAT=A, CORRFLAG=corrflag, CONSTRVAR=exp(constr_lsd)^2, STDLV=stdlv))
+  constr_list <- lavaan.pl:::check_cnstr(list(CONSTRMAT=A, CORRFLAG=corrflag, CONSTRVAR=exp(constr_lsd)^2, STDLV=stdlv))
   f <- compute_frequencies(Y = dat, C_VEC = cat)
-  dims <- check_dims(dat, constr_list)
-  init <- check_init(NULL, f, dims, constr_list, INIT_METHOD = "standard", FALSE)
+  dims <- lavaan.pl:::check_dims(dat, constr_list)
+  init <- lavaan.pl:::check_init(NULL, f, dims, constr_list, INIT_METHOD = "standard", FALSE)
   init
 
 
 
-  fit <- cpp_plSA2(
+  fit <- lavaan.pl:::cpp_plSA2(
     FREQ = f,
     VALFREQ = f,
     N = n,
@@ -98,7 +98,9 @@ if(1){
     VERBOSE_ITER=FALSE
   )
 
-  test_that("check param from SA", {lapply(fit$path_avtheta, function(x) expect_true(all(is.finite(x))))})
-  test_that("check nll from SA", {expect_true(all(is.finite(fit$path_nll)))})
+  # check param from SA
+  local({lapply(fit$path_avtheta, function(x) expect_true(all(is.finite(x))))})
+  # check nll from SA
+  local({expect_true(all(is.finite(fit$path_nll)))})
 
 }

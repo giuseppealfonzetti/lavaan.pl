@@ -1,5 +1,6 @@
 #### test compute_frequencies() ####
-test_that("compute_frequencies() output", {
+# compute_frequencies() output
+local({
   set.seed(123)
   p <- 10; q <- 2; n <- 10
   y <- matrix(as.numeric(rbinom(n*p, 1, .5)), n, p)
@@ -11,7 +12,8 @@ test_that("compute_frequencies() output", {
   expect_identical(sum(!is.finite(f)), 0L)
 })
 
-test_that("compute_frequencies() errors", {
+# compute_frequencies() errors
+local({
   set.seed(123)
   p <- 10; q <- 2; n <- 10
   y <- matrix(as.numeric(rbinom(n*p, 1, .5)), n, p)
@@ -22,7 +24,8 @@ test_that("compute_frequencies() errors", {
 })
 
 #### test build_constrMat() ####
-test_that("build_constrMat() output", {
+# build_constrMat() output
+local({
   p <- 10; q <- 2
   A <- is.na(build_constrMat(P = p, Q = q, STRUCT = 'triangular'))
   expect_equal(sum(A), (p*q)-(q*(q-1)/2))
@@ -36,7 +39,8 @@ test_that("build_constrMat() output", {
 
 #### test gen_loadings() ####
 
-test_that("gen_loadings() errors", {
+# gen_loadings() errors
+local({
   p <- 10; q <- 2
   A <- build_constrMat(P = p, Q = q, STRUCT = 'triangular')
   expect_error(gen_loadings(CONSTRMAT = 2))

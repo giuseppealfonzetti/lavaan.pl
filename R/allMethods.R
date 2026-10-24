@@ -19,7 +19,8 @@ print.PlFaFit <- function(x, ...){
 
     cat(
       "- Numerical estimate obtained via ucminf.\n\n",
-      "   Total time:", round(x$RTime, 2), "s (Data reduction:", round(x$freqTime,2), "s)\n",
+      "   Estimation time:", round(x$RTime, 2), "s\n",
+      "   Data reduction:", round(x$data$freqTime,2), "s (in set_plfa_data())\n",
       "   Cores used:", x$cores, "\n",
 
       "\n- Use getPar() to extract parameter estimates."
@@ -28,15 +29,51 @@ print.PlFaFit <- function(x, ...){
   }else{
     cat(
       "- Stochastic estimate\n\n",
-      "    Pairs per iteration:", x$stoFit$control$PAIRS_PER_ITERATION, " out of ", x$dims$pairs, "\n",
+      "    Pairs per iteration:", x$control$PAIRS_PER_ITERATION, " out of ", x$dims$pairs, "\n",
       "    Iterations:", x$stoFit$last_iter, "\n",
-      "    Total time:", round(x$RTime, 2), "s (Data reduction:", round(x$freqTime,2), "s)\n",
+      "    Estimation time:", round(x$RTime, 2), "s\n",
+      "    Data reduction:", round(x$data$freqTime,2), "s (in set_plfa_data())\n",
       "    Cores used:", x$cores, "\n",
 
 
       "\n- Use getPar() to extract parameter estimates."
     )
   }
+  invisible(x)
+}
+
+#' Print method for `plfa_data` objects
+#'
+#' @param x A `plfa_data` object.
+#' @param ... Ignored.
+#'
+#' @rdname set_plfa_data
+#' @export
+print.plfa_data <- function(x, ...) {
+  cat(
+    "<plfa_data>", x$n, "observations,", x$p, "items (", x$p * (x$p - 1) / 2, "pairs )\n",
+    " Categories per item:", paste(range(x$cat), collapse = " to "), "\n",
+    " Validation data:", if (is.null(x$valfreq)) "none" else "yes", "\n"
+  )
+  invisible(x)
+}
+
+#' Print method for `plfa_model` objects
+#'
+#' @param x A `plfa_model` object.
+#' @param ... Ignored.
+#'
+#' @rdname set_plfa_model
+#' @export
+print.plfa_model <- function(x, ...) {
+  cat(
+    "<plfa_model>", x$p, "items,", x$q, "latent variables\n",
+    " Free loadings:", sum(is.na(x$CONSTRMAT)), "\n",
+    " Latent correlations:", if (x$q == 1) "none" else if (x$CORRFLAG) "free" else "fixed to zero", "\n",
+    " Latent variances:", if (anyNA(x$CONSTRLOGSD)) "free" else "fixed", "\n",
+    " Linear loading constraints:", length(x$LLC), "\n",
+    " Identification:", if (x$STDLV) "standardised latent variables" else "marker loadings", "\n"
+  )
   invisible(x)
 }
 
@@ -52,9 +89,9 @@ getPar <- function(OBJ, ...) UseMethod('getPar')
 #' @param ... Additional arguments
 #' @export
 getPar.PlFaFit <- function(OBJ, ...) extract_par(THETA       = OBJ$theta,
-                                                              CONSTRMAT   = OBJ$cnstr$loadings,
-                                                              CONSTRLOGSD = OBJ$cnstr$loglatsd,
-                                                              LLC         = OBJ$cnstr$llc,
+                                                              CONSTRMAT   = OBJ$model$CONSTRMAT,
+                                                              CONSTRLOGSD = OBJ$model$CONSTRLOGSD,
+                                                              LLC         = OBJ$model$LLC,
                                                               NTHR        = OBJ$dims$nthr,
                                                               NLOAD       = OBJ$dims$nload,
                                                               NCORR       = OBJ$dims$ncorr,
@@ -136,35 +173,33 @@ extract_par <- function(THETA, OPTION = c('list', 'raw', 'transformed'),
 
 #' Compute variance of the estimates
 #' @param OBJ Object of class plFaFit
-#' @param DATA Original data
 #' @param NUMDERIV TRUE if the hessian must be computed using \link[numDeriv]{jacobian}
 #' @param OPTION `transformed` if correlations are of interest. `raw` for inference on the reparametrised level.
 #' @param VERBOSE TRUE if the function must print messages
 #' @export
-computeVar <- function(OBJ, DATA, NUMDERIV = F, OPTION = 'transformed', VERBOSE = FALSE) UseMethod('computeVar')
+computeVar <- function(OBJ, NUMDERIV = F, OPTION = 'transformed', VERBOSE = FALSE) UseMethod('computeVar')
 #' Compute variance of the estimates
 #' @param OBJ Object of class plFaFit
-#' @param DATA Original data
 #' @param NUMDERIV TRUE if the hessian must be computed using \link[numDeriv]{jacobian}
 #' @param OPTION `transformed` if correlations are of interest. `raw` for inference on the reparametrised level.
 #' @param VERBOSE TRUE if the function must print messages
 #' @export
-computeVar.PlFaFit <- function(OBJ, DATA, NUMDERIV = F, OPTION = 'transformed', VERBOSE = FALSE){ if(OBJ$method == 'ucminf'){
+computeVar.PlFaFit <- function(OBJ, NUMDERIV = F, OPTION = 'transformed', VERBOSE = FALSE){ if(OBJ$method == 'ucminf'){
             compute_var(THETA      = OBJ$theta,
                        C_VEC       = OBJ$dims$cat,
                        N           = OBJ$dims$n,
                        IT          = NULL,
                        PAIRS       = NULL,
                        PPI         = NULL,
-                       CONSTRMAT   = OBJ$cnstr$loadings,
-                       CONSTRLOGSD = OBJ$cnstr$loglatsd,
-                       LLC         = OBJ$cnstr$llc,
+                       CONSTRMAT   = OBJ$model$CONSTRMAT,
+                       CONSTRLOGSD = OBJ$model$CONSTRLOGSD,
+                       LLC         = OBJ$model$LLC,
                        NTHR        = OBJ$dims$nthr,
                        NLOAD       = OBJ$dims$nload,
                        NCORR       = OBJ$dims$ncorr,
                        NVAR        = OBJ$dims$nvar,
-                       FREQ        = OBJ$freq,
-                       DATA        = DATA,
+                       FREQ        = OBJ$data$freq,
+                       DATA        = OBJ$data$Y,
                        METHOD      = OBJ$method,
                        NUMDERIV    = NUMDERIV,
                        NCORES      = OBJ$cores,
@@ -173,18 +208,18 @@ computeVar.PlFaFit <- function(OBJ, DATA, NUMDERIV = F, OPTION = 'transformed', 
             compute_var(THETA      = OBJ$theta,
                        C_VEC       = OBJ$dims$cat,
                        N           = OBJ$dims$n,
-                       IT          = OBJ$stoFit$last_iter - OBJ$stoFit$control$BURN,
+                       IT          = OBJ$stoFit$last_iter - OBJ$control$BURN,
                        PAIRS       = OBJ$dims$pairs,
-                       PPI         = OBJ$stoFit$control$PAIRS_PER_ITERATION,
-                       CONSTRMAT   = OBJ$cnstr$loadings,
-                       CONSTRLOGSD = OBJ$cnstr$loglatsd,
-                       LLC         = OBJ$cnstr$llc,
+                       PPI         = OBJ$control$PAIRS_PER_ITERATION,
+                       CONSTRMAT   = OBJ$model$CONSTRMAT,
+                       CONSTRLOGSD = OBJ$model$CONSTRLOGSD,
+                       LLC         = OBJ$model$LLC,
                        NTHR        = OBJ$dims$nthr,
                        NLOAD       = OBJ$dims$nload,
                        NCORR       = OBJ$dims$ncorr,
                        NVAR        = OBJ$dims$nvar,
-                       FREQ        = OBJ$freq,
-                       DATA        = DATA,
+                       FREQ        = OBJ$data$freq,
+                       DATA        = OBJ$data$Y,
                        METHOD      = OBJ$method,
                        NUMDERIV    = NUMDERIV,
                        NCORES      = OBJ$cores,
@@ -309,7 +344,6 @@ compute_var <- function(THETA, C_VEC, N, IT = NULL, PAIRS = NULL, PPI = NULL,
 
 }
 
-#' @importFrom rlang .data
 plotTraj <- function(OBJ) UseMethod('plotTraj')
 #' @export
 plotTraj.PlFaFit <- function(OBJ){
@@ -319,35 +353,27 @@ plotTraj.PlFaFit <- function(OBJ){
     return(NULL)
   }
 
-  if (!requireNamespace(c("dplyr", "tidyr", "purrr", "ggplot2"), quietly = TRUE)) {
-    warning('{dplyr}, {tidyr}, {purrr}, {ggplot2} must be installed to plot trajectories.\n
+  if (!requireNamespace("tinyplot", quietly = TRUE)) {
+    warning('{tinyplot} must be installed to plot trajectories.\n
             The trajectories list will be returned.')
     return(list(iters=OBJ$stoFit$path$iters, theta=OBJ$stoFit$path$avtheta))
   }
 
-  dplyr::tibble(iter=OBJ$stoFit$path$iters, theta=OBJ$stoFit$path$avtheta) |>
-    dplyr::mutate(theta=purrr::map(.data$theta, ~{dplyr::tibble( par=extract_par(
-      THETA=.x, OPTION = c('transformed'),
-      CONSTRMAT = OBJ$cnstr$loadings,
-      CONSTRLOGSD=OBJ$cnstr$loglatsd,
-      LLC=OBJ$cnstr$llc,
-      NTHR=OBJ$dims$nthr,
-      NLOAD=OBJ$dims$nload,
-      NCORR=OBJ$dims$ncorr,
-      NVAR=OBJ$dims$nvar),
-      id=1:length(.x),
-      type=c(rep("thresholds", OBJ$dims$nthr),
-             rep("loadings", OBJ$dims$nload),
-             rep("latent correlations", OBJ$dims$ncorr),
-             rep("latent variances", OBJ$dims$nvar)))})) |>
-    tidyr::unnest("theta") |>
-    ggplot2::ggplot(ggplot2::aes(x=.data$iter, y = .data$par, group = .data$id))+
-    ggplot2::facet_wrap(~.data$type) +
-    ggplot2::geom_vline(xintercept = OBJ$stoFit$burnt, linetype="dashed", col="lightgrey")+
-    ggplot2::geom_line() +
-    ggplot2::labs(x="Iterations", y="Estimates")+
-    ggplot2::theme_bw()
+  type <- rep(c("thresholds", "loadings", "latent correlations", "latent variances"),
+              c(OBJ$dims$nthr, OBJ$dims$nload, OBJ$dims$ncorr, OBJ$dims$nvar))
+  long <- do.call(rbind, Map(function(iter, theta) {
+    data.frame(iter = iter,
+               par = getPar(replace(OBJ, "theta", list(theta)), OPTION = "transformed"),
+               id = seq_along(theta),
+               type = type)
+  }, OBJ$stoFit$path$iters, OBJ$stoFit$path$avtheta))
 
+  do.call(tinyplot::tinyplot, list(
+    par ~ iter | factor(id), data = long, facet = ~type, type = "l",
+    legend = FALSE, col = "black", xlab = "Iterations", ylab = "Estimates",
+    draw = bquote(abline(v = .(OBJ$stoFit$burnt), lty = 2, col = "lightgrey"))
+  ))
+  invisible(long)
 }
 
 #' @export

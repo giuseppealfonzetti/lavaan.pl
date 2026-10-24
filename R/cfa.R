@@ -25,21 +25,20 @@
 #'   indicator to 1.0.
 #' @param start A vector of starting values to use (in the order of free
 #'   loadings, thresholds, and then factor correlations). If not provided, the
-#'   starting point is computed according to [`fit_plFA()`]'s `INIT_METHOD`.
+#'   starting point is computed according to `estimator.args$init`.
 #' @param estimator The estimator is `PML`. If any other estimator is provided,
 #'   then [`lavaan::cfa()`] is used.
 #' @param estimator.args A list of arguments for [fit_plFA()]--see the help file
 #'   for more details. Possible options are:
 #'   \describe{
-#'     \item{\code{method}}{One of \code{"ucminf"} (default) for the quasi-Newton BFGS optimiser, or \code{"SA"} for stochastic approximation.}
-#'     \item{\code{init_method}}{One of \code{"SA"} (default) for stochastic approximation, \code{"custom"} for user-defined starting values, or \code{"standard"} for standard starting values.}
-#'     \item{\code{cpp_control_init}}{A list of control parameters for the initialisation algorithm.}
+#'     \item{\code{init}}{Starting values object from [set_init()], by default `set_init(METHOD = "SA")`. Its `THETA` is taken from `start` or from the lavaan starting values.}
 #'     \item{\code{ncores}}{The number of cores to use for parallel computation.}
 #'     \item{\code{valdata}}{Validation data.}
 #'     \item{\code{computevar_numderiv}}{If `TRUE`, the asymptotic variance-covariance matrix is computed using numerical derivatives.}
 #'   }
-#' @param control A list of control parameters for the estimation algorithm. See
-#'   [fit_plFA()] for more information.
+#' @param control Control object of the estimation algorithm: [set_ucminf_control()]
+#'   for the quasi-Newton BFGS optimiser (default), [set_sa_control()] for stochastic
+#'   approximation.
 #' @param verbose If `TRUE`, print additional information during the estimation
 #'   process.
 #' @param ... Additional arguments to be passed to [lavaan()].
@@ -73,35 +72,39 @@ cfa <- function(
     std.lv = FALSE,
     estimator = "PML",
     estimator.args = list(
-      method = c("ucminf", "SA"),
-      init_method = c("SA", "custom", "standard"),
-      cpp_control_init = NULL,
+      init = set_init(METHOD = "SA"),
       ncores = 1,
       valdata = NULL,
       computevar_numderiv = FALSE
     ),
     start = NULL,
-    control = list(),
+    control = NULL,
     verbose = FALSE,
     ...
 ) {
 
   # Validate arguments ---------------------------------------------------------
-  method <- estimator.args$method
-  if (is.null(method)) method <- "ucminf"
-  method <- rlang::arg_match(method, c("ucminf", "SA"))
-  init_method <- estimator.args$init_method
-  if (is.null(init_method)) init_method <- "SA"
-  init_method <- rlang::arg_match(init_method, c("SA", "custom", "standard"))
+  if (!is.null(estimator.args$method)) {
+    stop("`estimator.args$method` is no longer supported; the method follows `control`, e.g. `control = set_sa_control()`.", call. = FALSE)
+  }
+  if (any(c("init_method", "init_control", "cpp_control_init") %in% names(estimator.args))) {
+    stop("`estimator.args$init_method`, `init_control` and `cpp_control_init` are no longer supported; use `init = set_init(...)`.", call. = FALSE)
+  }
+  if (is.null(control)) control <- set_ucminf_control()
+  if (!inherits(control, c("plfa_ucminf_control", "plfa_sa_control"))) {
+    stop("`control` must be created with `set_ucminf_control()` or `set_sa_control()`.", call. = FALSE)
+  }
+  init <- estimator.args$init
+  if (is.null(init)) init <- set_init(METHOD = "SA")
+  if (!inherits(init, "plfa_init")) {
+    stop("`estimator.args$init` must be created with `set_init()`.", call. = FALSE)
+  }
+  if (!is.null(init$THETA)) {
+    stop("Supply starting values through `start`, not `estimator.args$init`.", call. = FALSE)
+  }
   ncores <- estimator.args$ncores
   if (is.null(ncores)) ncores <- 1
   valdata <- estimator.args$valdata
-  cpp_control_main <- NULL
-  if (method == "SA") {
-    cpp_control_main <- control
-    control <- list()
-  }
-  cpp_control_init <- estimator.args$cpp_control_init
   computevar_numderiv <- estimator.args$computevar_numderiv
   if (is.null(computevar_numderiv)) computevar_numderiv <- FALSE
 
@@ -116,13 +119,13 @@ cfa <- function(
   if (estimator == "PML") {
     if ("information" %in% names(lavargs)) {
       if (lavargs$information != "observed") {
-        cli::cli_abort("Only 'observed' information is currently supported.")
+        stop("Only 'observed' information is currently supported.", call. = FALSE)
       }
     }
     lavargs$information <- "observed"
     if ("se" %in% names(lavargs)) {
       if (!(lavargs$se %in% c("robust.huber.white", "none"))) {
-        cli::cli_alert_info("Only 'robust.huber.white' is currently supported.")
+        message("Only 'robust.huber.white' is currently supported.")
         lavargs$se <- "robust.huber.white"
       }
     } else {
@@ -140,19 +143,15 @@ cfa <- function(
   }
 
   # Fit lavaan.pl -------------------------------------------------------------------
-  spec <- spec_from_lavaan(template, start)
+  spec <- spec_from_lavaan(template, start, valdata)
+  init$THETA <- spec$THETA
   # Send to lavaan.pl
   fit <- fit_plFA(
     DATA = spec$DATA,
-    CONSTR_LIST = spec$CONSTR_LIST,
-    METHOD = method,
-    INIT_METHOD = init_method,
-    NCORES = ncores,
-    VALDATA = valdata,
+    MODEL = spec$MODEL,
     CONTROL = control,
-    CPP_CONTROL_MAIN = cpp_control_main,
-    CPP_CONTROL_INIT = cpp_control_init,
-    INIT = spec$INIT,
+    INIT = init,
+    NCORES = ncores,
     VERBOSE = verbose
   )
 
@@ -161,7 +160,6 @@ cfa <- function(
   if (lavargs$se != "none") {
     vars <- computeVar(
       OBJ = fit,
-      DATA = spec$DATA,
       NUMDERIV = computevar_numderiv,
       OPTION = "transformed",
       VERBOSE = verbose
@@ -174,47 +172,47 @@ cfa <- function(
   out
 }
 
-spec_from_lavaan <- function(template, start = NULL) {
+spec_from_lavaan <- function(template, start = NULL, valdata = NULL) {
   pt <- lavaan::parTable(template)
   lv <- lavaan::lavNames(template, "lv")
 
   if (template@Data@ngroups > 1L) {
-    cli::cli_abort("Multigroup analysis is not currently supported.")
+    stop("Multigroup analysis is not currently supported.", call. = FALSE)
   }
   if (template@Data@nlevels > 1L) {
-    cli::cli_abort("Multilevel models are not currently supported.")
+    stop("Multilevel models are not currently supported.", call. = FALSE)
   }
   # Check any ordinal data or not?
   if (!all(template@Data@ov$type == "ordered")) {
-    cli::cli_abort("All measurement items must be declared as ordered factors.")
+    stop("All measurement items must be declared as ordered factors.", call. = FALSE)
   }
   if (template@Options$parameterization != "delta") {
-    cli::cli_abort("Only the delta parameterization is currently supported.")
+    stop("Only the delta parameterization is currently supported.", call. = FALSE)
   }
   if (any(pt$op %in% c("~", "<~")) || any(pt$op == "=~" & pt$rhs %in% lv)) {
-    cli::cli_abort("Structural regressions and higher-order factors are not currently supported.")
+    stop("Structural regressions and higher-order factors are not currently supported.", call. = FALSE)
   }
   if (any(pt$op %in% c("<", ">"))) {
-    cli::cli_abort("Inequality constraints are not currently supported.")
+    stop("Inequality constraints are not currently supported.", call. = FALSE)
   }
   if (any(pt$free > 0 & pt$op == "~~" & !(pt$lhs %in% lv & pt$rhs %in% lv))) {
-    cli::cli_abort("Free residual variances or covariances are not currently supported.")
+    stop("Free residual variances or covariances are not currently supported.", call. = FALSE)
   }
   other <- pt$free > 0 & !(pt$op %in% c("=~", "~~", "|"))
   if (any(other)) {
-    cli::cli_abort("Free {.code {unique(pt$op[other])}} parameters are not currently supported.")
+    stop(paste0("Free `", paste(unique(pt$op[other]), collapse = "`, `"), "` parameters are not currently supported."), call. = FALSE)
   }
   if (any(pt$free[pt$op == "|"] == 0)) {
-    cli::cli_abort("Fixed thresholds are not currently supported.")
+    stop("Fixed thresholds are not currently supported.", call. = FALSE)
   }
 
   data <- template@Data@X[[1]] - 1
   if (anyNA(data)) {
-    cli::cli_abort("Missing data are not currently supported.")
+    stop("Missing data are not currently supported.", call. = FALSE)
   }
   nlev <- template@Data@ov$nlev[match(template@Data@ov.names[[1]], template@Data@ov$name)]
   if (any(apply(data, 2, max) + 1 != nlev)) {
-    cli::cli_abort("Every category of every item must be observed at least once.")
+    stop("Every category of every item must be observed at least once.", call. = FALSE)
   }
 
   free <- lapply(lavaan::lavInspect(template, "free"), unclass)
@@ -228,12 +226,12 @@ spec_from_lavaan <- function(template, start = NULL) {
   } else if (all(free$psi[off] == 0 & est$psi[off] == 0)) {
     corrflag <- FALSE
   } else {
-    cli::cli_abort("Latent covariances must be either all free or all fixed to zero.")
+    stop("Latent covariances must be either all free or all fixed to zero.", call. = FALSE)
   }
   constrvar <- diag(est$psi)
   constrvar[diag(free$psi) > 0] <- NA
   if (any(constrvar <= 0, na.rm = TRUE)) {
-    cli::cli_abort("Fixed latent variances must be positive.")
+    stop("Fixed latent variances must be positive.", call. = FALSE)
   }
 
   # Build the p x q loading constraints matrix
@@ -245,11 +243,11 @@ spec_from_lavaan <- function(template, start = NULL) {
   jac <- template@Model@ceq.JAC
   if (nrow(jac) > 0L) {
     if (length(template@Model@ceq.nonlinear.idx) > 0L || any(template@Model@ceq.rhs != 0)) {
-      cli::cli_abort("Only homogeneous linear equality constraints are currently supported.")
+      stop("Only homogeneous linear equality constraints are currently supported.", call. = FALSE)
     }
     load_idx <- free$lambda[free$lambda > 0]
     if (any(jac[, -load_idx] != 0)) {
-      cli::cli_abort("Equality constraints are only supported on factor loadings.")
+      stop("Equality constraints are only supported on factor loadings.", call. = FALSE)
     }
     jac <- jac[, load_idx, drop = FALSE]
     piv <- integer(0)
@@ -272,15 +270,15 @@ spec_from_lavaan <- function(template, start = NULL) {
   }
 
   # Build constraint list
-  constr_list <- list(
+  model <- set_plfa_model(
     CONSTRMAT = constrmat,
     CONSTRVAR = constrvar,
     CORRFLAG = corrflag,
     STDLV = !anyNA(constrvar),
     LLC = llc
   )
-  if (!identical(is.na(check_cnstr(constr_list)$CONSTRMAT), is.na(constrmat))) {
-    cli::cli_abort("This identification of the latent variables is not currently supported.")
+  if (!identical(is.na(model$CONSTRMAT), is.na(constrmat))) {
+    stop("This identification of the latent variables is not currently supported.", call. = FALSE)
   }
 
   # Note: the values in lavaan.pl are always in the order of thresholds, loadings, latent
@@ -296,7 +294,7 @@ spec_from_lavaan <- function(template, start = NULL) {
     cpp_latvar_mat2vec(start_glist$psi, log(sqrt(constrvar)), if (corrflag) q * (q - 1) / 2 else 0, sum(is.na(constrvar)))
   )
 
-  list(DATA = data, CONSTR_LIST = constr_list, INIT = init)
+  list(DATA = set_plfa_data(data, valdata), MODEL = model, THETA = init)
 }
 
 #' Convert a lavaan.pl fit into a lavaan object

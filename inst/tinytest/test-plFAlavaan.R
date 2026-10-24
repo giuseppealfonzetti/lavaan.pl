@@ -1,4 +1,5 @@
-test_that("[binary] cfa function works", {
+# [binary] cfa function works
+local({
 
   # Generate some data
   set.seed(456)
@@ -30,17 +31,19 @@ test_that("[binary] cfa function works", {
   "
   fit <- cfa(mod, dat, std.lv = TRUE)
 
-  expect_s4_class(fit, "lavaan")
+  expect_inherits(fit, "lavaan")
   expect_identical(as.character(class(fit)), "lavaan")
   expect_true(inherits(coef(fit), "lavaan.vector"))
 })
 
-test_that("Revert to lavaan works", {
+# Revert to lavaan works
+local({
   fit <- cfa("eta =~ y1 + y2 + y3 + y4 + y5", LSAT, estimator = "DWLS")
   expect_null(fit@external$lavaan.pl)
 })
 
-test_that("[ordinal] cfa function works", {
+# [ordinal] cfa function works
+local({
 
   # Generate some data
   set.seed(456)
@@ -76,12 +79,13 @@ test_that("[ordinal] cfa function works", {
   "
   fit <- cfa(mod, dat, std.lv = TRUE)
 
-  expect_s4_class(fit, "lavaan")
+  expect_inherits(fit, "lavaan")
   expect_identical(as.character(class(fit)), "lavaan")
   expect_true(inherits(coef(fit), "lavaan.vector"))
 })
 
-test_that("`std.lv` argument works", {
+# `std.lv` argument works
+local({
   mod <- "
     A =~ A1 + A2 + A3
     C =~ C1 + C2 + C3
@@ -96,7 +100,8 @@ test_that("`std.lv` argument works", {
   expect_equal(fitted(fit1), fitted(fit2), tolerance = 1e-3)
 })
 
-test_that("Method = 'SA' works", {
+# Method = 'SA' works
+local({
   mod <- "
     A =~ A1 + A2 + A3 + A4 + A5
     C =~ C1 + C2 + C3 + C4 + C5
@@ -105,15 +110,15 @@ test_that("Method = 'SA' works", {
     O =~ O1 + O2 + O3 + O4 + O5
   "
 
-  fit <- cfa(mod, bfi, std.lv = TRUE, estimator.args = list(method = "SA"),
-             se = "none")
+  fit <- cfa(mod, bfi, std.lv = TRUE, control = set_sa_control(), se = "none")
 
-  expect_s4_class(fit, "lavaan")
+  expect_inherits(fit, "lavaan")
   expect_identical(as.character(class(fit)), "lavaan")
   expect_true(inherits(coef(fit), "lavaan.vector"))
 })
 
-test_that("Constraints work", {
+# Constraints work
+local({
   mod <- "
     A =~ -0.4*A1 + A2 + a*A3 + b*A4 + c*A5
     C =~ 0.6*C1 + C2 + C3 + C4 + C5
@@ -127,7 +132,8 @@ test_that("Constraints work", {
 
 })
 
-test_that("Against lavaan::cfa", {
+# Against lavaan::cfa
+local({
   mod <- "eta1 =~ y1 + y2 + y3 + y4 + y5"
 
   fit1 <- cfa(mod, LSAT, std.lv = TRUE)
@@ -140,7 +146,8 @@ test_that("Against lavaan::cfa", {
 })
 
 
-test_that("Hinv is the same", {
+# Hinv is the same
+local({
 
   information_matrix <- function(fit, type) {
     lavargs <- list(
@@ -180,20 +187,22 @@ test_that("Hinv is the same", {
 
 })
 
-test_that("vcov is the same", {
+# vcov is the same
+local({
   mod <- "eta1 =~ y1 + y2 + y3 + y4 + y5"
   fit1 <- cfa(mod, LSAT, std.lv = TRUE)
   fit2 <- lavaan::cfa(mod, LSAT, std.lv = TRUE, estimator = "PML")
   expect_equal(unclass(vcov(fit1)), unclass(vcov(fit2)), tolerance = 1e-4)
 })
 
-test_that("update() refits through lavaan.pl", {
+# update() refits through lavaan.pl
+local({
   mod <- "eta1 =~ y1 + y2 + y3 + y4 + y5"
   fit <- cfa(mod, LSAT, std.lv = TRUE)
   fit2 <- update(fit, se = "none")
   expect_identical(fit2@Options$se, "none")
   expect_false(is.null(fit2@external$lavaan.pl))
   fit3 <- update(fit, model = "eta1 =~ y1 + y2 + y3 + y4")
-  expect_length(coef(fit3), 8)
+  expect_equal(length(coef(fit3)), 8)
   expect_false(is.null(fit3@external$lavaan.pl))
 })

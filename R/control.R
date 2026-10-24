@@ -188,7 +188,7 @@ check_init_par <- function(PAR, DIMS, CONSTR_LIST){
 
   return(PAR)
 }
-check_init <- function(INIT, FREQ, DIMS, CONSTR_LIST, INIT_METHOD=c("SA", "custom", "standard"), VERBOSE=FALSE, CPP_ARGS=NULL){
+check_init <- function(INIT, FREQ, DIMS, CONSTR_LIST, INIT_METHOD=c("SA", "custom", "standard"), VERBOSE=FALSE, INIT_CONTROL=set_sa_init_control()){
 
   INIT_METHOD <- check_init_method(DIMS=DIMS, INIT_METHOD = INIT_METHOD, INIT = INIT)
 
@@ -216,8 +216,7 @@ check_init <- function(INIT, FREQ, DIMS, CONSTR_LIST, INIT_METHOD=c("SA", "custo
 
   if(INIT_METHOD=="SA"){
     if(VERBOSE) message('- Initialising with SA ...', appendLF = FALSE)
-    CPP_ARGS <- check_plSA_args(FREQ=FREQ, DIMS=DIMS, CONSTR_LIST=CONSTR_LIST, LIST=CPP_ARGS, SETTING = "init")
-    INIT <- init_par_with_plSA(DIMS, CONSTR_LIST, CPP_ARGS, INIT)
+    INIT <- init_par_with_plSA(DIMS, CONSTR_LIST, FREQ, INIT_CONTROL, INIT)
     if(VERBOSE) message(' Done.')
   }
 
@@ -233,93 +232,264 @@ check_init_method <- function(DIMS, INIT_METHOD = c("SA", "custom", "standard"),
   }
   return(INIT_METHOD)
 }
-check_plSA_args <- function(FREQ, VALFREQ=NULL, DIMS, CONSTR_LIST, LIST=NULL, SETTING=c("init", "main")){
-  SETTING <- match.arg(SETTING)
-  out <- list()
-  out$FREQ <-  FREQ
+#' Ordinal data for pairwise likelihood estimation
+#'
+#'@param DATA Integer data matrix of dimension \eqn{n*p}. Categories must be
+#'  coded starting from zero.
+#'@param VALDATA Validation data used to monitor convergence of stochastic
+#'  approximations. If `NULL`, data passed via `DATA` is used for monitoring
+#'  purposes.
+#'
+#' @return An object of class `plfa_data` with the data matrix `Y`, its dimensions `n` and `p`,
+#'   the number of categories of each item `cat`, the pairwise frequency tables `freq` and
+#'   `valfreq`, and the time spent computing them `freqTime`.
+#'
+#' @export
+set_plfa_data <- function(DATA, VALDATA = NULL) {
+  Y <- check_data(DATA)
+  if (anyNA(Y)) stop("Missing data are not currently supported.")
+  cat <- apply(Y, 2, max) + 1
+  stopifnot(cat > 1)
+  freq_start_time <- Sys.time()
+  freq <- pairs_freq(Y, cat)
+  valfreq <- NULL
+  if (!is.null(VALDATA)) {
+    stopifnot(
+      is.matrix(VALDATA),
+      is.numeric(VALDATA),
+      all(is.finite(VALDATA)),
+      ncol(VALDATA) == ncol(Y),
+      all(VALDATA >= 0),
+      all(t(VALDATA) <= cat - 1)
+    )
+    valfreq <- pairs_freq(round(VALDATA), cat)
+  }
+  out <- list(
+    Y = Y,
+    n = nrow(Y),
+    p = ncol(Y),
+    cat = cat,
+    freq = freq,
+    valfreq = valfreq,
+    freqTime = as.numeric(difftime(Sys.time(), freq_start_time, units = "secs"))
+  )
+  class(out) <- "plfa_data"
+  out
+}
 
-  if(is.null(VALFREQ)) {out$VALFREQ <- FREQ} else {out$VALFREQ <- VALFREQ}
+#' Factor model for pairwise likelihood estimation
+#'
+#' @param CONSTRMAT \eqn{p*q}-dimensional matrix. Elements set to `NA`
+#'  refers to free loading parameters. Elements set to numerical values denote
+#'  fixed values constraints.
+#' @param CONSTRVAR \eqn{q}-dimensional vector. Elements set to `NA` refers to free latent
+#'  variance parameters. Elements set to numerical values denote fixed values
+#'  constraints.
+#' @param CORRFLAG Logical indicator. Set it to
+#'  `FALSE` if the latent variables are assumed to be independent. Set it `TRUE`
+#'  otherwise.
+#' @param STDLV Logical indicator. Set it to
+#'  `TRUE` to fix latent variables scale. Set it `FALSE` to fix loadings scale.
+#' @param LLC Linear loadings constraints. Expects a list
+#'  of constraints. The argument `LLC` is expected to be a list of constraints,
+#'  e.g. `LLC <- list(constraint_1, constraint2, ...)`, where each
+#'  constraint is defined by a list itself. For example, to impose the
+#'  constraint "L_(2,1)=0.5L_(5,2)+0.25L_(9,3)" you have to write `constraint_1
+#'  <- list(c(2,1), c(0.5,5,2), c(0.25, 9,3))`. That is: the first vector of the
+#'  list is 2-dimensional and stores the coordinates of the constrained loading.
+#'  Each of the successive triplets represent a linear coefficient followed by
+#'  the coordinates of the loading of reference. You can set up an arbitrary
+#'  number of triplets in each constraint.
+#'
+#' @return An object of class `plfa_model` with the identified loading constraints `CONSTRMAT`,
+#'   the log standard deviations of the latent variables `CONSTRLOGSD` (`NA` when free),
+#'   `CORRFLAG`, `STDLV`, `LLC`, and the numbers of items `p` and latent variables `q`.
+#'
+#' @export
+set_plfa_model <- function(CONSTRMAT, CONSTRVAR = NULL, CORRFLAG = TRUE, STDLV = TRUE, LLC = NULL) {
+  if (is.matrix(CONSTRMAT) && all(is.na(CONSTRMAT))) storage.mode(CONSTRMAT) <- "double"
+  stopifnot(is.matrix(CONSTRMAT))
+  if (!is.null(LLC)) {
+    stopifnot(
+      is.list(LLC),
+      all(vapply(LLC, function(lc) {
+        if (!is.list(lc) || length(lc[[1]]) != 2 || any(lengths(lc[-1]) != 3) ||
+            !all(vapply(lc, function(x) is.numeric(x) && all(is.finite(x)), NA))) return(FALSE)
+        coords <- vapply(lc, function(x) x[length(x) - 1:0], numeric(2))
+        all(coords[1, ] %in% seq_len(nrow(CONSTRMAT))) && all(coords[2, ] %in% seq_len(ncol(CONSTRMAT)))
+      }, NA))
+    )
+  }
+  out <- check_cnstr(list(CONSTRMAT = CONSTRMAT, CONSTRVAR = CONSTRVAR, CORRFLAG = CORRFLAG, STDLV = STDLV, LLC = LLC))
+  out$p <- nrow(out$CONSTRMAT)
+  out$q <- ncol(out$CONSTRMAT)
+  class(out) <- "plfa_model"
+  out
+}
 
-  if(is.null(LIST$PAIRS_PER_ITERATION) & SETTING=="init") LIST$PAIRS_PER_ITERATION <- 16
-  if(is.null(LIST$PAIRS_PER_ITERATION) & SETTING=="main") LIST$PAIRS_PER_ITERATION <- 16
+#' Starting values for pairwise likelihood estimation
+#'
+#' @param METHOD \tabular{ll}{ \code{'standard'} \tab Uses cold
+#'  initialisation where loadings are initialised at `0.25` and the latent
+#'  covariance matrix as an Identity matrix. \cr \tab \cr \code{'SA'} \tab
+#'  Computes the starting point using a short chain of stochastic updates.
+#'  Updates start from the `standard` initialisation point. \cr }
+#'  With fewer than 15 items, `'SA'` falls back to `'standard'`.
+#' @param THETA Initialising vector. If `NULL`, the `standard` initialisation point is used.
+#' @param CONTROL Control object from [set_sa_init_control()], used when `METHOD = "SA"`.
+#'
+#' @return An object of class `plfa_init` to be passed to [fit_plFA()] via `INIT`, or to [cfa()]
+#'   via `estimator.args$init`.
+#'
+#' @export
+set_init <- function(METHOD = c("standard", "SA"), THETA = NULL, CONTROL = set_sa_init_control()) {
+  METHOD <- match.arg(METHOD)
+  stopifnot(
+    is.null(THETA) || (is.numeric(THETA) && is.vector(THETA) && all(is.finite(THETA))),
+    inherits(CONTROL, "plfa_sa_control")
+  )
+  out <- list(METHOD = METHOD, THETA = THETA, CONTROL = CONTROL)
+  class(out) <- "plfa_init"
+  out
+}
 
-  stopifnot(is.numeric(LIST$PAIRS_PER_ITERATION))
-  stopifnot(LIST$PAIRS_PER_ITERATION>0)
-  out$PAIRS_PER_ITERATION <- as.integer(LIST$PAIRS_PER_ITERATION)
+#' Control options for the ucminf optimiser
+#'
+#' @param GRTOL Tolerance on the largest absolute gradient element.
+#' @param XTOL Tolerance on the relative step length.
+#' @param STEPMAX Initial maximal step length of the trust region.
+#' @param MAXEVAL Maximum number of function evaluations.
+#'
+#' @return An object of class `plfa_ucminf_control` to be passed to [fit_plFA()] via `CONTROL`
+#'   when `METHOD = "ucminf"`, or to [cfa()] via `control`.
+#'
+#' @export
+set_ucminf_control <- function(
+  GRTOL = 1e-6,
+  XTOL = 1e-12,
+  STEPMAX = 1,
+  MAXEVAL = 500
+) {
+  stopifnot(
+    is.numeric(GRTOL), length(GRTOL) == 1, GRTOL > 0,
+    is.numeric(XTOL), length(XTOL) == 1, XTOL > 0,
+    is.numeric(STEPMAX), length(STEPMAX) == 1, STEPMAX > 0,
+    is.numeric(MAXEVAL), length(MAXEVAL) == 1, MAXEVAL >= 1
+  )
+  out <- list(GRTOL = GRTOL, XTOL = XTOL, STEPMAX = STEPMAX, MAXEVAL = as.integer(MAXEVAL))
+  class(out) <- "plfa_ucminf_control"
+  out
+}
 
-  if(is.null(LIST$STEP0) & SETTING=="init") LIST$STEP0 <- sqrt(1/DIMS$d)
-  if(is.null(LIST$STEP0) & SETTING=="main") LIST$STEP0 <- 1
+#' Control options for the pairwise stochastic approximation
+#'
+#' @param PAIRS_PER_ITERATION Number of item pairs drawn at each iteration.
+#' @param STEP0 Initial step length.
+#' @param STEP1 Scaling of the step length.
+#' @param STEP2 Rate of the step length decay.
+#' @param STEP3 Exponent of the step length decay.
+#' @param BURNE Maximum number of burn-in epochs before trajectory averaging.
+#' @param MAXE Maximum number of epochs.
+#' @param EPOCHS_PER_CHECK Number of epochs between evaluations of the full negative pairwise
+#'   log-likelihood.
+#' @param CHECK_TOL If `TRUE`, stop the burn-in and the optimisation when the relative change in
+#'   the full negative pairwise log-likelihood falls below `TOL_BURN` and `TOL_END`.
+#' @param MAX_TOL_COUNTER Number of consecutive checks below tolerance required to stop.
+#' @param TOL_BURN Tolerance ending the burn-in.
+#' @param TOL_END Tolerance ending the optimisation.
+#' @param SEED Seed of the pair sampling.
+#'
+#' @return An object of class `plfa_sa_control` to be passed to [fit_plFA()] via `CONTROL` when
+#'   `METHOD = "SA"`, or to [cfa()] via `control`.
+#'
+#' @export
+set_sa_control <- function(
+  PAIRS_PER_ITERATION = 16,
+  STEP0 = 1,
+  STEP1 = 1,
+  STEP2 = 1e-8,
+  STEP3 = 0.75,
+  BURNE = 20,
+  MAXE = 30,
+  EPOCHS_PER_CHECK = 5,
+  CHECK_TOL = TRUE,
+  MAX_TOL_COUNTER = 1,
+  TOL_BURN = 5e-7,
+  TOL_END = 1e-7,
+  SEED = 123
+) {
+  stopifnot(
+    is.numeric(PAIRS_PER_ITERATION), length(PAIRS_PER_ITERATION) == 1, PAIRS_PER_ITERATION >= 1,
+    is.null(STEP0) || (is.numeric(STEP0) && length(STEP0) == 1 && STEP0 > 0),
+    is.numeric(STEP1), length(STEP1) == 1, STEP1 > 0,
+    is.numeric(STEP2), length(STEP2) == 1, STEP2 > 0,
+    is.numeric(STEP3), length(STEP3) == 1, STEP3 > 0,
+    is.numeric(BURNE), length(BURNE) == 1, BURNE >= 0,
+    is.numeric(MAXE), length(MAXE) == 1, MAXE >= 0,
+    is.numeric(EPOCHS_PER_CHECK), length(EPOCHS_PER_CHECK) == 1, EPOCHS_PER_CHECK >= 1,
+    is.logical(CHECK_TOL), length(CHECK_TOL) == 1,
+    is.numeric(MAX_TOL_COUNTER), length(MAX_TOL_COUNTER) == 1, MAX_TOL_COUNTER >= 1,
+    is.numeric(TOL_BURN), length(TOL_BURN) == 1, TOL_BURN > 0,
+    is.numeric(TOL_END), length(TOL_END) == 1, TOL_END > 0,
+    is.numeric(SEED), length(SEED) == 1, SEED > 0
+  )
+  out <- list(
+    PAIRS_PER_ITERATION = as.integer(PAIRS_PER_ITERATION),
+    STEP0 = STEP0,
+    STEP1 = STEP1,
+    STEP2 = STEP2,
+    STEP3 = STEP3,
+    BURNE = as.integer(BURNE),
+    MAXE = as.integer(MAXE),
+    EPOCHS_PER_CHECK = as.integer(EPOCHS_PER_CHECK),
+    CHECK_TOL = CHECK_TOL,
+    MAX_TOL_COUNTER = as.integer(MAX_TOL_COUNTER),
+    TOL_BURN = TOL_BURN,
+    TOL_END = TOL_END,
+    SEED = as.integer(SEED)
+  )
+  class(out) <- "plfa_sa_control"
+  out
+}
 
-  stopifnot(is.numeric(LIST$STEP0))
-  stopifnot(LIST$STEP0>0)
-  out$STEP0 <- LIST$STEP0
-
-  if(is.null(LIST$STEP1)) LIST$STEP1 <- 1
-  stopifnot(is.numeric(LIST$STEP1))
-  stopifnot(LIST$STEP1>0)
-  out$STEP1 <- LIST$STEP1
-
-  if(is.null(LIST$STEP2)) LIST$STEP2 <- 1e-8
-  stopifnot(is.numeric(LIST$STEP2))
-  stopifnot(LIST$STEP2>0)
-  out$STEP2 <- LIST$STEP2
-
-  if(is.null(LIST$STEP3)) LIST$STEP3 <- .75
-  stopifnot(is.numeric(LIST$STEP3))
-  stopifnot(LIST$STEP3>0)
-  out$STEP3 <- LIST$STEP3
-
-  if(is.null(LIST$BURNE) & (SETTING=="init")) LIST$BURNE <- 3
-  if(is.null(LIST$BURNE) & (SETTING=="main")) LIST$BURNE <- 20
-  stopifnot(is.numeric(LIST$BURNE))
-  stopifnot(LIST$BURNE>=0)
-  out$BURNE <- as.integer(LIST$BURNE)
-
-  if(is.null(LIST$MAXE) & SETTING=="init") LIST$MAXE <- 5
-  if(is.null(LIST$MAXE) & SETTING=="main") LIST$MAXE <- 30
-  stopifnot(is.numeric(LIST$MAXE))
-  stopifnot(LIST$MAXE>=0)
-  out$MAXE <- as.integer(LIST$MAXE)
-
-  if(is.null(LIST$MAX_TOL_COUNTER)) LIST$MAX_TOL_COUNTER <- 1
-  stopifnot(is.numeric(LIST$MAX_TOL_COUNTER))
-  stopifnot(LIST$MAX_TOL_COUNTER>0)
-  out$MAX_TOL_COUNTER <- as.integer(LIST$MAX_TOL_COUNTER)
-
-  if(is.null(LIST$TOL_END)) LIST$TOL_END <- 1e-7
-  stopifnot(is.numeric(LIST$TOL_END))
-  stopifnot(LIST$TOL_END>0)
-  out$TOL_END <- LIST$TOL_END
-
-  if(is.null(LIST$TOL_BURN)) LIST$TOL_BURN <- 5e-7
-  stopifnot(is.numeric(LIST$TOL_BURN))
-  stopifnot(LIST$TOL_BURN>0)
-  out$TOL_BURN <- LIST$TOL_BURN
-
-  if(is.null(LIST$CHECK_TOL) & SETTING=="init") LIST$CHECK_TOL <- FALSE
-  if(is.null(LIST$CHECK_TOL) & SETTING=="main") LIST$CHECK_TOL <- TRUE
-
-  stopifnot(is.logical(LIST$CHECK_TOL))
-  out$CHECK_TOL <- LIST$CHECK_TOL
-
-
-  if(is.null(LIST$EPOCHS_PER_CHECK) & SETTING=="init") LIST$EPOCHS_PER_CHECK <- 1
-  if(is.null(LIST$EPOCHS_PER_CHECK) & SETTING=="main") LIST$EPOCHS_PER_CHECK <- 5
-  stopifnot(is.numeric(LIST$EPOCHS_PER_CHECK))
-  stopifnot(LIST$EPOCHS_PER_CHECK>0)
-  out$EPOCHS_PER_CHECK <- as.integer(LIST$EPOCHS_PER_CHECK)
-
-  if(is.null(LIST$SEED)) LIST$SEED <- 123
-  stopifnot(is.numeric(LIST$SEED))
-  stopifnot(LIST$SEED>0)
-  out$SEED <- as.integer(LIST$SEED)
-
-  if(is.null(LIST$VERBOSE) & SETTING=="init") LIST$VERBOSE <- FALSE
-  if(is.null(LIST$VERBOSE) & SETTING=="main") LIST$VERBOSE <- TRUE
-  stopifnot(is.logical(LIST$VERBOSE))
-  out$VERBOSE <- LIST$VERBOSE
-
-
-  return(out)
-
+#' Control options for the stochastic approximation initialisation
+#'
+#' @inheritParams set_sa_control
+#' @param STEP0 Initial step length. If `NULL`, it is set to \eqn{\sqrt{1/d}} at fit time, where
+#'   \eqn{d} is the number of free parameters.
+#'
+#' @return An object of class `plfa_sa_control` to be passed to [fit_plFA()] via `INIT_CONTROL`,
+#'   or to [cfa()] via `estimator.args$init_control`, when the initialisation method is `"SA"`.
+#'
+#' @export
+set_sa_init_control <- function(
+  PAIRS_PER_ITERATION = 16,
+  STEP0 = NULL,
+  STEP1 = 1,
+  STEP2 = 1e-8,
+  STEP3 = 0.75,
+  BURNE = 3,
+  MAXE = 5,
+  EPOCHS_PER_CHECK = 1,
+  CHECK_TOL = FALSE,
+  MAX_TOL_COUNTER = 1,
+  TOL_BURN = 5e-7,
+  TOL_END = 1e-7,
+  SEED = 123
+) {
+  set_sa_control(
+    PAIRS_PER_ITERATION = PAIRS_PER_ITERATION,
+    STEP0 = STEP0,
+    STEP1 = STEP1,
+    STEP2 = STEP2,
+    STEP3 = STEP3,
+    BURNE = BURNE,
+    MAXE = MAXE,
+    EPOCHS_PER_CHECK = EPOCHS_PER_CHECK,
+    CHECK_TOL = CHECK_TOL,
+    MAX_TOL_COUNTER = MAX_TOL_COUNTER,
+    TOL_BURN = TOL_BURN,
+    TOL_END = TOL_END,
+    SEED = SEED
+  )
 }

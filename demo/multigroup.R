@@ -1,15 +1,12 @@
 library(lavaan.pl)
-library(tidyverse)
 data("bfi")
 mod <- "agr =~ A1 + A2 + A3 + A4 + A5"
 
 # Convert to binary
-bfiord <-
-  bfi |>
-  mutate(
-    across(A1:O5, function(x) ordered(as.numeric(x >= 4))),
-    gender = ifelse(gender == 1, "Male", "Female")
-  )
+items <- paste0(rep(c("A", "C", "E", "N", "O"), each = 5), 1:5)
+bfiord <- as.data.frame(bfi)
+bfiord[items] <- lapply(bfi[items], function(x) ordered(as.numeric(x >= 4)))
+bfiord$gender <- ifelse(bfi$gender == 1, "Male", "Female")
 
 # Unconstrained model (aka configural invariance)
 fit1 <- lavaan::cfa(mod, bfiord, std.lv = TRUE, group = "gender")

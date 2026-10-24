@@ -1,22 +1,11 @@
 .onAttach <- function(libname, pkgname) {
 
   # Load lavaan
-  startup_msg <- paste0(
-    cli::cli_fmt(cli::cli_alert_info("Loading required package: {.pkg lavaan}"))
-  )
-  rlang::inform(startup_msg, class = "packageStartupMessage")
+  packageStartupMessage("Loading required package: lavaan")
   attach_lavaan(without = "cfa")
 
   # Inform conflicts
-  conflict_msg <- paste0(
-    cli::rule(
-      left = cli::style_bold("Conflicts"),
-      right = paste("lavaan.pl", utils::packageVersion("lavaan.pl"))
-    ),
-    "\n",
-    bullets_mask("lavaan.pl", "lavaan", "cfa")
-  )
-  rlang::inform(conflict_msg, class = "packageStartupMessage")
+  packageStartupMessage("lavaan.pl ", utils::packageVersion("lavaan.pl"), ": lavaan.pl::cfa() masks lavaan::cfa()")
 }
 
 attach_lavaan <- function(without) {
@@ -25,17 +14,4 @@ attach_lavaan <- function(without) {
     exclude = without,
     character.only = TRUE
   ))
-}
-
-format_pkgfun <- function(pkg, fun) {
-  paste0(cli::col_blue(pkg), "::", cli::col_green(fun, "()"))
-}
-
-bullets_mask <- function(winner, loser, fun) {
-  paste0(
-    cli::col_red(cli::symbol$cross), " ",
-    format_pkgfun(winner, fun),
-    " masks ",
-    format_pkgfun(loser, fun)
-  )
 }

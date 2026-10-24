@@ -1,17 +1,11 @@
----
-output: github_document
-editor_options: 
-  chunk_output_type: console
----
-
 <!-- README.md is generated from README.Rmd. Please edit that file -->
 
 ```{r, include = FALSE}
-knitr::opts_chunk$set(
+litedown::reactor(
   collapse = TRUE,
-  comment = "#>",
+  comment = "#> ",
   fig.path = "man/figures/README-",
-  out.width = "100%"
+  attr.source = "r"
 )
 ```
 
@@ -19,7 +13,6 @@ knitr::opts_chunk$set(
 
 <!-- badges: start -->
 [![Lifecycle: experimental](https://img.shields.io/badge/lifecycle-experimental-orange.svg)](https://lifecycle.r-lib.org/articles/stages.html#experimental)
-[![CRAN status](https://www.r-pkg.org/badges/version/lavaan.pl)](https://CRAN.R-project.org/package=lavaan.pl)
 [![R-CMD-check](https://github.com/giuseppealfonzetti/lavaan.pl/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/giuseppealfonzetti/lavaan.pl/actions/workflows/R-CMD-check.yaml)
 [![Codecov test coverage](https://codecov.io/gh/giuseppealfonzetti/lavaan.pl/graph/badge.svg)](https://app.codecov.io/gh/giuseppealfonzetti/lavaan.pl)
 <!-- badges: end -->
@@ -88,8 +81,7 @@ And also plot from the `{semPlot}` package:
 
 ```{r}
 #| label: fig-bfi
-#| out-width: 100%
-#| dpi: 300
+#| dev.args: !expr list(res = 300)
 library(semPlot)
 
 grouplist <- list(
@@ -112,7 +104,7 @@ semPaths(fit, whatLabels = "est", layout = "circle", residuals = FALSE,
 
 ```{r}
 #| label: sessioninfo
-sessioninfo::session_info()
+sessionInfo()
 ```
 
 <!-- To fit a latent factor analysis model with 5 factors, where the first 5 items load on the first factor and so on, we can use the `fit_plFA()` function. -->

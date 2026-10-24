@@ -153,8 +153,10 @@ sim_data <- function(SAMPLE_SIZE, LOADINGS, THRESHOLDS, LATENT_COV, SEED = 123){
   p <- check_p(nrow(loadings))
   error_variance <- diag(1, p, p) - diag(diag(loadings%*%lat_cov%*%t(loadings)),p,p)
 
-  errors <- mvtnorm::rmvnorm(n = n, sigma = error_variance)
-  factors <- mvtnorm::rmvnorm(n = n, sigma = lat_cov)
+  ev <- eigen(error_variance, symmetric = TRUE)
+  errors <- matrix(rnorm(n * p), nrow = n, byrow = TRUE) %*% t(ev$vectors %*% (t(ev$vectors) * sqrt(pmax(ev$values, 0))))
+  ev <- eigen(lat_cov, symmetric = TRUE)
+  factors <- matrix(rnorm(n * ncol(lat_cov)), nrow = n, byrow = TRUE) %*% t(ev$vectors %*% (t(ev$vectors) * sqrt(pmax(ev$values, 0))))
 
   URV <- factors %*% t(loadings) + errors
 

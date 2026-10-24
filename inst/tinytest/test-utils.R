@@ -25,7 +25,7 @@ nthr <- sum(cat)-p
   llc <- list(list(c(2,1), c(1.5,6,2), c(2,10, 3)),
               list(c(3,1), c(3,7,2))
               )
-  A <- check_cnstr_loadings(A, STDLV=stdlv, LLC = llc)
+  A <- lavaan.pl:::check_cnstr_loadings(A, STDLV=stdlv, LLC = llc)
 
   # Draw some random loadings according to constraints
   Load <- gen_loadings(CONSTRMAT = A, STDLV = stdlv, LLC=llc)
@@ -34,12 +34,12 @@ nthr <- sum(cat)-p
   # Generate random latent correlation matrix
   tcorrvec <- rep(0, q*(q-1)/2); if(corrflag) tcorrvec <- rnorm(q*(q-1)/2)
   ncorr <- if(corrflag)q*(q-1)/2 else 0
-  R <- cpp_latvar_vec2cmat(VEC=tcorrvec, NCORR=ncorr, Q=q)
+  R <- lavaan.pl:::cpp_latvar_vec2cmat(VEC=tcorrvec, NCORR=ncorr, Q=q)
 
 
   # Generate random latent variances
   constr_var <- rep(NA, q)
-  constr_lsd <- check_cnstr_latvar(constr_var, q, stdlv)
+  constr_lsd <- lavaan.pl:::check_cnstr_latvar(constr_var, q, stdlv)
   nvar  <- sum(is.na(constr_lsd))
   tsdvec <- constr_lsd
   tsdvec[is.na(constr_lsd)] <- rnorm(sum(is.na(constr_lsd)), -.5, .1)
@@ -64,14 +64,12 @@ nthr <- sum(cat)-p
     CORRFLAG = corrflag,
     STDLV = stdlv
   )
-  test_that(paste0("CORRFLAG:", corrflag, ", STDLV:", stdlv,
-                   ", Dimension of parameter vector"), {
+  local({
     expect_equal(length(theta), d)
   })
 
 
-  test_that(paste0("CORRFLAG:", corrflag, ", STDLV:", stdlv,
-                   ", get_lambda"), {
+  local({
     expect_equal(
       get_lambda(
         THETA = theta,
@@ -83,10 +81,9 @@ nthr <- sum(cat)-p
     )
   })
 
-  test_that(paste0("CORRFLAG:", corrflag, ", STDLV:", stdlv,
-                   ", Loadings theta2mat"), {
+  local({
     expect_equal(
-      cpp_loadings_theta2mat(
+      lavaan.pl:::cpp_loadings_theta2mat(
         THETA = theta,
         CONSTRMAT = A,
         LLC = llc,
@@ -98,10 +95,9 @@ nthr <- sum(cat)-p
     )
   })
 
-  test_that(paste0("CORRFLAG:", corrflag, ", STDLV:", stdlv,
-                   ", Latvar theta2mat"), {
+  local({
     expect_equal(
-      cpp_latvar_theta2mat(
+      lavaan.pl:::cpp_latvar_theta2mat(
         THETA = theta,
         CONSTRLOGSD = constr_lsd,
         NTHR = nthr,
@@ -114,8 +110,7 @@ nthr <- sum(cat)-p
     )
   })
 
-  test_that(paste0("CORRFLAG:", corrflag, ", STDLV:", stdlv,
-                   ", get_S"), {
+  local({
     expect_equal(
       get_S(
         THETA = theta,
@@ -130,8 +125,7 @@ nthr <- sum(cat)-p
     )
   })
 
-  test_that(paste0("CORRFLAG:", corrflag, ", STDLV:", stdlv,
-                   ", get_R"), {
+  local({
     expect_equal(
       get_R(
         THETA = theta,
@@ -145,8 +139,7 @@ nthr <- sum(cat)-p
     )
   })
 
-  test_that(paste0("CORRFLAG:", corrflag, ", STDLV:", stdlv,
-                   ", get_corr"), {
+  local({
     expect_equal(
       get_corr(
         THETA = theta,
@@ -173,7 +166,7 @@ nthr <- sum(cat)-p
   llc <- list(list(c(2,1), c(1,6,2), c(2,10, 3)),
               list(c(3,1), c(3,7,2))
   )
-  A <- check_cnstr_loadings(A, stdlv, llc)
+  A <- lavaan.pl:::check_cnstr_loadings(A, stdlv, llc)
 
   # Draw some random loadings according to constraints
   Load <- gen_loadings(CONSTRMAT = A, STDLV = stdlv, LLC=llc)
@@ -182,12 +175,12 @@ nthr <- sum(cat)-p
   # Generate random latent correlation matrix
   tcorrvec <- rep(0, q*(q-1)/2); if(corrflag) tcorrvec <- rnorm(q*(q-1)/2)
   ncorr <- if(corrflag)q*(q-1)/2 else 0
-  R <- cpp_latvar_vec2cmat(VEC=tcorrvec, NCORR=ncorr, Q=q)
+  R <- lavaan.pl:::cpp_latvar_vec2cmat(VEC=tcorrvec, NCORR=ncorr, Q=q)
 
 
   # Generate random latent variances
   constr_var <- rep(NA, q)
-  constr_lsd <- check_cnstr_latvar(constr_var, q, stdlv)
+  constr_lsd <- lavaan.pl:::check_cnstr_latvar(constr_var, q, stdlv)
   nvar  <- sum(is.na(constr_lsd))
   tsdvec <- constr_lsd
   tsdvec[is.na(constr_lsd)] <- rnorm(sum(is.na(constr_lsd)), -.5, .1)
@@ -212,14 +205,12 @@ nthr <- sum(cat)-p
     CORRFLAG = corrflag,
     STDLV = stdlv
   )
-  test_that(paste0("CORRFLAG:", corrflag, ", STDLV:", stdlv,
-                   ", Dimension of parameter vector"), {
+  local({
                      expect_equal(length(theta), d)
                    })
 
 
-  test_that(paste0("CORRFLAG:", corrflag, ", STDLV:", stdlv,
-                   ", get_lambda"), {
+  local({
                      expect_equal(
                        get_lambda(
                          THETA = theta,
@@ -231,10 +222,9 @@ nthr <- sum(cat)-p
                      )
                    })
 
-  test_that(paste0("CORRFLAG:", corrflag, ", STDLV:", stdlv,
-                   ", Loadings theta2mat"), {
+  local({
                      expect_equal(
-                       cpp_loadings_theta2mat(
+                       lavaan.pl:::cpp_loadings_theta2mat(
                          THETA = theta,
                          CONSTRMAT = A,
                          LLC = llc,
@@ -246,10 +236,9 @@ nthr <- sum(cat)-p
                      )
                    })
 
-  test_that(paste0("CORRFLAG:", corrflag, ", STDLV:", stdlv,
-                   ", Latvar theta2mat"), {
+  local({
                      expect_equal(
-                       cpp_latvar_theta2mat(
+                       lavaan.pl:::cpp_latvar_theta2mat(
                          THETA = theta,
                          CONSTRLOGSD = constr_lsd,
                          NTHR = nthr,
@@ -262,8 +251,7 @@ nthr <- sum(cat)-p
                      )
                    })
 
-  test_that(paste0("CORRFLAG:", corrflag, ", STDLV:", stdlv,
-                   ", get_S"), {
+  local({
                      expect_equal(
                        get_S(
                          THETA = theta,
@@ -278,8 +266,7 @@ nthr <- sum(cat)-p
                      )
                    })
 
-  test_that(paste0("CORRFLAG:", corrflag, ", STDLV:", stdlv,
-                   ", get_R"), {
+  local({
                      expect_equal(
                        get_R(
                          THETA = theta,
@@ -293,10 +280,9 @@ nthr <- sum(cat)-p
                      )
                    })
 
-  test_that(paste0("CORRFLAG:", corrflag, ", STDLV:", stdlv,
-                   ", cpp_latvar_theta2dmat"), {
+  local({
                      expect_equal(
-                       cpp_latvar_theta2dmat(
+                       lavaan.pl:::cpp_latvar_theta2dmat(
                          THETA = theta,
                          CONSTRLOGSD = constr_lsd,
                          NTHR = nthr,
@@ -309,8 +295,7 @@ nthr <- sum(cat)-p
                      )
                    })
 
-  test_that(paste0("CORRFLAG:", corrflag, ", STDLV:", stdlv,
-                   ", get_corr"), {
+  local({
                      expect_equal(
                        get_corr(
                          THETA = theta,
@@ -338,7 +323,7 @@ nthr <- sum(cat)-p
   llc <- list(list(c(2,1), c(1,6,2), c(2,10, 3)),
               list(c(3,1), c(3,7,2))
   )
-  A <- check_cnstr_loadings(A, stdlv, llc)
+  A <- lavaan.pl:::check_cnstr_loadings(A, stdlv, llc)
 
   # Draw some random loadings according to constraints
   Load <- gen_loadings(CONSTRMAT = A, STDLV = stdlv, LLC=llc)
@@ -347,12 +332,12 @@ nthr <- sum(cat)-p
   # Generate random latent correlation matrix
   tcorrvec <- rep(0, q*(q-1)/2); if(corrflag) tcorrvec <- rnorm(q*(q-1)/2)
   ncorr <- if(corrflag)q*(q-1)/2 else 0
-  R <- cpp_latvar_vec2cmat(VEC=tcorrvec, NCORR=ncorr, Q=q)
+  R <- lavaan.pl:::cpp_latvar_vec2cmat(VEC=tcorrvec, NCORR=ncorr, Q=q)
 
 
   # Generate random latent variances
   constr_var <- rep(NA, q); constr_var[1:2] <- .5
-  constr_lsd <- check_cnstr_latvar(constr_var, q, stdlv)
+  constr_lsd <- lavaan.pl:::check_cnstr_latvar(constr_var, q, stdlv)
   nvar  <- sum(is.na(constr_lsd))
   tsdvec <- constr_lsd
   tsdvec[is.na(constr_lsd)] <- rnorm(sum(is.na(constr_lsd)), -.5, .1)
@@ -377,14 +362,12 @@ nthr <- sum(cat)-p
     CORRFLAG = corrflag,
     STDLV = stdlv
   )
-  test_that(paste0("CORRFLAG:", corrflag, ", STDLV:", stdlv,
-                   ", Dimension of parameter vector"), {
+  local({
                      expect_equal(length(theta), d)
                    })
 
 
-  test_that(paste0("CORRFLAG:", corrflag, ", STDLV:", stdlv,
-                   ", get_lambda"), {
+  local({
                      expect_equal(
                        get_lambda(
                          THETA = theta,
@@ -396,10 +379,9 @@ nthr <- sum(cat)-p
                      )
                    })
 
-  test_that(paste0("CORRFLAG:", corrflag, ", STDLV:", stdlv,
-                   ", Loadings theta2mat"), {
+  local({
                      expect_equal(
-                       cpp_loadings_theta2mat(
+                       lavaan.pl:::cpp_loadings_theta2mat(
                          THETA = theta,
                          CONSTRMAT = A,
                          LLC = llc,
@@ -411,10 +393,9 @@ nthr <- sum(cat)-p
                      )
                    })
 
-  test_that(paste0("CORRFLAG:", corrflag, ", STDLV:", stdlv,
-                   ", Latvar theta2mat"), {
+  local({
                      expect_equal(
-                       cpp_latvar_theta2mat(
+                       lavaan.pl:::cpp_latvar_theta2mat(
                          THETA = theta,
                          CONSTRLOGSD = constr_lsd,
                          NTHR = nthr,
@@ -427,8 +408,7 @@ nthr <- sum(cat)-p
                      )
                    })
 
-  test_that(paste0("CORRFLAG:", corrflag, ", STDLV:", stdlv,
-                   ", get_S"), {
+  local({
                      expect_equal(
                        get_S(
                          THETA = theta,
@@ -443,8 +423,7 @@ nthr <- sum(cat)-p
                      )
                    })
 
-  test_that(paste0("CORRFLAG:", corrflag, ", STDLV:", stdlv,
-                   ", get_R"), {
+  local({
                      expect_equal(
                        get_R(
                          THETA = theta,
@@ -458,10 +437,9 @@ nthr <- sum(cat)-p
                      )
                    })
 
-  test_that(paste0("CORRFLAG:", corrflag, ", STDLV:", stdlv,
-                   ", cpp_latvar_theta2dmat"), {
+  local({
                      expect_equal(
-                       cpp_latvar_theta2dmat(
+                       lavaan.pl:::cpp_latvar_theta2dmat(
                          THETA = theta,
                          CONSTRLOGSD = constr_lsd,
                          NTHR = nthr,
@@ -474,8 +452,7 @@ nthr <- sum(cat)-p
                      )
                    })
 
-  test_that(paste0("CORRFLAG:", corrflag, ", STDLV:", stdlv,
-                   ", get_corr"), {
+  local({
                      expect_equal(
                        get_corr(
                          THETA = theta,
@@ -502,7 +479,7 @@ nthr <- sum(cat)-p
   llc <- list(list(c(2,1), c(1,6,2), c(2,10, 3)),
               list(c(3,1), c(3,7,2))
   )
-  A <- check_cnstr_loadings(A, stdlv, llc)
+  A <- lavaan.pl:::check_cnstr_loadings(A, stdlv, llc)
 
   # Draw some random loadings according to constraints
   Load <- gen_loadings(CONSTRMAT = A, STDLV = stdlv, LLC=llc)
@@ -511,12 +488,12 @@ nthr <- sum(cat)-p
   # Generate random latent correlation matrix
   tcorrvec <- rep(0, q*(q-1)/2); if(corrflag) tcorrvec <- rnorm(q*(q-1)/2)
   ncorr <- if(corrflag)q*(q-1)/2 else 0
-  R <- cpp_latvar_vec2cmat(VEC=tcorrvec, NCORR=ncorr, Q=q)
+  R <- lavaan.pl:::cpp_latvar_vec2cmat(VEC=tcorrvec, NCORR=ncorr, Q=q)
 
 
   # Generate random latent variances
   constr_var <- rep(NA, q); constr_var[2] <- 1.5
-  constr_lsd <- check_cnstr_latvar(constr_var, q, stdlv)
+  constr_lsd <- lavaan.pl:::check_cnstr_latvar(constr_var, q, stdlv)
   nvar  <- sum(is.na(constr_lsd))
   tsdvec <- constr_lsd
   tsdvec[is.na(constr_lsd)] <- rnorm(sum(is.na(constr_lsd)), -.5, .1)
@@ -541,14 +518,12 @@ nthr <- sum(cat)-p
     CORRFLAG = corrflag,
     STDLV = stdlv
   )
-  test_that(paste0("CORRFLAG:", corrflag, ", STDLV:", stdlv,
-                   ", Dimension of parameter vector"), {
+  local({
                      expect_equal(length(theta), d)
                    })
 
 
-  test_that(paste0("CORRFLAG:", corrflag, ", STDLV:", stdlv,
-                   ", get_lambda"), {
+  local({
                      expect_equal(
                        get_lambda(
                          THETA = theta,
@@ -560,10 +535,9 @@ nthr <- sum(cat)-p
                      )
                    })
 
-  test_that(paste0("CORRFLAG:", corrflag, ", STDLV:", stdlv,
-                   ", Loadings theta2mat"), {
+  local({
                      expect_equal(
-                       cpp_loadings_theta2mat(
+                       lavaan.pl:::cpp_loadings_theta2mat(
                          THETA = theta,
                          CONSTRMAT = A,
                          LLC = llc,
@@ -575,10 +549,9 @@ nthr <- sum(cat)-p
                      )
                    })
 
-  test_that(paste0("CORRFLAG:", corrflag, ", STDLV:", stdlv,
-                   ", Latvar theta2mat"), {
+  local({
                      expect_equal(
-                       cpp_latvar_theta2mat(
+                       lavaan.pl:::cpp_latvar_theta2mat(
                          THETA = theta,
                          CONSTRLOGSD = constr_lsd,
                          NTHR = nthr,
@@ -591,8 +564,7 @@ nthr <- sum(cat)-p
                      )
                    })
 
-  test_that(paste0("CORRFLAG:", corrflag, ", STDLV:", stdlv,
-                   ", get_S"), {
+  local({
                      expect_equal(
                        get_S(
                          THETA = theta,
@@ -607,8 +579,7 @@ nthr <- sum(cat)-p
                      )
                    })
 
-  test_that(paste0("CORRFLAG:", corrflag, ", STDLV:", stdlv,
-                   ", get_R"), {
+  local({
                      expect_equal(
                        get_R(
                          THETA = theta,
@@ -622,8 +593,7 @@ nthr <- sum(cat)-p
                      )
                    })
 
-  test_that(paste0("CORRFLAG:", corrflag, ", STDLV:", stdlv,
-                   ", get_corr"), {
+  local({
                      expect_equal(
                        get_corr(
                          THETA = theta,
@@ -650,7 +620,7 @@ nthr <- sum(cat)-p
   llc <- list(list(c(2,1), c(1,6,2), c(2,10, 3)),
               list(c(3,1), c(3,7,2))
   )
-  A <- check_cnstr_loadings(A, stdlv, llc)
+  A <- lavaan.pl:::check_cnstr_loadings(A, stdlv, llc)
 
   # Draw some random loadings according to constraints
   Load <- gen_loadings(CONSTRMAT = A, STDLV = stdlv, LLC=llc)
@@ -659,12 +629,12 @@ nthr <- sum(cat)-p
   # Generate random latent correlation matrix
   tcorrvec <- rep(0, q*(q-1)/2); if(corrflag) tcorrvec <- rnorm(q*(q-1)/2)
   ncorr <- if(corrflag)q*(q-1)/2 else 0
-  R <- cpp_latvar_vec2cmat(VEC=tcorrvec, NCORR=ncorr, Q=q)
+  R <- lavaan.pl:::cpp_latvar_vec2cmat(VEC=tcorrvec, NCORR=ncorr, Q=q)
 
 
   # Generate random latent variances
   constr_var <- rep(NA, q)
-  constr_lsd <- check_cnstr_latvar(constr_var, q, stdlv)
+  constr_lsd <- lavaan.pl:::check_cnstr_latvar(constr_var, q, stdlv)
   nvar  <- sum(is.na(constr_lsd))
   tsdvec <- constr_lsd
   tsdvec[is.na(constr_lsd)] <- rnorm(sum(is.na(constr_lsd)), -.5, .1)
@@ -689,14 +659,12 @@ nthr <- sum(cat)-p
     CORRFLAG = corrflag,
     STDLV = stdlv
   )
-  test_that(paste0("CORRFLAG:", corrflag, ", STDLV:", stdlv,
-                   ", Dimension of parameter vector"), {
+  local({
                      expect_equal(length(theta), d)
                    })
 
 
-  test_that(paste0("CORRFLAG:", corrflag, ", STDLV:", stdlv,
-                   ", get_lambda"), {
+  local({
                      expect_equal(
                        get_lambda(
                          THETA = theta,
@@ -708,10 +676,9 @@ nthr <- sum(cat)-p
                      )
                    })
 
-  test_that(paste0("CORRFLAG:", corrflag, ", STDLV:", stdlv,
-                   ", Loadings theta2mat"), {
+  local({
                      expect_equal(
-                       cpp_loadings_theta2mat(
+                       lavaan.pl:::cpp_loadings_theta2mat(
                          THETA = theta,
                          CONSTRMAT = A,
                          LLC = llc,
@@ -723,10 +690,9 @@ nthr <- sum(cat)-p
                      )
                    })
 
-  test_that(paste0("CORRFLAG:", corrflag, ", STDLV:", stdlv,
-                   ", Latvar theta2mat"), {
+  local({
                      expect_equal(
-                       cpp_latvar_theta2mat(
+                       lavaan.pl:::cpp_latvar_theta2mat(
                          THETA = theta,
                          CONSTRLOGSD = constr_lsd,
                          NTHR = nthr,
@@ -739,8 +705,7 @@ nthr <- sum(cat)-p
                      )
                    })
 
-  test_that(paste0("CORRFLAG:", corrflag, ", STDLV:", stdlv,
-                   ", get_S"), {
+  local({
                      expect_equal(
                        get_S(
                          THETA = theta,
@@ -755,8 +720,7 @@ nthr <- sum(cat)-p
                      )
                    })
 
-  test_that(paste0("CORRFLAG:", corrflag, ", STDLV:", stdlv,
-                   ", get_R"), {
+  local({
                      expect_equal(
                        get_R(
                          THETA = theta,
@@ -770,8 +734,7 @@ nthr <- sum(cat)-p
                      )
                    })
 
-  test_that(paste0("CORRFLAG:", corrflag, ", STDLV:", stdlv,
-                   ", get_corr"), {
+  local({
                      expect_equal(
                        get_corr(
                          THETA = theta,

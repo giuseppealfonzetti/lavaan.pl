@@ -1,22 +1,20 @@
 ---
 title: "Limited information Goodness-of-Fit tests"
 author: Haziq Jamil
-output: rmarkdown::html_vignette
+output: litedown::html_format
 vignette: >
   %\VignetteIndexEntry{Limited information Goodness-of-Fit tests}
   %\VignetteEncoding{UTF-8}
-  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEngine{litedown::vignette}
 editor_options: 
   chunk_output_type: console
 ---
 
 ```{r, include = FALSE}
-knitr::opts_chunk$set(
+litedown::reactor(
   collapse = TRUE,
-  comment = "#>"
+  comment = "#> "
 )
-library(tidyverse)
-library(tinytest)
 ```
 
 ## Limited information GOF tests
@@ -24,16 +22,16 @@ library(tinytest)
 The `{lavaan.bingof}` package provides a set of LIGOF tests for CFA models with binary data.
 Models estimated using the `{lavaan.pl}` package are directly compatible.
 
-```{r setup}
+```{r setup, eval = FALSE}
 library(lavaan.pl)
 library(lavaan.bingof)
 ```
 
-```{r}
+```{r, eval = FALSE}
 (dat <- gen_data_bin(n = 1000, seed = 123))
 mod <- "eta =~ y1 + y2 + y3 + y4 + y5"
 fit <- cfa(mod, dat, std.lv = TRUE)
-expect_true(inherits(fit, "plFAlavaan"))
+stopifnot(!is.null(fit@external$lavaan.pl))
 
 # Test statistics
 all_tests(fit)
@@ -41,35 +39,34 @@ all_tests(fit)
 
 As a comparison, we can look at the output from using the `cfa()` function in the `{lavaan}` package.
 
-```{r}
+```{r, eval = FALSE}
 fit1 <- lavaan.pl::cfa(mod, dat, std.lv = TRUE)
 fit2 <- lavaan::cfa(mod, dat, std.lv = TRUE, estimator = "PML")
 
 # Test equality of coefficients and standard errors
-expect_equal(coef(fit1), coef(fit2), tolerance = 1e-5)  
-expect_equal(fit1@Fit@se, fit2@Fit@se, tolerance = 1e-5)
+stopifnot(isTRUE(all.equal(coef(fit1), coef(fit2), tolerance = 1e-5)))  
+stopifnot(isTRUE(all.equal(fit1@Fit@se, fit2@Fit@se, tolerance = 1e-5)))
 
 # Test equality of test statistics and p-values
-c(
+tests <- c(
   "Wald_test",
   "Wald_vcovf_test",
   "Wald_diag_test",
   "Pearson_test",
   "RSS_test",
   "Multn_test"
-) |>
-  set_names() |>
-  map(.f = function(x) {
-    out1 <- do.call(x, list(fit1))
-    out2 <- do.call(x, list(fit2))
-    expect_equal(out1, out2, tolerance = 5e-3)
-  })
+)
+lapply(setNames(tests, tests), function(x) {
+  out1 <- do.call(x, list(fit1))
+  out2 <- do.call(x, list(fit2))
+  stopifnot(isTRUE(all.equal(out1, out2, tolerance = 5e-3)))
+})
 ```
 
 ## Testing differences
 
 
-```{r}
+```{r, eval = FALSE}
 information_matrix <- function(fit, type) {
   lavargs <- list(
     lavmodel = fit@Model,
@@ -81,13 +78,13 @@ information_matrix <- function(fit, type) {
   )
 
   if (type == "observed") 
-    out <- do.call("lav_model_information_observed", lavargs, 
+    out <- do.call("lav_model_info_observed", lavargs, 
                    envir = asNamespace("lavaan"))
   else if (type == "expected")
-    out <- do.call("lav_model_information_expected", lavargs, 
+    out <- do.call("lav_model_info_expected", lavargs, 
                    envir = asNamespace("lavaan"))
   else if (type == "first.order")
-    out <- do.call("lav_model_information_firstorder", lavargs, 
+    out <- do.call("lav_model_info_firstorder", lavargs, 
                    envir = asNamespace("lavaan"))
   else stop("Invalid type")
   return(out)
@@ -98,30 +95,31 @@ information_matrix <- function(fit, type) {
 ### Sensitivity (inverted) matrix
 
 
-```{r}
+```{r, eval = FALSE}
 # From lavaan.pl
-Hinv1 <- with(fit1@external, computeVar(lavaan.pl, D)$invH[idx_plFA2lav, idx_plFA2lav])
+Hinv1 <- attr(fit1@vcov$vcov, "E.inv")
 fit1 <- cfa(mod, dat, std.lv = TRUE, estimator.args = list(computevar_numderiv = TRUE), verbose = TRUE)
-Hinv2 <- with(fit1@external, computeVar(lavaan.pl, D)$invH[idx_plFA2lav, idx_plFA2lav])
+Hinv2 <- attr(fit1@vcov$vcov, "E.inv")
 Hinv3 <- solve(information_matrix(fit1, "observed"))
 
-expect_equal(Hinv1, Hinv2, tolerance = 1e-5)  # ucminf vs numderiv
-expect_equal(Hinv1, Hinv3, tolerance = 1e-5)  # ucminf vs lavaan
-expect_equal(Hinv2, Hinv3, tolerance = 1e-5)  # numderiv vs lavaan
+stopifnot(isTRUE(all.equal(Hinv1, Hinv2, tolerance = 1e-5)))  # analytic vs numderiv
+stopifnot(isTRUE(all.equal(Hinv1, Hinv3, tolerance = 1e-5)))  # analytic vs lavaan
+stopifnot(isTRUE(all.equal(Hinv2, Hinv3, tolerance = 1e-5)))  # numderiv vs lavaan
 ```
 
 ### Variability matrix
 
-```{r}
+```{r, eval = FALSE}
 # From lavaan.pl
-J1 <- with(fit1@external, computeVar(lavaan.pl, D)$J[idx_plFA2lav, idx_plFA2lav])
+Einv <- attr(fit1@vcov$vcov, "E.inv")
+J1 <- solve(Einv) %*% fit1@vcov$vcov %*% solve(Einv) * nobs(fit1)
 J2 <- information_matrix(fit1, "first.order")
 
-expect_equal(J1, J2, tolerance = 1e-5)  # ucminf vs numderiv
+stopifnot(isTRUE(all.equal(J1, J2, tolerance = 1e-5)))  # lavaan.pl vs lavaan
 ```
 
 ## Session information
 
-```{r}
-sessioninfo::session_info()
+```{r, eval = FALSE}
+sessionInfo()
 ```

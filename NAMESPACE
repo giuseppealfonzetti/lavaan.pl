@@ -6,6 +6,8 @@ S3method(getPar,default)
 S3method(plotTraj,PlFaFit)
 S3method(plotTraj,lavaan)
 S3method(print,PlFaFit)
+S3method(print,plfa_data)
+S3method(print,plfa_model)
 export(as_lavaan)
 export(build_constrMat)
 export(cfa)
@@ -20,22 +22,22 @@ export(get_corr)
 export(get_lambda)
 export(get_theta)
 export(pairs_freq)
+export(set_init)
+export(set_plfa_data)
+export(set_plfa_model)
+export(set_sa_control)
+export(set_sa_init_control)
+export(set_ucminf_control)
 export(sim_data)
 import(RcppEigen)
 import(RcppParallel)
 importFrom(Rcpp,sourceCpp)
-importFrom(cli,
-  col_blue,
-  col_green,
-  symbol
-)
 importFrom(methods,
   new,
   slot
 )
-importFrom(rlang,
-  .data,
-  inform
+importFrom(stats,
+  rnorm,
+  runif
 )
-importFrom(stats,runif)
 useDynLib(lavaan.pl, .registration = TRUE)

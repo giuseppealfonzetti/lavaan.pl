@@ -5,94 +5,47 @@
 #'Fit latent variable models for ordinal variable using pairwise likelihood
 #'methods running via quasi-Newton BFGS or stochastic approximations.
 #'
-#'@param DATA Integer data matrix of dimension \eqn{n*p}. Categories must be
-#'  coded starting from zero.
-#'@param CONSTR_LIST List of constraints. It must contain \tabular{ll}{
-#'  \code{CONSTRMAT} \tab \eqn{p*q}-dimensional matrix. Elements set to `NA`
-#'  refers to free loading parameters. Elements set to numerical values denote
-#'  fixed values constraints. \cr \tab \cr \code{CONSTRVAR} \tab
-#'  \eqn{q}-dimensional vector. Elements set to `NA` refers to free latent
-#'  variance parameters. Elements set to numerical values denote fixed values
-#'  constraints. \cr \tab \cr \code{CORRFLAG} \tab Logical indicator. Set it to
-#'  `FALSE` if the latent variables are assumed to be independent. Set it `TRUE`
-#'  otherwise. \cr \tab \cr \code{STDLV} \tab Logical indicator. Set it to
-#'  `TRUE` to fix latent variables scale. Set it `FALSE` to fix loadings scale.
-#'  \cr    \tab \cr \code{LLC} \tab Linear loadings constraints. Expects a list
-#'  of constraints. See DETAILS. \cr }
-#'@param METHOD Label for the method chosen. Possible values are: \tabular{ll}{
-#'  \code{'ucminf'} \tab for estimation via the quasi-Newton BFGS optimiser from
-#'  the \code{ucminf} package. Used as default method. \cr \tab \cr \code{'SA'}
-#'  \tab for estimation via Stochastic Approximations. \cr }
-#'@param INIT_METHOD \tabular{ll}{ \code{'custom'} \tab Uses the vector provided
-#'  via `INIT` as starting point. \cr \tab \cr \code{'standard'} \tab Uses cold
-#'  initialisation where loadings are initialised at `0.5` and the latent
-#'  covariance matrix as an Identity matrix. \cr \tab \cr \code{'SA'} \tab
-#'  Computes the starting point using a short chain of stochastic updates.
-#'  Updates start from the `standard` initialisation point. Set as default
-#'  method. \cr }
+#'@param DATA Data object from [set_plfa_data()].
+#'@param MODEL Model object from [set_plfa_model()].
+#'@param CONTROL Control object of the main optimiser: [set_ucminf_control()]
+#'  for the quasi-Newton BFGS optimiser from the \code{ucminf} package,
+#'  [set_sa_control()] for Stochastic Approximations.
+#'@param INIT Starting values object from [set_init()].
 #'@param NCORES Integer value setting the number of threads to carry out the
 #'  estimation.
-#'@param CONTROL List of control options to pass to `ucminf`. See
-#'  [ucminf::ucminf] documentation.
-#'@param CPP_CONTROL_MAIN List of control options to pass to the `SA` optimiser
-#'  when `METHOD="SA"`: \tabular{ll}{ \code{PAIRS_PER_ITERATION} \tab  Number of
-#'  pairs to draw at each iteration.   \cr \tab \cr \code{MAXT} \tab  Maximum
-#'  number of iterations.\cr \tab \cr \code{BURN} \tab  Maximum number of
-#'  iterations to burn before trajectory averaging.\cr \tab \cr \code{STEP0}
-#'  \tab  Initial step length.\cr }
-#'@param CPP_CONTROL_INIT List of control options to pass to the `SA` optimiser
-#'  when `INIT_METHOD="SA"`. See `CPP_CONTROL_MAIN` for details.
-#'@param VALDATA Validation data used to monitor convergence of stochastic
-#'  approximations. If `NULL`, data passed via `DATA` is used for monitoring
-#'  purposes.
-#'@param INIT Initialising vector. If not provided, the starting point is
-#'  computed according to `INIT_METHOD`
 #'@param VERBOSE `TRUE` for verbose output
-#'
-#'@details The argument CONSTR_LIST$LLC is expected to be a list of constraints,
-#'  e.g. `CONSTR_LIST$LLC <- list(constraint_1, constraint2, ...)`, where each
-#'  constraint is defined by a list itself. For example, to impose the
-#'  constraint "L_(2,1)=0.5L_(5,2)+0.25L_(9,3)" you have to write `constraint_1
-#'  <- list(c(2,1), c(0.5,5,2), c(0.25, 9,3))`. That is: the first vector of the
-#'  list is 2-dimensional and stores the coordinates of the constrained loading.
-#'  Each of the successive triplets represent a linear coefficient followed by
-#'  the coordinates of the loading of reference. You can set up an arbitrary
-#'  number of triplets in each constraint.
 #'
 #'@return Object of class `plFaFit`.
 #'@export
 fit_plFA <- function(
     DATA,
-    CONSTR_LIST,
-    METHOD = c("ucminf", "SA"),
-    INIT_METHOD = c("standard", "custom",  "SA"),
+    MODEL,
+    CONTROL = set_ucminf_control(),
+    INIT = set_init(),
     NCORES = 1,
-    VALDATA = NULL,
-    CONTROL = list(),
-    CPP_CONTROL_MAIN = NULL,
-    CPP_CONTROL_INIT = NULL,
-    INIT = NULL,
     VERBOSE = FALSE
 ){
 
   start_time <- Sys.time()
 
-  dat <- check_data(DATA)
-  constr_list <- check_cnstr(CONSTR_LIST)
-  METHOD <- match.arg(METHOD)
-  INIT_METHOD <- match.arg(INIT_METHOD)
+  stopifnot(
+    inherits(DATA, "plfa_data"),
+    inherits(MODEL, "plfa_model"),
+    inherits(CONTROL, c("plfa_ucminf_control", "plfa_sa_control")),
+    inherits(INIT, "plfa_init"),
+    DATA$p == MODEL$p
+  )
+  METHOD <- if (inherits(CONTROL, "plfa_sa_control")) "SA" else "ucminf"
 
   # Identify model dimensions
-  dims <- check_dims(dat, constr_list)
+  dims <- check_dims(DATA$Y, MODEL)
   if(METHOD=="SA" && dims$p<20) message("METHOD='SA' not recommended with less than 20 items.")
-  INIT_METHOD <- check_init_method(dims, INIT_METHOD, INIT)
+  INIT_METHOD <- check_init_method(dims, INIT$METHOD, INIT$THETA)
 
   tmp <- structure(
-    list(cnstr = list(loadings = constr_list$CONSTRMAT,
-                      corrflag = constr_list$CORRFLAG,
-                      stdlv    = constr_list$STDLV,
-                      loglatsd = constr_list$CONSTRLOGSD,
-                      llc      = constr_list$LLC),
+    list(data = DATA,
+         model = MODEL,
+         control = CONTROL,
          dims = list(n     = dims$n,
                      p     = dims$p,
                      q     = dims$q,
@@ -115,15 +68,8 @@ fit_plFA <- function(
 
   RcppParallel::setThreadOptions(numThreads = NCORES)
 
-
-  if(VERBOSE) message('- Computing frequencies...')
-  freq_start_time <- Sys.time()
-  tmp$freq <- pairs_freq(dat, dims$cat)
-  freq_end_time <- Sys.time()
-  tmp$freqTime <- as.numeric(difftime(freq_end_time, freq_start_time, units = 'secs')[1])
-
   # Check Initialisation
-  tmp$init <- check_init(INIT, tmp$freq, dims, constr_list, INIT_METHOD, VERBOSE, CPP_ARGS = CPP_CONTROL_INIT)
+  tmp$init <- check_init(INIT$THETA, DATA$freq, dims, MODEL, INIT_METHOD, VERBOSE, INIT_CONTROL = INIT$CONTROL)
 
   diag_inv_H <- rep(1,length(tmp$init))
 
@@ -139,12 +85,12 @@ fit_plFA <- function(
       mod <- cpp_multiThread_completePairwise(
         N          = dims$n,
         C_VEC      = dims$cat,
-        CONSTRMAT  = constr_list$CONSTRMAT,
-        CONSTRLOGSD= constr_list$CONSTRLOGSD,
-        LLC        = constr_list$LLC,
-        FREQ       = tmp$freq,
+        CONSTRMAT  = MODEL$CONSTRMAT,
+        CONSTRLOGSD= MODEL$CONSTRLOGSD,
+        LLC        = MODEL$LLC,
+        FREQ       = DATA$freq,
         THETA      = par_vec,
-        CORRFLAG   = constr_list$CORRFLAG,
+        CORRFLAG   = MODEL$CORRFLAG,
         NTHR       = dims$nthr,
         NLOAD      = dims$nload,
         NCORR      = dims$ncorr,
@@ -160,12 +106,12 @@ fit_plFA <- function(
       mod <- cpp_multiThread_completePairwise(
         N          = dims$n,
         C_VEC      = dims$cat,
-        CONSTRMAT  = constr_list$CONSTRMAT,
-        CONSTRLOGSD= constr_list$CONSTRLOGSD,
-        LLC        = constr_list$LLC,
-        FREQ       = tmp$freq,
+        CONSTRMAT  = MODEL$CONSTRMAT,
+        CONSTRLOGSD= MODEL$CONSTRLOGSD,
+        LLC        = MODEL$LLC,
+        FREQ       = DATA$freq,
         THETA      = par_vec,
-        CORRFLAG   = constr_list$CORRFLAG,
+        CORRFLAG   = MODEL$CORRFLAG,
         NTHR       = dims$nthr,
         NLOAD      = dims$nload,
         NCORR      = dims$ncorr,
@@ -183,8 +129,8 @@ fit_plFA <- function(
       'par' = tmp$init,
       'fn' = Rwr_ncl,
       'gr' = Rwr_ngr,
-      'control' = if (is.null(CONTROL$ctrl)) list() else CONTROL$ctrl,
-      'hessian' = if (is.null(CONTROL$hessian)) 0 else CONTROL$hessian)
+      'control' = list(grtol = CONTROL$GRTOL, xtol = CONTROL$XTOL, stepmax = CONTROL$STEPMAX, maxeval = CONTROL$MAXEVAL),
+      'hessian' = 0)
 
     # optimisation
     opt <- do.call(ucminf::ucminf, args)
@@ -202,38 +148,29 @@ fit_plFA <- function(
   }
 
   if(METHOD=="SA"){
-    if(!is.null(VALDATA)){
-      if(VERBOSE) message('- Computing frequencies on validation data...')
-      tmp$valfreq <- pairs_freq(VALDATA, dims$cat)
-    }
 
     if(VERBOSE) message('- Optimising via pairwise stochastic approximation...')
     stoFit <- list()
     tmp$method <- "SA"
 
 
-    sa_args <- check_plSA_args(FREQ        = tmp$freq,
-                               VALFREQ     = if(is.null(VALDATA)) NULL else tmp$valfreq,
-                               DIMS        = dims,
-                               CONSTR_LIST = constr_list,
-                               LIST        = CPP_CONTROL_MAIN,
-                               SETTING     = "main")
+    if(is.null(CONTROL$STEP0)) CONTROL$STEP0 <- sqrt(1/dims$d)
+    tmp$control <- CONTROL
 
-    stoFit$control <- sa_args
-
-    sa_args <-  c(list(N           = dims$n,
+    sa_args <-  c(list(FREQ        = DATA$freq,
+                       VALFREQ     = if(is.null(DATA$valfreq)) DATA$freq else DATA$valfreq,
+                       N           = dims$n,
                        C_VEC       = dims$cat,
-                       CONSTRMAT   = constr_list$CONSTRMAT,
-                       CONSTRLOGSD = constr_list$CONSTRLOGSD,
-                       LLC         = constr_list$LLC,
+                       CONSTRMAT   = MODEL$CONSTRMAT,
+                       CONSTRLOGSD = MODEL$CONSTRLOGSD,
+                       LLC         = MODEL$LLC,
                        THETA_INIT  = tmp$init,
                        DIH         = diag_inv_H,
                        NTHR        = dims$nthr,
                        NLOAD       = dims$nload,
                        NCORR       = dims$ncorr,
                        NVAR        = dims$nvar
-    ), sa_args)
-    sa_args$VERBOSE <- VERBOSE
+    ), unclass(CONTROL), VERBOSE = VERBOSE)
 
     opt <- do.call(cpp_plSA2, sa_args)
     end_time <- Sys.time()

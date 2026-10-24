@@ -4,12 +4,10 @@
 \alias{computeVar.PlFaFit}
 \title{Compute variance of the estimates}
 \usage{
-\method{computeVar}{PlFaFit}(OBJ, DATA, NUMDERIV = F, OPTION = "transformed", VERBOSE = FALSE)
+\method{computeVar}{PlFaFit}(OBJ, NUMDERIV = F, OPTION = "transformed", VERBOSE = FALSE)
 }
 \arguments{
 \item{OBJ}{Object of class plFaFit}
-
-\item{DATA}{Original data}
 
 \item{NUMDERIV}{TRUE if the hessian must be computed using \link[numDeriv]{jacobian}}
 

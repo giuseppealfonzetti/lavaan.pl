@@ -1,4 +1,4 @@
-skip_on_cran()
+if (!at_home()) exit_file("Not run on CRAN")
 
 grid <- list(
   "binary, one factor" = list(
@@ -27,7 +27,7 @@ for (nm in names(grid)) {
   ours <- cfa(g$model, g$data, std.lv = g$std.lv)
   ref <- lavaan::cfa(g$model, g$data, std.lv = g$std.lv, estimator = "PML")
 
-  test_that(paste("matches lavaan PML:", nm), {
+  local({
     expect_identical(as.character(class(ours)), "lavaan")
     expect_true(lavaan::lavInspect(ours, "converged"))
     pe <- parameterEstimates(ours)
@@ -40,7 +40,8 @@ for (nm in names(grid)) {
   })
 }
 
-test_that("mean.var.adjusted test matches lavaan PML", {
+# mean.var.adjusted test matches lavaan PML
+local({
   for (nm in c("ordinal, std.lv", "equality constraints")) {
     g <- grid[[nm]]
     ours <- cfa(g$model, g$data, std.lv = g$std.lv, test = "mean.var.adjusted")
@@ -50,7 +51,8 @@ test_that("mean.var.adjusted test matches lavaan PML", {
   }
 })
 
-test_that("unsupported models are rejected", {
+# unsupported models are rejected
+local({
   expect_error(cfa("A =~ A1 + A2 + A3\nC =~ C1 + C2 + C3\nA ~~ 0.3*C", bfi, std.lv = TRUE), "covariances")
   expect_error(cfa("A =~ A1 + A2 + A3\nA1 | -1*t1", bfi, std.lv = TRUE), "threshold")
   expect_error(cfa("A =~ A1 + A2 + A3\nA1 ~~ A2", bfi, std.lv = TRUE), "residual")

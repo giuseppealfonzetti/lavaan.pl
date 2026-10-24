@@ -13,7 +13,7 @@ corrflag <- TRUE
 
 # Simple loading matrix constraints
 A <- build_constrMat(P = p, Q = q, STRUCT = 'simple')
-A <- check_cnstr_loadings(A, stdlv)
+A <- lavaan.pl:::check_cnstr_loadings(A, stdlv)
 
 # Draw some random loadings according to constraints
 Load <- gen_loadings(CONSTRMAT = A, STDLV = stdlv)
@@ -22,12 +22,12 @@ nload <- sum(is.na(A))
 # Generate random latent correlation matrix
 tcorrvec <- rep(0, q*(q-1)/2); if(corrflag) tcorrvec <- rnorm(q*(q-1)/2)
 ncorr <- if(corrflag)q*(q-1)/2 else 0
-R <- cpp_latvar_vec2cmat(VEC=tcorrvec, NCORR=ncorr, Q=q)
+R <- lavaan.pl:::cpp_latvar_vec2cmat(VEC=tcorrvec, NCORR=ncorr, Q=q)
 
 
 # Generate random latent variances
 constr_var <- rep(NA, q)
-constr_lsd <- check_cnstr_latvar(constr_var, q, stdlv)
+constr_lsd <- lavaan.pl:::check_cnstr_latvar(constr_var, q, stdlv)
 nvar  <- sum(is.na(constr_lsd))
 tsdvec <- constr_lsd
 tsdvec[is.na(constr_lsd)] <- rnorm(sum(is.na(constr_lsd)), -.25, .1)
@@ -56,13 +56,14 @@ dat <- sim_data(
   LOADINGS = Load,
   THRESHOLDS = thr,
   LATENT_COV = S)
-constr_list <- check_cnstr(list(CONSTRMAT=A, CORRFLAG=corrflag, CONSTRVAR=exp(constr_lsd)^2, STDLV=stdlv))
+constr_list <- lavaan.pl:::check_cnstr(list(CONSTRMAT=A, CORRFLAG=corrflag, CONSTRVAR=exp(constr_lsd)^2, STDLV=stdlv))
 f <- compute_frequencies(Y = dat, C_VEC = cat)
-dims <- check_dims(dat, constr_list)
-init <- check_init(NULL, f, dims, constr_list, INIT_METHOD = "standard", FALSE)
+dims <- lavaan.pl:::check_dims(dat, constr_list)
+init <- lavaan.pl:::check_init(NULL, f, dims, constr_list, INIT_METHOD = "standard", FALSE)
 init
 
-test_that("init par",{
+# init par
+local({
   expect_true(all(is.finite(init)))
   expect_true(all(is.finite(init)))}
 )
@@ -70,7 +71,7 @@ test_that("init par",{
 
 Rwr_ncl <- function(par_vec){
   n <- dims$n
-  mod <- cpp_multiThread_completePairwise(
+  mod <- lavaan.pl:::cpp_multiThread_completePairwise(
     N          = dims$n,
     C_VEC      = dims$cat,
     CONSTRMAT  = constr_list$CONSTRMAT,
@@ -89,7 +90,8 @@ Rwr_ncl <- function(par_vec){
   return(out)
 }
 init_nll <- Rwr_ncl(init)
-test_that("init nll",{
+# init nll
+local({
   expect_true(is.finite(init_nll))
   expect_true(init_nll<1e3)
 })
@@ -98,7 +100,7 @@ test_that("init nll",{
 
 Rwr_ngr <- function(par_vec){
   n <- dims$n
-  mod <- cpp_multiThread_completePairwise(
+  mod <- lavaan.pl:::cpp_multiThread_completePairwise(
     N          = dims$n,
     C_VEC      = dims$cat,
     CONSTRMAT  = constr_list$CONSTRMAT,
@@ -117,7 +119,8 @@ Rwr_ngr <- function(par_vec){
   return(out)
 }
 init_ngr <- Rwr_ngr(init)
-test_that("init ngr",{
+# init ngr
+local({
   expect_true(all(is.finite(init_ngr)))
 })
 
@@ -129,7 +132,7 @@ test_that("init ngr",{
 
 
 init_nll
-fit <- cpp_plSA2(
+fit <- lavaan.pl:::cpp_plSA2(
   FREQ = f,
   VALFREQ = f,
   N = n,
@@ -160,5 +163,7 @@ fit <- cpp_plSA2(
   VERBOSE_ITER=FALSE
 )
 
-test_that("check initial nll from SA", {expect_equal(init_nll, fit$path_nll[1])})
-test_that("check initial nll from SA", {expect_true(all(is.finite(fit$avtheta)))})
+# check initial nll from SA
+local({expect_equal(init_nll, fit$path_nll[1])})
+# check initial nll from SA
+local({expect_true(all(is.finite(fit$avtheta)))})

@@ -9,11 +9,10 @@ cfa(
   data,
   std.lv = FALSE,
   estimator = "PML",
-  estimator.args = list(method = c("ucminf", "SA"), init_method = c("SA", "custom",
-    "standard"), cpp_control_init = NULL, ncores = 1, valdata = NULL, computevar_numderiv
-    = FALSE),
+  estimator.args = list(init = set_init(METHOD = "SA"), ncores = 1, valdata = NULL,
+    computevar_numderiv = FALSE),
   start = NULL,
-  control = list(),
+  control = NULL,
   verbose = FALSE,
   ...
 )
@@ -38,9 +37,7 @@ then \code{\link[lavaan:cfa]{lavaan::cfa()}} is used.}
 \item{estimator.args}{A list of arguments for \code{\link[=fit_plFA]{fit_plFA()}}--see the help file
 for more details. Possible options are:
 \describe{
-\item{\code{method}}{One of \code{"ucminf"} (default) for the quasi-Newton BFGS optimiser, or \code{"SA"} for stochastic approximation.}
-\item{\code{init_method}}{One of \code{"SA"} (default) for stochastic approximation, \code{"custom"} for user-defined starting values, or \code{"standard"} for standard starting values.}
-\item{\code{cpp_control_init}}{A list of control parameters for the initialisation algorithm.}
+\item{\code{init}}{Starting values object from \code{\link[=set_init]{set_init()}}, by default \code{set_init(METHOD = "SA")}. Its \code{THETA} is taken from \code{start} or from the lavaan starting values.}
 \item{\code{ncores}}{The number of cores to use for parallel computation.}
 \item{\code{valdata}}{Validation data.}
 \item{\code{computevar_numderiv}}{If \code{TRUE}, the asymptotic variance-covariance matrix is computed using numerical derivatives.}
@@ -48,10 +45,11 @@ for more details. Possible options are:
 
 \item{start}{A vector of starting values to use (in the order of free
 loadings, thresholds, and then factor correlations). If not provided, the
-starting point is computed according to \code{\link[=fit_plFA]{fit_plFA()}}'s \code{INIT_METHOD}.}
+starting point is computed according to \code{estimator.args$init}.}
 
-\item{control}{A list of control parameters for the estimation algorithm. See
-\code{\link[=fit_plFA]{fit_plFA()}} for more information.}
+\item{control}{Control object of the estimation algorithm: \code{\link[=set_ucminf_control]{set_ucminf_control()}}
+for the quasi-Newton BFGS optimiser (default), \code{\link[=set_sa_control]{set_sa_control()}} for stochastic
+approximation.}
 
 \item{verbose}{If \code{TRUE}, print additional information during the estimation
 process.}

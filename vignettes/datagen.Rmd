@@ -1,16 +1,16 @@
 ---
 title: "Data generation"
-output: rmarkdown::html_vignette
+output: litedown::html_format
 vignette: >
   %\VignetteIndexEntry{Data generation}
-  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEngine{litedown::vignette}
   %\VignetteEncoding{UTF-8}
 ---
 
 ```{r, include = FALSE}
-knitr::opts_chunk$set(
+litedown::reactor(
   collapse = TRUE,
-  comment = "#>"
+  comment = "#> "
 )
 ```
 
