@@ -6,9 +6,9 @@ check_data <- function(DATA){
   return(round(DATA,0))
 }
 check_cnstr_corrflag <- function(CORRFLAG){
-  if(is.null(CORRFLAG)) CORRFLAG <- 1
+  if(is.null(CORRFLAG)) CORRFLAG <- TRUE
   stopifnot(CORRFLAG%in%c(0,1))
-  return(CORRFLAG)
+  return(as.logical(CORRFLAG))
 }
 check_cnstr_stdlv <- function(STDLV){
   if(is.null(STDLV)) STDLV <- TRUE
@@ -41,9 +41,6 @@ check_cnstr_loadings <- function(MAT, STDLV, LLC=NULL){
 
   return(MAT)
 }
-check_cnstr_loadings_llc <- function(LIST){
-  return(LIST)
-}
 check_cnstr_latvar <- function(VEC, Q, STDLV){
   if(is.null(VEC) & STDLV) VEC <- rep(1, Q)
   if(is.null(VEC) & !STDLV) VEC <- rep(NA, Q)
@@ -62,7 +59,7 @@ check_cnstr <- function(LIST){
   ls <- list()
   ls$CORRFLAG <- check_cnstr_corrflag(LIST$CORRFLAG)
   ls$STDLV    <- check_cnstr_stdlv(LIST$STDLV)
-  ls$LLC <- check_cnstr_loadings_llc(LIST$LLC)
+  ls$LLC <- LIST$LLC
   ls$CONSTRMAT <- check_cnstr_loadings(LIST$CONSTRMAT, STDLV = ls$STDLV, LLC = ls$LLC)
   q <- ncol(ls$CONSTRMAT)
   ls$CONSTRLOGSD <- check_cnstr_latvar(LIST$CONSTRVAR, Q=q, STDLV = ls$STDLV)
@@ -177,7 +174,6 @@ check_init_par <- function(PAR, DIMS, CONSTR_LIST){
                             Q           = DIMS$q)
   check_latcov(S)
   Sy <- L%*%S%*%t(L)
-  # stopifnot(diag(Sy)<=1)
   if(!all(diag(Sy)<=1)) warning("Negative error variances implied by init parameters")
   PAR <- cpp_sa_proj( THETA=PAR,
                       CONSTRMAT=CONSTR_LIST$CONSTRMAT,
@@ -231,9 +227,6 @@ check_init <- function(INIT, FREQ, DIMS, CONSTR_LIST, INIT_METHOD=c("SA", "custo
 check_init_method <- function(DIMS, INIT_METHOD = c("SA", "custom", "standard"), INIT =NULL){
   INIT_METHOD <- match.arg(INIT_METHOD)
   if(INIT_METHOD == "custom") INIT_METHOD <- "standard"
-  # if (.Platform$OS.type == "windows" & INIT_METHOD=="SA"){
-  #   INIT_METHOD <- "standard"
-  # }
 
   if(INIT_METHOD=="SA"){
     if(DIMS$p<15)INIT_METHOD <- "standard"
@@ -247,20 +240,12 @@ check_plSA_args <- function(FREQ, VALFREQ=NULL, DIMS, CONSTR_LIST, LIST=NULL, SE
 
   if(is.null(VALFREQ)) {out$VALFREQ <- FREQ} else {out$VALFREQ <- VALFREQ}
 
-  # if(is.null(LIST$SAMPLER)) LIST$SAMPLER <- 0
-  # stopifnot(LIST$SAMPLER%in%c(0,1))
-  # out$SAMPLER <- LIST$SAMPLER
-
   if(is.null(LIST$PAIRS_PER_ITERATION) & SETTING=="init") LIST$PAIRS_PER_ITERATION <- 16
   if(is.null(LIST$PAIRS_PER_ITERATION) & SETTING=="main") LIST$PAIRS_PER_ITERATION <- 16
 
   stopifnot(is.numeric(LIST$PAIRS_PER_ITERATION))
   stopifnot(LIST$PAIRS_PER_ITERATION>0)
   out$PAIRS_PER_ITERATION <- as.integer(LIST$PAIRS_PER_ITERATION)
-
-  # if(is.null(LIST$SCHEDULE)) LIST$SCHEDULE <- 1
-  # stopifnot(LIST$SCHEDULE%in%c(0,1))
-  # out$SCHEDULE <- LIST$SCHEDULE
 
   if(is.null(LIST$STEP0) & SETTING=="init") LIST$STEP0 <- sqrt(1/DIMS$d)
   if(is.null(LIST$STEP0) & SETTING=="main") LIST$STEP0 <- 1
@@ -324,16 +309,6 @@ check_plSA_args <- function(FREQ, VALFREQ=NULL, DIMS, CONSTR_LIST, LIST=NULL, SE
   stopifnot(LIST$EPOCHS_PER_CHECK>0)
   out$EPOCHS_PER_CHECK <- as.integer(LIST$EPOCHS_PER_CHECK)
 
-  # if(is.null(LIST$PATH_WINDOW)) LIST$PATH_WINDOW <- out$CHECK_WINDOW
-  # stopifnot(is.numeric(LIST$PATH_WINDOW))
-  # stopifnot(LIST$PATH_WINDOW>0)
-  # out$PATH_WINDOW <- as.integer(LIST$PATH_WINDOW)
-  #
-  # if(is.null(LIST$CLOCK_WINDOW)) LIST$CLOCK_WINDOW <- out$CHECK_WINDOW
-  # stopifnot(is.numeric(LIST$CLOCK_WINDOW))
-  # stopifnot(LIST$CLOCK_WINDOW>0)
-  # out$CLOCK_WINDOW <- as.integer(LIST$CLOCK_WINDOW)
-
   if(is.null(LIST$SEED)) LIST$SEED <- 123
   stopifnot(is.numeric(LIST$SEED))
   stopifnot(LIST$SEED>0)
@@ -348,70 +323,3 @@ check_plSA_args <- function(FREQ, VALFREQ=NULL, DIMS, CONSTR_LIST, LIST=NULL, SE
   return(out)
 
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

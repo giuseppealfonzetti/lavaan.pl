@@ -7,7 +7,7 @@ mod <- "agr =~ A1 + A2 + A3 + A4 + A5"
 bfiord <-
   bfi |>
   mutate(
-    across(A1:O5, \(x) ordered(as.numeric(x >= 4))),
+    across(A1:O5, function(x) ordered(as.numeric(x >= 4))),
     gender = ifelse(gender == 1, "Male", "Female")
   )
 
@@ -20,7 +20,7 @@ inspect(fit1, "free")  # Now a list of 2, one for each group
 fit2 <- lavaan::cfa(mod, bfiord, std.lv = TRUE, group = "gender",
                     group.equal = c("loadings"))
 inspect(fit2, "free")
-lavtable(fit2)  # freq counts also accounts for multi groups
+lavTables(fit2)  # freq counts also accounts for multi groups
 
 # (Strong) Invariance model. Note: because of the restriction on the thresholds,
 # the total variance of the y* cannot be 1 in both groups now, so the var(y*)

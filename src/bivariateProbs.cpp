@@ -6,8 +6,8 @@
 /*  PI (the probability of a bivariate response pattern) */
 // Compute specific pi_sksl
 double biprobs::compute_pi(
-    const Eigen::VectorXd c_vec,
-    const Eigen::VectorXd pi_thresholds,
+    const Eigen::Ref<const Eigen::VectorXd> c_vec,
+    const Eigen::Ref<const Eigen::VectorXd> pi_thresholds,
     double rho_kl,
 
     const unsigned int k,

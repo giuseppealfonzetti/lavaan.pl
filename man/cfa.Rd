@@ -22,7 +22,7 @@ cfa(
 \item{model}{A description of the user-specified model. Typically, the model
 is described using the lavaan model syntax. See \code{\link[lavaan:model.syntax]{lavaan::model.syntax}}
 for more information. Alternatively, a parameter table (eg. the output of
-the \code{\link[lavaan:model.syntax]{lavaan::lavaanify()}} function) is also accepted.}
+the \code{\link[lavaan:lavaanify]{lavaan::lavaanify()}} function) is also accepted.}
 
 \item{data}{A data frame containing the observed variables used in the model.
 Variables must be declared as ordered factors.}
@@ -56,7 +56,7 @@ starting point is computed according to \code{\link[=fit_plFA]{fit_plFA()}}'s \c
 \item{verbose}{If \code{TRUE}, print additional information during the estimation
 process.}
 
-\item{...}{Additional arguments to be passed to \code{\link[=lavaan]{lavaan()}}.}
+\item{...}{Additional arguments to be passed to \code{\link[lavaan:lavaan]{lavaan()}}.}
 }
 \value{
 A \code{plFAlavaan} object, which is a subclass of the \code{lavaan} class.
@@ -65,12 +65,12 @@ compatible with \code{plFAlavaan} objects.
 }
 \description{
 Fit a Confirmatory Factor Analysis (CFA) model using the \code{lavaan.pl()} engine
-using the \code{\link{lavaan}} framework. By default, a quasi-Newton BFGS optimiser
-from the \code{\link{ucminf}} package is used. For large data sets, the stochastic
+using the \code{\link[lavaan:lavaan]{lavaan}} framework. By default, a quasi-Newton BFGS optimiser
+from the \code{\link[ucminf:ucminf]{ucminf}} package is used. For large data sets, the stochastic
 approximation algorithm can be used.
 }
 \details{
-Not all \code{\link{lavaan}} options can be used at present. Some options of
+Not all \code{\link[lavaan:lavaan]{lavaan}} options can be used at present. Some options of
 interest are:
 \describe{
 \item{\code{information}}{The information matrix to use. Only \code{"observed"} is currently supported.}

@@ -63,35 +63,6 @@ Eigen::VectorXd params::extract_thresholds(const Eigen::Ref<const Eigen::VectorX
       return THETA.segment(NTHR, NLOAD);
     }
 
-    // Eigen::MatrixXd theta2mat(const Eigen::Ref<const Eigen::VectorXd> THETA,
-    //                           const Eigen::Ref<const Eigen::MatrixXd> CONSTRMAT,
-    //                           const int NTHR,
-    //                           const int NLOAD){
-    //
-    //   Eigen::VectorXd vec = params::loadings::theta2vec(THETA, NTHR, NLOAD);
-    //   const int p = CONSTRMAT.rows();
-    //   const int q = CONSTRMAT.cols();
-    //   Eigen::MatrixXd out(p, q);
-    //
-    //   int idx = 0;
-    //
-    //   // construct vector with parameters free to be estimated
-    //   for(int h = 0; h < q; h++){
-    //     for(int j = 0; j < p; j++){
-    //       if(!std::isfinite(CONSTRMAT(j,h))){
-    //         out(j, h)=vec(idx);
-    //         idx ++;
-    //       }else{
-    //         out(j, h)= CONSTRMAT(j, h);
-    //       };
-    //     };
-    //   }
-    //
-    //   return out;
-    //
-    //
-    // }
-
     Eigen::VectorXd mat2vec(const Eigen::Ref<const Eigen::MatrixXd> LOADINGS,
                             const Eigen::Ref<const Eigen::MatrixXd> CONSTRMAT,
                             const int  NLOAD){
@@ -148,8 +119,6 @@ Eigen::VectorXd params::extract_thresholds(const Eigen::Ref<const Eigen::VectorX
         const int target_col = LLC.at(idx_lc).at(0).at(1)-1;
         const int n_loads_involved = LLC.at(idx_lc).size();
 
-        // Rcpp::Rcout << "Constrain number " << idx_lc+1 << ", L("<<target_row+1<<","<<target_col+1
-        //             <<"), Number of params involved: "<< n_loads_involved-1<<"\n";
 
         out(target_row, target_col) = 0;
 
@@ -158,7 +127,6 @@ Eigen::VectorXd params::extract_thresholds(const Eigen::Ref<const Eigen::VectorX
           const int target_row_var = LLC.at(idx_lc).at(idx_var).at(1)-1;
           const int target_col_var = LLC.at(idx_lc).at(idx_var).at(2)-1;
 
-          // Rcpp::Rcout << " + " << coeff << "*" "L("<<target_row_var+1<<","<<target_col_var+1<<")\n";
 
           out(target_row, target_col) += coeff* out(target_row_var, target_col_var);
 
@@ -190,7 +158,6 @@ Eigen::VectorXd params::extract_thresholds(const Eigen::Ref<const Eigen::VectorX
 
       if(NCORR>0){
         // extract uncostrained parameters related to latent correlations
-        // Eigen::VectorXd transformed_rhos = VEC;
 
         // inverse of Fisher's transformation
         Eigen::VectorXd tanh_entries = ((Eigen::VectorXd(2*VEC.segment(0, NCORR))).array().exp() - 1)/
@@ -353,7 +320,6 @@ Eigen::VectorXd params::extract_thresholds(const Eigen::Ref<const Eigen::VectorX
       Eigen::MatrixXd U = llt.matrixU();
 
       Eigen::VectorXd y(q*(q-1)/2);
-      Eigen::MatrixXd Y = Eigen::MatrixXd::Zero(q,q);
       Eigen::MatrixXd Z = Eigen::MatrixXd::Zero(q,q);
       unsigned int iterator = 0;
       for(unsigned int col = 1; col < q; col ++){
@@ -366,7 +332,6 @@ Eigen::VectorXd params::extract_thresholds(const Eigen::Ref<const Eigen::VectorX
               Z(row, col) = U(row, col)*prod;
             }
           }
-          Y(row, col) = atanh(Z(row, col));
           y(iterator) = atanh(Z(row, col));
           iterator++;
         }

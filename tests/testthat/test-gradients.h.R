@@ -11,14 +11,13 @@ p <- 12; q <- 3; n <- 100
 thr <- c(-1.5, 0, 1.5)
 cat <- rep(length(thr)+1, p)
 nthr <- sum(cat)-p
-pair_nll <- function(PAR, K, L, OPTION=0){
+pair_nll <- function(PAR, K, L){
   pair <- cpp_compute_pair_ext(
     CONSTRMAT   = constr_list$CONSTRMAT,
     CONSTRLOGSD = constr_list$CONSTRLOGSD,
     LLC         = constr_list$LLC,
     C_VEC       = cat,
     THETA       = PAR,
-    CORRFLAG    = corrflag,
     NTHR        = nthr,
     NLOAD       = nload,
     NCORR       = ncorr,
@@ -26,21 +25,18 @@ pair_nll <- function(PAR, K, L, OPTION=0){
     K           = K,
     L           = L,
     PAIRS_TABLE = f,
-    SILENTFLAG  = 1,
-    GRADFLAG    = 0,
-    OPTION      = OPTION
+    GRADFLAG    = 0
   )
   out <- pair$nll/n
   return(out)
 }
-pair_ngr <- function(PAR, K, L, OPTION=0){
+pair_ngr <- function(PAR, K, L){
   pair <- cpp_compute_pair_ext(
     CONSTRMAT   = constr_list$CONSTRMAT,
     CONSTRLOGSD = constr_list$CONSTRLOGSD,
     LLC         = constr_list$LLC,
     C_VEC       = cat,
     THETA       = PAR,
-    CORRFLAG    = corrflag,
     NTHR        = nthr,
     NLOAD       = nload,
     NCORR       = ncorr,
@@ -48,9 +44,7 @@ pair_ngr <- function(PAR, K, L, OPTION=0){
     K           = K,
     L           = L,
     PAIRS_TABLE = f,
-    SILENTFLAG  = 1,
-    GRADFLAG    = 1,
-    OPTION      = OPTION
+    GRADFLAG    = 1
   )
   out <- pair$ngr/n
   return(out)
@@ -148,10 +142,6 @@ if(1){
         expect_equal(pair_ngr(PAR=theta, K=k-1, L=l-1), numDeriv::grad(func=pair_nll, x=theta, K=k-1,L=l-1), tolerance = 1e-4)
       })
       tot_gr <- tot_gr+pair_ngr(PAR=theta, K=k-1, L=l-1)
-
-      test_that(paste0("check gradient (pi version) pair (", l, ",", k, "):") ,{
-        expect_equal(pair_ngr(PAR=theta, K=k-1, L=l-1, OPTION=1), numDeriv::grad(func=pair_nll, x=theta, K=k-1,L=l-1), tolerance = 1e-4)
-      })
     }
   }
 
@@ -236,10 +226,6 @@ if(1){
         expect_equal(pair_ngr(PAR=theta, K=k-1, L=l-1), numDeriv::grad(func=pair_nll, x=theta, K=k-1,L=l-1), tolerance = 1e-4)
       })
       tot_gr <- tot_gr+pair_ngr(PAR=theta, K=k-1, L=l-1)
-
-      test_that(paste0("check gradient (pi version) pair (", l, ",", k, "):") ,{
-        expect_equal(pair_ngr(PAR=theta, K=k-1, L=l-1, OPTION=1), numDeriv::grad(func=pair_nll, x=theta, K=k-1,L=l-1), tolerance = 1e-4)
-      })
     }
   }
 
@@ -321,10 +307,6 @@ if(1){
         expect_equal(pair_ngr(PAR=theta, K=k-1, L=l-1), numDeriv::grad(func=pair_nll, x=theta, K=k-1,L=l-1), tolerance = 1e-4)
       })
       tot_gr <- tot_gr+pair_ngr(PAR=theta, K=k-1, L=l-1)
-
-      test_that(paste0("check gradient (pi version) pair (", l, ",", k, "):") ,{
-        expect_equal(pair_ngr(PAR=theta, K=k-1, L=l-1, OPTION=1), numDeriv::grad(func=pair_nll, x=theta, K=k-1,L=l-1), tolerance = 1e-4)
-      })
     }
   }
 
@@ -407,10 +389,6 @@ if(1){
         expect_equal(pair_ngr(PAR=theta, K=k-1, L=l-1), numDeriv::grad(func=pair_nll, x=theta, K=k-1,L=l-1), tolerance = 1e-4)
       })
       tot_gr <- tot_gr+pair_ngr(PAR=theta, K=k-1, L=l-1)
-
-      test_that(paste0("check gradient (pi version) pair (", l, ",", k, "):") ,{
-        expect_equal(pair_ngr(PAR=theta, K=k-1, L=l-1, OPTION=1), numDeriv::grad(func=pair_nll, x=theta, K=k-1,L=l-1), tolerance = 1e-4)
-      })
     }
   }
 
@@ -492,10 +470,6 @@ if(1){
         expect_equal(pair_ngr(PAR=theta, K=k-1, L=l-1), numDeriv::grad(func=pair_nll, x=theta, K=k-1,L=l-1), tolerance = 1e-4)
       })
       tot_gr <- tot_gr+pair_ngr(PAR=theta, K=k-1, L=l-1)
-
-      test_that(paste0("check gradient (pi version) pair (", l, ",", k, "):") ,{
-        expect_equal(pair_ngr(PAR=theta, K=k-1, L=l-1, OPTION=1), numDeriv::grad(func=pair_nll, x=theta, K=k-1,L=l-1), tolerance = 1e-4)
-      })
     }
   }
 
@@ -578,10 +552,6 @@ if(1){
         expect_equal(pair_ngr(PAR=theta, K=k-1, L=l-1), numDeriv::grad(func=pair_nll, x=theta, K=k-1,L=l-1), tolerance = 1e-4)
       })
       tot_gr <- tot_gr+pair_ngr(PAR=theta, K=k-1, L=l-1)
-
-      test_that(paste0("check gradient (pi version) pair (", l, ",", k, "):") ,{
-        expect_equal(pair_ngr(PAR=theta, K=k-1, L=l-1, OPTION=1), numDeriv::grad(func=pair_nll, x=theta, K=k-1,L=l-1), tolerance = 1e-4)
-      })
     }
   }
 
@@ -592,32 +562,3 @@ if(1){
     )
   })
 }
-
-
-
-# k <- 3; l <- 2
-# cpp_compute_pair_ext(
-#   CONSTRMAT   = constr_list$CONSTRMAT,
-#   CONSTRLOGSD = constr_list$CONSTRLOGSD,
-#   LLC         = constr_list$LLC,
-#   C_VEC       = cat,
-#   THETA       = theta,
-#   CORRFLAG    = corrflag,
-#   NTHR        = nthr,
-#   NLOAD       = nload,
-#   NCORR       = ncorr,
-#   NVAR        = nvar,
-#   K           = k-1,
-#   L           = l-1,
-#   PAIRS_TABLE = f,
-#   SILENTFLAG  = 1,
-#   GRADFLAG    = 0,
-#   OPTION      = 0
-# )$nll
-#
-# pair_ngr(theta, k-1, l-1)
-# numDeriv::grad(func=pair_nll, x=theta, K=k-1,L=l-1)
-#
-#
-# Load[k, ] %*% S %*% as.vector(Load[l,])
-#

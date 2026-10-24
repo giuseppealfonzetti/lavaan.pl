@@ -12,8 +12,8 @@ Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
 #endif
 
 // cpp_compute_pair_ext
-Rcpp::List cpp_compute_pair_ext(Eigen::Map<Eigen::MatrixXd> CONSTRMAT, Eigen::Map<Eigen::VectorXd> CONSTRLOGSD, const std::vector<std::vector<std::vector<double>>> LLC, Eigen::Map<Eigen::VectorXd> C_VEC, Eigen::VectorXd THETA, const int CORRFLAG, const int NTHR, const int NLOAD, const int NCORR, const int NVAR, const unsigned int K, const unsigned int L, Eigen::MatrixXd PAIRS_TABLE, const unsigned int SILENTFLAG, const unsigned int GRADFLAG, const int OPTION);
-RcppExport SEXP _lavaan_pl_cpp_compute_pair_ext(SEXP CONSTRMATSEXP, SEXP CONSTRLOGSDSEXP, SEXP LLCSEXP, SEXP C_VECSEXP, SEXP THETASEXP, SEXP CORRFLAGSEXP, SEXP NTHRSEXP, SEXP NLOADSEXP, SEXP NCORRSEXP, SEXP NVARSEXP, SEXP KSEXP, SEXP LSEXP, SEXP PAIRS_TABLESEXP, SEXP SILENTFLAGSEXP, SEXP GRADFLAGSEXP, SEXP OPTIONSEXP) {
+Rcpp::List cpp_compute_pair_ext(Eigen::Map<Eigen::MatrixXd> CONSTRMAT, Eigen::Map<Eigen::VectorXd> CONSTRLOGSD, const std::vector<std::vector<std::vector<double>>> LLC, Eigen::Map<Eigen::VectorXd> C_VEC, Eigen::VectorXd THETA, const int NTHR, const int NLOAD, const int NCORR, const int NVAR, const unsigned int K, const unsigned int L, Eigen::MatrixXd PAIRS_TABLE, const unsigned int GRADFLAG);
+RcppExport SEXP _lavaan_pl_cpp_compute_pair_ext(SEXP CONSTRMATSEXP, SEXP CONSTRLOGSDSEXP, SEXP LLCSEXP, SEXP C_VECSEXP, SEXP THETASEXP, SEXP NTHRSEXP, SEXP NLOADSEXP, SEXP NCORRSEXP, SEXP NVARSEXP, SEXP KSEXP, SEXP LSEXP, SEXP PAIRS_TABLESEXP, SEXP GRADFLAGSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -22,7 +22,6 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< const std::vector<std::vector<std::vector<double>>> >::type LLC(LLCSEXP);
     Rcpp::traits::input_parameter< Eigen::Map<Eigen::VectorXd> >::type C_VEC(C_VECSEXP);
     Rcpp::traits::input_parameter< Eigen::VectorXd >::type THETA(THETASEXP);
-    Rcpp::traits::input_parameter< const int >::type CORRFLAG(CORRFLAGSEXP);
     Rcpp::traits::input_parameter< const int >::type NTHR(NTHRSEXP);
     Rcpp::traits::input_parameter< const int >::type NLOAD(NLOADSEXP);
     Rcpp::traits::input_parameter< const int >::type NCORR(NCORRSEXP);
@@ -30,10 +29,8 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< const unsigned int >::type K(KSEXP);
     Rcpp::traits::input_parameter< const unsigned int >::type L(LSEXP);
     Rcpp::traits::input_parameter< Eigen::MatrixXd >::type PAIRS_TABLE(PAIRS_TABLESEXP);
-    Rcpp::traits::input_parameter< const unsigned int >::type SILENTFLAG(SILENTFLAGSEXP);
     Rcpp::traits::input_parameter< const unsigned int >::type GRADFLAG(GRADFLAGSEXP);
-    Rcpp::traits::input_parameter< const int >::type OPTION(OPTIONSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_compute_pair_ext(CONSTRMAT, CONSTRLOGSD, LLC, C_VEC, THETA, CORRFLAG, NTHR, NLOAD, NCORR, NVAR, K, L, PAIRS_TABLE, SILENTFLAG, GRADFLAG, OPTION));
+    rcpp_result_gen = Rcpp::wrap(cpp_compute_pair_ext(CONSTRMAT, CONSTRLOGSD, LLC, C_VEC, THETA, NTHR, NLOAD, NCORR, NVAR, K, L, PAIRS_TABLE, GRADFLAG));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -88,21 +85,6 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< const int >::type NCORR(NCORRSEXP);
     Rcpp::traits::input_parameter< const int >::type Q(QSEXP);
     rcpp_result_gen = Rcpp::wrap(cpp_latvar_vec2cmat(VEC, NCORR, Q));
-    return rcpp_result_gen;
-END_RCPP
-}
-// cpp_latvar_vec2dmat
-Eigen::MatrixXd cpp_latvar_vec2dmat(Eigen::Map<Eigen::VectorXd> VEC, Eigen::Map<Eigen::VectorXd> CONSTRLOGSD, const int NCORR, const int NVAR, const int Q);
-RcppExport SEXP _lavaan_pl_cpp_latvar_vec2dmat(SEXP VECSEXP, SEXP CONSTRLOGSDSEXP, SEXP NCORRSEXP, SEXP NVARSEXP, SEXP QSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< Eigen::Map<Eigen::VectorXd> >::type VEC(VECSEXP);
-    Rcpp::traits::input_parameter< Eigen::Map<Eigen::VectorXd> >::type CONSTRLOGSD(CONSTRLOGSDSEXP);
-    Rcpp::traits::input_parameter< const int >::type NCORR(NCORRSEXP);
-    Rcpp::traits::input_parameter< const int >::type NVAR(NVARSEXP);
-    Rcpp::traits::input_parameter< const int >::type Q(QSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_latvar_vec2dmat(VEC, CONSTRLOGSD, NCORR, NVAR, Q));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -167,17 +149,6 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< const int >::type NCORR(NCORRSEXP);
     Rcpp::traits::input_parameter< const int >::type NVAR(NVARSEXP);
     rcpp_result_gen = Rcpp::wrap(cpp_latvar_mat2vec(S, CONSTRLOGSD, NCORR, NVAR));
-    return rcpp_result_gen;
-END_RCPP
-}
-// cpp_latvar_mat2cmat
-Eigen::MatrixXd cpp_latvar_mat2cmat(Eigen::Map<Eigen::MatrixXd> S);
-RcppExport SEXP _lavaan_pl_cpp_latvar_mat2cmat(SEXP SSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< Eigen::Map<Eigen::MatrixXd> >::type S(SSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_latvar_mat2cmat(S));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -300,17 +271,15 @@ END_RCPP
 }
 
 static const R_CallMethodDef CallEntries[] = {
-    {"_lavaan_pl_cpp_compute_pair_ext", (DL_FUNC) &_lavaan_pl_cpp_compute_pair_ext, 16},
+    {"_lavaan_pl_cpp_compute_pair_ext", (DL_FUNC) &_lavaan_pl_cpp_compute_pair_ext, 13},
     {"_lavaan_pl_cpp_loadings_theta2vec", (DL_FUNC) &_lavaan_pl_cpp_loadings_theta2vec, 3},
     {"_lavaan_pl_cpp_loadings_theta2mat", (DL_FUNC) &_lavaan_pl_cpp_loadings_theta2mat, 5},
     {"_lavaan_pl_cpp_loadings_mat2vec", (DL_FUNC) &_lavaan_pl_cpp_loadings_mat2vec, 3},
     {"_lavaan_pl_cpp_latvar_vec2cmat", (DL_FUNC) &_lavaan_pl_cpp_latvar_vec2cmat, 3},
-    {"_lavaan_pl_cpp_latvar_vec2dmat", (DL_FUNC) &_lavaan_pl_cpp_latvar_vec2dmat, 5},
     {"_lavaan_pl_cpp_latvar_theta2cmat", (DL_FUNC) &_lavaan_pl_cpp_latvar_theta2cmat, 6},
     {"_lavaan_pl_cpp_latvar_theta2dmat", (DL_FUNC) &_lavaan_pl_cpp_latvar_theta2dmat, 7},
     {"_lavaan_pl_cpp_latvar_theta2mat", (DL_FUNC) &_lavaan_pl_cpp_latvar_theta2mat, 7},
     {"_lavaan_pl_cpp_latvar_mat2vec", (DL_FUNC) &_lavaan_pl_cpp_latvar_mat2vec, 4},
-    {"_lavaan_pl_cpp_latvar_mat2cmat", (DL_FUNC) &_lavaan_pl_cpp_latvar_mat2cmat, 1},
     {"_lavaan_pl_cpp_sa_proj", (DL_FUNC) &_lavaan_pl_cpp_sa_proj, 10},
     {"_lavaan_pl_cpp_sample_estimators_HJ", (DL_FUNC) &_lavaan_pl_cpp_sample_estimators_HJ, 13},
     {"_lavaan_pl_pairs_freq", (DL_FUNC) &_lavaan_pl_pairs_freq, 2},

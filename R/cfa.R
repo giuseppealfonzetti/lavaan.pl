@@ -92,9 +92,11 @@ cfa <- function(
   method <- rlang::arg_match(method, c("ucminf", "SA"))
   init_method <- estimator.args$init_method
   if (is.null(init_method)) init_method <- "SA"
+  init_method <- rlang::arg_match(init_method, c("SA", "custom", "standard"))
   ncores <- estimator.args$ncores
   if (is.null(ncores)) ncores <- 1
   valdata <- estimator.args$valdata
+  cpp_control_main <- NULL
   if (method == "SA") {
     cpp_control_main <- control
     control <- list()
@@ -110,10 +112,6 @@ cfa <- function(
   lavargs$std.lv <- std.lv
   lavargs$estimator <- estimator
   lavargs$do.fit <- FALSE
-
-  # Cheeky way to see if vars is passed, then no need to recompute it
-  vars <- lavargs$vars
-  lavargs$vars <- NULL  # empty it!
 
   if (estimator == "PML") {
     if ("information" %in% names(lavargs)) {
@@ -133,7 +131,7 @@ cfa <- function(
     if (!("test" %in% names(lavargs))) {
       lavargs$test <- "none"
     }
-    fit0 <- do.call(get("cfa", envir = asNamespace("lavaan")), lavargs)
+    template <- do.call(get("cfa", envir = asNamespace("lavaan")), lavargs)
   } else{
     # In case user selects "DWLS" or "WLSMV", revert to lavaan::cfa()
     lavargs$do.fit <- TRUE
@@ -141,113 +139,12 @@ cfa <- function(
     return(fit)
   }
 
-  # Check any ordinal data or not?
-  if (!all(fit0@Data@ov$type == "ordered")) {
-    cli::cli_abort("All measurement items must be declared as ordered factors.")
-  }
-  if (fit0@Data@ngroups > 1L) {
-    cli::cli_abort("Multigroup analysis is not currently supported.")
-  }
-
   # Fit lavaan.pl -------------------------------------------------------------------
-  D <- fit0@Data@X[[1]] - 1
-
-  # Build the p x q loading constraints matrix
-  FREE <- lavaan::inspect(fit0, what = "free", add.class = FALSE)
-  lambda <- lavaan::inspect(fit0, what = "est")$lambda
-  p <- nrow(lambda)
-  q <- ncol(lambda)
-  A <- lambda
-  class(A) <- "matrix"
-  A[] <- NA
-  A[FREE$lambda == 0] <- lambda[FREE$lambda == 0]
-
-  # CORRFLAG
-  psi <- lavaan::inspect(fit0, "est")$psi
-  LTpsi <- psi[lower.tri(psi)]
-  if (length(LTpsi) > 0) {
-    if (any(LTpsi == 0 & FREE$psi[lower.tri(psi)] == 0))
-      corrflag <- FALSE
-    else
-      corrflag <- TRUE
-  } else {
-    corrflag <- FALSE
-  }
-  constrvar <- diag(psi)
-  constrvar[diag(FREE$psi) > 0] <- NA
-
-  # Linear loadings constraints
-  llc <- NULL
-  pt <- lavaan::partable(fit0)
-  ptlc <- pt[pt$op == "==", ]
-  Lambdaid <- lavaan::inspect(fit0, "free")$lambda
-
-  if (nrow(ptlc) > 0L) {
-    llc <- list()
-    coord1 <- ptlc$lhs
-    coord2 <- strsplit(ptlc$rhs, "\\+")[[1]]
-    for (i in seq_along(coord1)) {
-      idx <- pt$id[pt$label == coord1[i]]
-      llc[[i]] <- list(which(Lambdaid == idx, arr.ind = TRUE))
-
-      for (j in seq_along(coord2)) {
-        cz <- strsplit(coord2[j], "\\*")[[1]]
-        if (length(cz) == 1L) {
-          cz <- c("1", cz)
-        }
-        idx <- pt$id[pt$label == cz[2]]
-        tmp <- which(Lambdaid == idx, arr.ind = TRUE)
-        llc[[i]] <- c(llc[[i]], list(as.numeric(c(cz[1], tmp))))
-      }
-    }
-  }
-
-  # Build constraint list
-  constr_list <- list(
-    CONSTRMAT = A,
-    CONSTRVAR = constrvar,  # FIXME: Correct way to specify variance constraints?
-    CORRFLAG = corrflag,
-    STDLV = std.lv,
-    LLC = llc
-  )
-
-  # Starting values are always computed (for lav<->lavaan.pl indices). Note: the
-  # values in lavaan.pl are always in the order of thresholds, loadings, latent
-  # correlations, then latent variances.
-  startlist <- lavaan::inspect(fit0, what = "start", add.class = FALSE)
-  lambda <- startlist$lambda[FREE$lambda > 0]
-  tau <- startlist$tau[FREE$tau > 0]
-  rho <- startlist$psi[FREE$psi > 0 & lower.tri(FREE$psi)]
-  logsd <- log(sqrt(startlist$psi[FREE$psi > 0 & diag(TRUE, nrow(FREE$psi))]))
-  init <- c(tau, lambda, rho, logsd)
-
-  # init <- get_theta(
-  #   THRESHOLDS = as.numeric(startlist$tau),
-  #   LOADINGS = startlist$lambda,
-  #   LATENT_COV = startlist$psi,
-  #   CAT = fit0@Data@ov$nlev,
-  #   CONSTRMAT = A,
-  #   CONSTRVAR = constrvar,
-  #   CORRFLAG = corrflag,
-  #   STDLV = std.lv
-  # )
-  idx_lav2plFA <- c(
-    FREE$tau[FREE$tau > 0],
-    FREE$lambda[FREE$lambda > 0],
-    FREE$psi[FREE$psi > 0 & lower.tri(FREE$psi)],
-    FREE$psi[FREE$psi > 0 & diag(TRUE, nrow(FREE$psi))]
-  )
-  idx_plFA2lav <- order(idx_lav2plFA)
-
-  if (!is.null(start)) {
-    init <- as.numeric(start)
-    init <- init[idx_lav2plFA]
-  }
-
+  spec <- spec_from_lavaan(template, start)
   # Send to lavaan.pl
-  fit1 <- fit_plFA(
-    DATA = D,
-    CONSTR_LIST = constr_list,
+  fit <- fit_plFA(
+    DATA = spec$DATA,
+    CONSTR_LIST = spec$CONSTR_LIST,
     METHOD = method,
     INIT_METHOD = init_method,
     NCORES = ncores,
@@ -255,194 +152,251 @@ cfa <- function(
     CONTROL = control,
     CPP_CONTROL_MAIN = cpp_control_main,
     CPP_CONTROL_INIT = cpp_control_init,
-    INIT = init,
+    INIT = spec$INIT,
     VERBOSE = verbose
   )
 
   # Compute standard errors ----------------------------------------------------
-  if (is.null(vars)) {
-    if (lavargs$se != "none") {
-      vars <- computeVar(
-        OBJ = fit1,
-        DATA = D,
-        NUMDERIV = computevar_numderiv,
-        OPTION = "transformed",
-        VERBOSE = verbose
-      )
-    }
+  vars <- NULL
+  if (lavargs$se != "none") {
+    vars <- computeVar(
+      OBJ = fit,
+      DATA = spec$DATA,
+      NUMDERIV = computevar_numderiv,
+      OPTION = "transformed",
+      VERBOSE = verbose
+    )
   }
 
-  out <- create_lav_from_fitplFA(fit0, fit1, vars, D, idx_plFA2lav)
-  new("plFAlavaan", out)
+  out <- as_lavaan(fit, vars, template)
+  out@call <- match.call()
+  out@call[[1]] <- quote(lavaan.pl::cfa)
+  out
 }
 
-create_lav_from_fitplFA <- function(fit0, fit1, vars, D, idx_plFA2lav) {
+spec_from_lavaan <- function(template, start = NULL) {
+  pt <- lavaan::parTable(template)
+  lv <- lavaan::lavNames(template, "lv")
 
-  # Get coefficients and standard errors ---------------------------------------
-  FREE <- lavaan::inspect(fit0, what = "free")
-  n <- fit0@Data@nobs[[1]]  # FIXME: Group 1 only
+  if (template@Data@ngroups > 1L) {
+    cli::cli_abort("Multigroup analysis is not currently supported.")
+  }
+  if (template@Data@nlevels > 1L) {
+    cli::cli_abort("Multilevel models are not currently supported.")
+  }
+  # Check any ordinal data or not?
+  if (!all(template@Data@ov$type == "ordered")) {
+    cli::cli_abort("All measurement items must be declared as ordered factors.")
+  }
+  if (template@Options$parameterization != "delta") {
+    cli::cli_abort("Only the delta parameterization is currently supported.")
+  }
+  if (any(pt$op %in% c("~", "<~")) || any(pt$op == "=~" & pt$rhs %in% lv)) {
+    cli::cli_abort("Structural regressions and higher-order factors are not currently supported.")
+  }
+  if (any(pt$op %in% c("<", ">"))) {
+    cli::cli_abort("Inequality constraints are not currently supported.")
+  }
+  if (any(pt$free > 0 & pt$op == "~~" & !(pt$lhs %in% lv & pt$rhs %in% lv))) {
+    cli::cli_abort("Free residual variances or covariances are not currently supported.")
+  }
+  other <- pt$free > 0 & !(pt$op %in% c("=~", "~~", "|"))
+  if (any(other)) {
+    cli::cli_abort("Free {.code {unique(pt$op[other])}} parameters are not currently supported.")
+  }
+  if (any(pt$free[pt$op == "|"] == 0)) {
+    cli::cli_abort("Fixed thresholds are not currently supported.")
+  }
 
-  parlist <- extract_par(
-    THETA = fit1@theta,
-    OPTION = "list",
-    CONSTRMAT = fit1@cnstr@loadings,
-    CONSTRLOGSD = fit1@cnstr@loglatsd,
-    LLC = fit1@cnstr@llc,
-    NTHR = fit1@dims@nthr,
-    NLOAD = fit1@dims@nload,
-    NCORR = fit1@dims@ncorr,
-    NVAR = fit1@dims@nvar
-  )
-  lambda <- parlist$loadings[FREE$lambda > 0]
-  tau <- parlist$thresholds[FREE$tau > 0]
-  psi <- c(
-    parlist$latent_correlations[FREE$psi > 0 & diag(TRUE, nrow(FREE$psi))],
-    parlist$latent_correlations[FREE$psi > 0 & lower.tri(FREE$psi)]
-  )
+  data <- template@Data@X[[1]] - 1
+  if (anyNA(data)) {
+    cli::cli_abort("Missing data are not currently supported.")
+  }
+  nlev <- template@Data@ov$nlev[match(template@Data@ov.names[[1]], template@Data@ov$name)]
+  if (any(apply(data, 2, max) + 1 != nlev)) {
+    cli::cli_abort("Every category of every item must be observed at least once.")
+  }
 
-  x <- c(lambda, tau, psi)
-  # x <- fit1@theta[idx_plFA2lav]
+  free <- lapply(lavaan::lavInspect(template, "free"), unclass)
+  est <- lapply(lavaan::lavInspect(template, "est"), unclass)
+  q <- ncol(free$lambda)
 
-  if (is.null(vars)) {
-    SE <- NULL
-    vcov <- NULL
+  # CORRFLAG
+  off <- lower.tri(free$psi)
+  if (all(free$psi[off] > 0)) {
+    corrflag <- TRUE
+  } else if (all(free$psi[off] == 0 & est$psi[off] == 0)) {
+    corrflag <- FALSE
   } else {
-    SE <- sqrt(vars$asymptotic_variance / n)[idx_plFA2lav]
-    vcov <- vars$vcov / n
-    vcov <- vcov[idx_plFA2lav, idx_plFA2lav]
+    cli::cli_abort("Latent covariances must be either all free or all fixed to zero.")
+  }
+  constrvar <- diag(est$psi)
+  constrvar[diag(free$psi) > 0] <- NA
+  if (any(constrvar <= 0, na.rm = TRUE)) {
+    cli::cli_abort("Fixed latent variances must be positive.")
+  }
+
+  # Build the p x q loading constraints matrix
+  constrmat <- est$lambda
+  constrmat[free$lambda > 0] <- NA
+
+  # Linear loadings constraints
+  llc <- NULL
+  jac <- template@Model@ceq.JAC
+  if (nrow(jac) > 0L) {
+    if (length(template@Model@ceq.nonlinear.idx) > 0L || any(template@Model@ceq.rhs != 0)) {
+      cli::cli_abort("Only homogeneous linear equality constraints are currently supported.")
+    }
+    load_idx <- free$lambda[free$lambda > 0]
+    if (any(jac[, -load_idx] != 0)) {
+      cli::cli_abort("Equality constraints are only supported on factor loadings.")
+    }
+    jac <- jac[, load_idx, drop = FALSE]
+    piv <- integer(0)
+    for (j in seq_len(ncol(jac))) {
+      r <- length(piv) + 1L
+      if (r > nrow(jac)) break
+      i <- r - 1L + which.max(abs(jac[r:nrow(jac), j]))
+      if (abs(jac[i, j]) < 1e-10) next
+      jac[c(r, i), ] <- jac[c(i, r), ]
+      jac[r, ] <- jac[r, ] / jac[r, j]
+      jac[-r, ] <- jac[-r, , drop = FALSE] - outer(jac[-r, j], jac[r, ])
+      piv <- c(piv, j)
+    }
+    coords <- t(vapply(load_idx, function(i) as.numeric(which(free$lambda == i, arr.ind = TRUE)), numeric(2)))
+    llc <- lapply(seq_along(piv), function(r) {
+      refs <- setdiff(which(abs(jac[r, ]) > 1e-10), piv)
+      c(list(coords[piv[r], ]), lapply(refs, function(j) c(-jac[r, j], coords[j, ])))
+    })
+    constrmat[coords[piv, , drop = FALSE]] <- 1
+  }
+
+  # Build constraint list
+  constr_list <- list(
+    CONSTRMAT = constrmat,
+    CONSTRVAR = constrvar,
+    CORRFLAG = corrflag,
+    STDLV = !anyNA(constrvar),
+    LLC = llc
+  )
+  if (!identical(is.na(check_cnstr(constr_list)$CONSTRMAT), is.na(constrmat))) {
+    cli::cli_abort("This identification of the latent variables is not currently supported.")
+  }
+
+  # Note: the values in lavaan.pl are always in the order of thresholds, loadings, latent
+  # correlations, then latent variances.
+  if (is.null(start)) {
+    start_glist <- lapply(lavaan::lavInspect(template, "start"), unclass)
+  } else {
+    start_glist <- lavaan::lav_model_set_parameters(template@Model, as.numeric(start))@GLIST
+  }
+  init <- c(
+    as.numeric(start_glist$tau),
+    cpp_loadings_mat2vec(start_glist$lambda, constrmat, sum(is.na(constrmat))),
+    cpp_latvar_mat2vec(start_glist$psi, log(sqrt(constrvar)), if (corrflag) q * (q - 1) / 2 else 0, sum(is.na(constrvar)))
+  )
+
+  list(DATA = data, CONSTR_LIST = constr_list, INIT = init)
+}
+
+#' Convert a lavaan.pl fit into a lavaan object
+#'
+#' @param fit Object of class `PlFaFit` returned by [fit_plFA()].
+#' @param vars Output of [computeVar()] for `fit`, or `NULL` to skip standard errors.
+#' @param template Unfitted [lavaan::lavaan] object for the same model and data, created with `do.fit = FALSE`.
+#' @return A [lavaan::lavaan] object.
+#' @export
+as_lavaan <- function(fit, vars = NULL, template) {
+  free <- lapply(lavaan::lavInspect(template, "free"), unclass)
+  par_lav <- function(theta) {
+    fit$theta <- theta
+    par <- getPar(fit, OPTION = "list")
+    x <- numeric(template@Model@nx.free)
+    x[free$tau[free$tau > 0]] <- par$thresholds[free$tau > 0]
+    x[free$lambda[free$lambda > 0]] <- par$loadings[free$lambda > 0]
+    x[free$psi[free$psi > 0]] <- par$latent_correlations[free$psi > 0]
+    x
   }
 
   # Change Model and implied slots ---------------------------------------------
-  fit0@Model <- lavaan::lav_model_set_parameters(fit0@Model, x)
-  fit0@implied <- lavaan::lav_model_implied(fit0@Model)
-
-  # Change ParTable slot -------------------------------------------------------
-
-  # Find Theta matrix (residuals) and Sigmay (implied covariance matrix)
-  thetadiag <- diag(fit0@Model@GLIST$theta)
-  Sigmay <- fit0@implied$cov[[1]]  # FIXME: Group 1 only
-
-  # Change ParTable and pta slots
-  pt <- lavaan::partable(fit0)
-  pt$est[pt$free > 0] <- x
-  pt$se <- 0
-  if (length(SE) > 0) pt$se[pt$free > 0] <- SE
-  pt$start[pt$free > 0] <- fit1@init[idx_plFA2lav]
-
-  # Put the diag theta values in the pt
-  ov_names <- fit0@Data@ov.names[[1]]  # FIXME: Group 1 only
-  pt$est[pt$lhs %in% ov_names &
-           pt$rhs %in% ov_names &
-           pt$lhs == pt$rhs &
-           pt$op == "~~"] <- thetadiag
-
-  # Manually change the slack column
-  slack_values <- as.vector(fit0@Model@con.jac %*% x - fit0@Model@ceq.rhs)
-  pt$est[pt$op == "=="] <- slack_values
-  fit0@ParTable <- as.list(pt)
-  fit0@pta$names <- names(pt)
-
-  # Change Options slot --------------------------------------------------------
-  fit0@Options$optim.method <- fit1@method
-  fit0@Options$do.fit <- TRUE
+  pt <- lavaan::parTable(template)
+  idx <- pt$free > 0
+  pt$est[idx] <- pt$start[idx] <- par_lav(fit$theta)[pt$free[idx]]
+  options <- template@Options
+  options[c("do.fit", "optim.method", "se", "test", "baseline")] <- list(TRUE, "none", "none", "none", FALSE)
+  out <- lavaan::lavaan(
+    model = pt,
+    slot_options = options,
+    slot_sample_stats = template@SampleStats,
+    slot_data = template@Data,
+    slot_cache = template@Cache,
+    sloth1 = template@h1
+  )
+  out@Options[c("optim.method", "se", "test", "baseline")] <-
+    list("nlminb", template@Options$se, template@Options$test, template@Options$baseline)
 
   # Change Fit slot (depends whether it is numFit or stoFit) -------------------
-  fit0@Fit@x <- x
-  fit0@Fit@TH[[1]] <- tau  # FIXME: Group 1
-  fit0@Fit@est <- pt$est
-  fit0@Fit@se <- pt$se
-  fit0@Fit@start <- pt$start
-  if (fit1@method == "ucminf") {
-    fit0@Fit@iterations <- as.integer(fit1@numFit$info["neval"])
-    fit0@Fit@converged <- fit1@numFit$convergence == 1L  # FIXME: Check!!
-    fit0@Fit@fx <- fit1@numFit$value
-  } else if (fit1@method == "SA") {
-    fit0@Fit@iterations <- as.integer(fit1@stoFit@last_iter)
-    fit0@Fit@converged <- fit1@stoFit@convergence@convergence_full == 1L  # FIXME: Check!!
-    fit0@Fit@fx <- fit1@stoFit@nll
-  }
-  fit0@Fit@Sigma.hat[[1]] <- Sigmay  # implied variance-covariance matrix for group 1!!
-
-  # Change optim slot ----------------------------------------------------------
-  fit0@optim$x <- x
-  fit0@optim$dx <- 0
-  fit0@optim$npar <- length(x)
-  fit0@optim$fx <- fx <- fit0@Fit@fx
-  fit0@optim$fx.group <- fit0@Fit@fx.group
-  fit0@optim$iterations <- fit0@Fit@iterations
-  fit0@optim$converged <- fit0@Fit@converged
-
-  # Change loglik slot ---------------------------------------------------------
-  if (fit1@method == "ucminf") {
-    fit0@loglik$loglik <- fit1@numFit$value
-  } else if (fit1@method == "SA") {
-    fit0@loglik$loglik <- fit1@stoFit@nll
-  }
-  fit0@loglik$estimator <- "ML"  # FIXME: to turn off warning for now
-  if (!is.null(vars)) {
-    fit0@loglik$AIC <- get_AIC(NLL = fit0@loglik$loglik, INVH = vars$invH,
-                               J = vars$J)
-    fit0@loglik$BIC <- get_BIC(NLL = fit0@loglik$loglik, INVH = vars$invH,
-                               J = vars$J, N = n)
+  if (fit$method == "ucminf") {
+    out@optim$iterations <- out@Fit@iterations <- as.integer(fit$numFit$info[["neval"]])
+    out@optim$converged <- out@Fit@converged <- fit$numFit$convergence %in% c(1L, 2L) ||
+      (fit$numFit$convergence == 4L && fit$numFit$info[["maxgradient"]] < template@Options$optim.dx.tol)
+  } else {
+    out@optim$iterations <- out@Fit@iterations <- as.integer(fit$stoFit$last_iter)
+    out@optim$converged <- out@Fit@converged <- fit$stoFit$convergence$convergence_full == 1
   }
 
   # Change vcov slot -----------------------------------------------------------
-  fit0@vcov$vcov <- vcov
+  vcov <- NULL
+  if (!is.null(vars)) {
+    delta <- numDeriv::jacobian(par_lav, fit$theta)
+    hinv <- solve(vars$H)
+    vcov <- delta %*% hinv %*% vars$J %*% hinv %*% t(delta) / fit$dims$n
+    attr(vcov, "E.inv") <- delta %*% hinv %*% t(delta)
+    out@vcov <- list(se = out@Options$se, information = out@Options$information[1], vcov = vcov)
+    out@ParTable$se <- out@Fit@se <- lavaan___lav_model_vcov_se(out@Model, out@ParTable, vcov = vcov)
+  }
 
   # Change test slot -----------------------------------------------------------
-  Options <- fit0@Options
-  Options$optim.method <- "nlminb"  # hack to get no warnings from lavaan (ucminf not recognised.)
-  # fxval <- fx
-  # attr(fx, "fx.pml") <- fxval
-  # attr(fx, "fx.group") <- fxval
-  # attr(x, "fx") <- fx
-  # VCOV <- vcov
-  # attr(VCOV, "B0.group")[[1]] <- vars$J[idx_plFA2lav, idx_plFA2lav]
-  # attr(VCOV, "E.inv") <- vars$invH[idx_plFA2lav, idx_plFA2lav]
-
-  start_time <- Sys.time()
-  fit0@test <- lavaan___lav_model_test(
-    lavoptions     = Options,
-    lavmodel       = fit0@Model,
-    lavsamplestats = fit0@SampleStats,
-    lavdata        = fit0@Data,
-    lavpartable    = fit0@ParTable,
-    lavcache       = fit0@Cache,
-    lavimplied     = fit0@implied,
-    lavh1          = fit0@h1,
-    # x              = x,  # by not including these, lavaan will recompute it
-    # VCOV           = VCOV,
-    lavloglik      = fit0@loglik
-  )
-  end_time <- Sys.time()
-  timing_test <- as.numeric(difftime(end_time, start_time, units = 'secs')[1])
-
-  # Change baseline slot -------------------------------------------------------
-  fit0@baseline <- lavaan___lav_step15_baseline(
-    lavoptions = fit0@Options,
-    lavsamplestats = fit0@SampleStats,
-    lavdata = fit0@Data,
-    lavcache = fit0@Cache,
-    lavh1 = fit0@h1,
-    lavpartable = fit0@ParTable
-  )
+  if (!identical(out@Options$test, "none")) {
+    x <- out@optim$x
+    attr(x, "fx") <- lavaan___lav_model_objective(
+      lavmodel = out@Model,
+      lavsamplestats = out@SampleStats,
+      lavdata = out@Data,
+      lavcache = out@Cache
+    )
+    out@test <- lavaan___lav_model_test(
+      lavmodel = out@Model,
+      lavpartable = out@ParTable,
+      lavsamplestats = out@SampleStats,
+      lavimplied = out@implied,
+      lavh1 = out@h1,
+      lavoptions = out@Options,
+      x = x,
+      vcov_1 = vcov,
+      lavcache = out@Cache,
+      lavdata = out@Data,
+      lavloglik = out@loglik
+    )
+    out@baseline <- lavaan___lav_step15_baseline(
+      lavoptions = out@Options,
+      lavsamplestats = out@SampleStats,
+      lavdata = out@Data,
+      lavcache = out@Cache,
+      lavh1 = out@h1,
+      lavpartable = out@ParTable
+    )
+  }
 
   # Change timing slot ---------------------------------------------------------
-  fit0@timing$optim <- fit0@timing$optim + fit1@RTime
-  fit0@timing$vcov <- vars$RTime
-  fit0@timing$test <- timing_test
-  fit0@timing$total <- sum(unlist(fit0@timing))
-
+  out@timing$optim <- fit$RTime
+  out@timing$vcov <- if (is.null(vars)) 0 else vars$RTime
+  out@timing$total <- out@timing$total + fit$RTime + out@timing$vcov
   # Include the entire output of lavaan.pl fit --------------------------------------
-  fit0@external <- list(
-    lavaan.pl = fit1,
-    vars = vars,
-    D = D,
-    idx_plFA2lav = idx_plFA2lav
-  )
-
+  out@external <- list(lavaan.pl = fit, vars = vars)
   # Output ---------------------------------------------------------------------
-  fit0
+  out@call <- template@call
+  out
 }
 
 # Export lavaan functions
@@ -450,3 +404,7 @@ lavaan___lav_step15_baseline <-
   utils::getFromNamespace("lav_step15_baseline", "lavaan")
 lavaan___lav_model_test <-
   utils::getFromNamespace("lav_model_test", "lavaan")
+lavaan___lav_model_vcov_se <-
+  utils::getFromNamespace("lav_model_vcov_se", "lavaan")
+lavaan___lav_model_objective <-
+  utils::getFromNamespace("lav_model_objective", "lavaan")

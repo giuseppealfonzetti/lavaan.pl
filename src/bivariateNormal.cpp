@@ -81,9 +81,3 @@ double binorm::pbvnorm( double H1, double HK, double R){
   return bv;
 }
 
-
-// derivative of bivariate cdf wrt a
-double binorm::compute_bcdf_grad(double A, double B, double RHO){
-  double out = R::dnorm(A, 0, 1, 0) * R::pnorm((B-RHO*A)/(pow(1-pow(RHO,2), .5)), 0, 1, 1, 0);
-  return out;
-}

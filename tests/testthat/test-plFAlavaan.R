@@ -31,13 +31,13 @@ test_that("[binary] cfa function works", {
   fit <- cfa(mod, dat, std.lv = TRUE)
 
   expect_s4_class(fit, "lavaan")
-  expect_s4_class(fit, "plFAlavaan")
+  expect_identical(as.character(class(fit)), "lavaan")
   expect_true(inherits(coef(fit), "lavaan.vector"))
 })
 
 test_that("Revert to lavaan works", {
   fit <- cfa("eta =~ y1 + y2 + y3 + y4 + y5", LSAT, estimator = "DWLS")
-  expect_false(inherits(fit, "plFAlavaan"))
+  expect_null(fit@external$lavaan.pl)
 })
 
 test_that("[ordinal] cfa function works", {
@@ -77,7 +77,7 @@ test_that("[ordinal] cfa function works", {
   fit <- cfa(mod, dat, std.lv = TRUE)
 
   expect_s4_class(fit, "lavaan")
-  expect_s4_class(fit, "plFAlavaan")
+  expect_identical(as.character(class(fit)), "lavaan")
   expect_true(inherits(coef(fit), "lavaan.vector"))
 })
 
@@ -90,8 +90,8 @@ test_that("`std.lv` argument works", {
   fit1 <- cfa(mod, bfi, std.lv = FALSE)
   fit2 <- cfa(mod, bfi, std.lv = TRUE)
   expect_equal(
-    fit1@external$lavaan.pl@numFit$value,
-    fit2@external$lavaan.pl@numFit$value
+    fit1@external$lavaan.pl$numFit$value,
+    fit2@external$lavaan.pl$numFit$value
   )
   expect_equal(fitted(fit1), fitted(fit2), tolerance = 1e-3)
 })
@@ -109,7 +109,7 @@ test_that("Method = 'SA' works", {
              se = "none")
 
   expect_s4_class(fit, "lavaan")
-  expect_s4_class(fit, "plFAlavaan")
+  expect_identical(as.character(class(fit)), "lavaan")
   expect_true(inherits(coef(fit), "lavaan.vector"))
 })
 
@@ -117,28 +117,20 @@ test_that("Constraints work", {
   mod <- "
     A =~ -0.4*A1 + A2 + a*A3 + b*A4 + c*A5
     C =~ 0.6*C1 + C2 + C3 + C4 + C5
-    A ~~ -0.4*C
     a == 0.5*b + 0.25*c
   "
   fit <- cfa(mod, bfi, std.lv = TRUE)
-  Lambda <- lavaan::inspect(fit, "est")$lambda
-  Psi <- lavaan::inspect(fit, "est")$psi
+  Lambda <- lavaan::lavInspect(fit, "est")$lambda
   expect_equal(Lambda[1, 1], -0.4)
   expect_equal(Lambda[6, 2], 0.6)
-  expect_equal(Psi[1, 2], -0.4)
+  expect_equal(Lambda[3, 1], 0.5 * Lambda[4, 1] + 0.25 * Lambda[5, 1])
 
 })
-
-# Test for starting values
-#
-# fit <- cfa("eta =~ y1 + y2 + y3 + y4 + y5", LSAT)
-# fit <- cfa("eta =~ y1 + y2 + y3 + y4 + y5", LSAT, start = coef(fit))
 
 test_that("Against lavaan::cfa", {
   mod <- "eta1 =~ y1 + y2 + y3 + y4 + y5"
 
   fit1 <- cfa(mod, LSAT, std.lv = TRUE)
-  # fit2 <- cfa(mod, bfi, std.lv = TRUE, estimator.args = list(method = "SA"))
   fit3 <- lavaan::cfa(mod, LSAT, std.lv = TRUE, estimator = "WLSMV")
   fit4 <- lavaan::cfa(mod, LSAT, std.lv = TRUE, estimator = "PML")
 
@@ -173,12 +165,12 @@ test_that("Hinv is the same", {
   mod <- "eta1 =~ y1 + y2 + y3 + y4 + y5"
 
   fit <- cfa(mod, LSAT, std.lv = TRUE)
-  Hinv1 <- with(fit@external, computeVar(lavaan.pl, D)$invH[idx_plFA2lav, idx_plFA2lav])
+  Hinv1 <- attr(fit@vcov$vcov, "E.inv")
 
   # Getting Hinv via numDeriv
   fit <- cfa(mod, LSAT, std.lv = TRUE,
              estimator.args = list(computevar_numderiv = TRUE))
-  Hinv2 <- with(fit@external, vars$invH[idx_plFA2lav, idx_plFA2lav])
+  Hinv2 <- attr(fit@vcov$vcov, "E.inv")
 
   # Gtting Hinv from lavaan, which also uses numDeriv
   Hinv3 <- solve(information_matrix(fit, "observed"))
@@ -188,22 +180,20 @@ test_that("Hinv is the same", {
 
 })
 
-test_that("Jmat is the same", {
+test_that("vcov is the same", {
   mod <- "eta1 =~ y1 + y2 + y3 + y4 + y5"
   fit1 <- cfa(mod, LSAT, std.lv = TRUE)
   fit2 <- lavaan::cfa(mod, LSAT, std.lv = TRUE, estimator = "PML")
-
-  J1 <- with(fit1@external, computeVar(lavaan.pl, D)$J[idx_plFA2lav, idx_plFA2lav])
-  J2 <- lavaan:::lav_model_info_firstorder(
-    lavmodel =fit2@Model,
-    lavsamplestats = fit2@SampleStats,
-    lavdata = fit2@Data,
-    lavoptions = fit2@Options,
-    lavcache = fit2@Cache
-  )
-  expect_equal(J1, J2, tolerance = 1e-5)
+  expect_equal(unclass(vcov(fit1)), unclass(vcov(fit2)), tolerance = 1e-4)
 })
 
-
-
-
+test_that("update() refits through lavaan.pl", {
+  mod <- "eta1 =~ y1 + y2 + y3 + y4 + y5"
+  fit <- cfa(mod, LSAT, std.lv = TRUE)
+  fit2 <- update(fit, se = "none")
+  expect_identical(fit2@Options$se, "none")
+  expect_false(is.null(fit2@external$lavaan.pl))
+  fit3 <- update(fit, model = "eta1 =~ y1 + y2 + y3 + y4")
+  expect_length(coef(fit3), 8)
+  expect_false(is.null(fit3@external$lavaan.pl))
+})

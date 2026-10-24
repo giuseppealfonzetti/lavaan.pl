@@ -80,70 +80,69 @@ fit_plFA <- function(
   dat <- check_data(DATA)
   constr_list <- check_cnstr(CONSTR_LIST)
   METHOD <- match.arg(METHOD)
+  INIT_METHOD <- match.arg(INIT_METHOD)
 
   # Identify model dimensions
   dims <- check_dims(dat, constr_list)
   if(METHOD=="SA" && dims$p<20) message("METHOD='SA' not recommended with less than 20 items.")
   INIT_METHOD <- check_init_method(dims, INIT_METHOD, INIT)
 
-  tmp <- new('PlFaFit',
-             cnstr = new('Constraints',
-                         loadings = constr_list$CONSTRMAT,
-                         corrflag = constr_list$CORRFLAG,
-                         stdlv    = constr_list$STDLV,
-                         loglatsd = constr_list$CONSTRLOGSD,
-                         llc      = constr_list$LLC),
-             dims = new('Dimensions',
-                        n     = dims$n,
-                        p     = dims$p,
-                        q     = dims$q,
-                        cat   = dims$cat,
-                        pairs = dims$pairs,
-                        nthr  = dims$nthr,
-                        nload = dims$nload,
-                        ncorr = dims$ncorr,
-                        nvar  = dims$nvar,
-                        npar  = dims$d),
-             method = METHOD)
+  tmp <- structure(
+    list(cnstr = list(loadings = constr_list$CONSTRMAT,
+                      corrflag = constr_list$CORRFLAG,
+                      stdlv    = constr_list$STDLV,
+                      loglatsd = constr_list$CONSTRLOGSD,
+                      llc      = constr_list$LLC),
+         dims = list(n     = dims$n,
+                     p     = dims$p,
+                     q     = dims$q,
+                     cat   = dims$cat,
+                     pairs = dims$pairs,
+                     nthr  = dims$nthr,
+                     nload = dims$nload,
+                     ncorr = dims$ncorr,
+                     nvar  = dims$nvar,
+                     npar  = dims$d),
+         method = METHOD),
+    class = "PlFaFit")
 
   # Version
-  tmp@version <- as.character(utils::packageVersion("lavaan.pl"))
+  tmp$version <- as.character(utils::packageVersion("lavaan.pl"))
 
   # Set up multi-threads computations
   if (is.null(NCORES)) NCORES <- 1L
-  tmp@cores <- NCORES
+  tmp$cores <- NCORES
 
   RcppParallel::setThreadOptions(numThreads = NCORES)
 
 
   if(VERBOSE) message('- Computing frequencies...')
   freq_start_time <- Sys.time()
-  tmp@freq <- pairs_freq(DATA, dims$cat)
+  tmp$freq <- pairs_freq(dat, dims$cat)
   freq_end_time <- Sys.time()
-  tmp@freqTime <- as.numeric(difftime(freq_end_time, freq_start_time, units = 'secs')[1])
+  tmp$freqTime <- as.numeric(difftime(freq_end_time, freq_start_time, units = 'secs')[1])
 
   # Check Initialisation
-  tmp@init <- check_init(INIT, tmp@freq, dims, constr_list, INIT_METHOD, VERBOSE, CPP_ARGS = CPP_CONTROL_INIT)
+  tmp$init <- check_init(INIT, tmp$freq, dims, constr_list, INIT_METHOD, VERBOSE, CPP_ARGS = CPP_CONTROL_INIT)
 
-  diag_inv_H <- rep(1,length(tmp@init))
+  diag_inv_H <- rep(1,length(tmp$init))
 
   # Numerical optimisation
   if(METHOD == 'ucminf'){
 
     if(VERBOSE) message('- Optimising with ucminf...')
-    tmp@method <- "ucminf"
+    tmp$method <- "ucminf"
 
     # Compute frequency table bivariate patterns
 
     Rwr_ncl <- function(par_vec){
-      n <- dims$n
       mod <- cpp_multiThread_completePairwise(
         N          = dims$n,
         C_VEC      = dims$cat,
         CONSTRMAT  = constr_list$CONSTRMAT,
         CONSTRLOGSD= constr_list$CONSTRLOGSD,
         LLC        = constr_list$LLC,
-        FREQ       = tmp@freq,
+        FREQ       = tmp$freq,
         THETA      = par_vec,
         CORRFLAG   = constr_list$CORRFLAG,
         NTHR       = dims$nthr,
@@ -158,14 +157,13 @@ fit_plFA <- function(
 
     # function for gradient
     Rwr_ngr <- function(par_vec){
-      n <- dims$n
       mod <- cpp_multiThread_completePairwise(
         N          = dims$n,
         C_VEC      = dims$cat,
         CONSTRMAT  = constr_list$CONSTRMAT,
         CONSTRLOGSD= constr_list$CONSTRLOGSD,
         LLC        = constr_list$LLC,
-        FREQ       = tmp@freq,
+        FREQ       = tmp$freq,
         THETA      = par_vec,
         CORRFLAG   = constr_list$CORRFLAG,
         NTHR       = dims$nthr,
@@ -182,23 +180,23 @@ fit_plFA <- function(
 
     # list of ucminf args
     args <- list(
-      'par' = tmp@init,
+      'par' = tmp$init,
       'fn' = Rwr_ncl,
       'gr' = Rwr_ngr,
-      'control' = ifelse(is.null(CONTROL$ctrl), list(), CONTROL$ctrl),
-      'hessian' = ifelse(is.null(CONTROL$hessian), 2, CONTROL$hessian))
+      'control' = if (is.null(CONTROL$ctrl)) list() else CONTROL$ctrl,
+      'hessian' = if (is.null(CONTROL$hessian)) 0 else CONTROL$hessian)
 
     # optimisation
     opt <- do.call(ucminf::ucminf, args)
 
 
     end_time <- Sys.time()
-    tmp@numFit <- opt
-    tmp@theta <- opt$par
-    tmp@RTime <- as.numeric(difftime(end_time, start_time, units = 'secs')[1])
+    tmp$numFit <- opt
+    tmp$theta <- opt$par
+    tmp$RTime <- as.numeric(difftime(end_time, start_time, units = 'secs')[1])
 
 
-    if(VERBOSE) message('Done! (', round(tmp@RTime,2),' secs)')
+    if(VERBOSE) message('Done! (', round(tmp$RTime,2),' secs)')
     RcppParallel::setThreadOptions(numThreads = 1)
     return(tmp)
   }
@@ -206,29 +204,29 @@ fit_plFA <- function(
   if(METHOD=="SA"){
     if(!is.null(VALDATA)){
       if(VERBOSE) message('- Computing frequencies on validation data...')
-      tmp@valfreq <- pairs_freq(VALDATA, dims$cat)
+      tmp$valfreq <- pairs_freq(VALDATA, dims$cat)
     }
 
     if(VERBOSE) message('- Optimising via pairwise stochastic approximation...')
-    stoFit <- new('StoFit')
-    tmp@method <- "SA"
+    stoFit <- list()
+    tmp$method <- "SA"
 
 
-    sa_args <- check_plSA_args(FREQ        = tmp@freq,
-                               VALFREQ     = if(is.null(VALDATA)) NULL else tmp@valfreq,
+    sa_args <- check_plSA_args(FREQ        = tmp$freq,
+                               VALFREQ     = if(is.null(VALDATA)) NULL else tmp$valfreq,
                                DIMS        = dims,
                                CONSTR_LIST = constr_list,
                                LIST        = CPP_CONTROL_MAIN,
                                SETTING     = "main")
 
-    stoFit@control <- sa_args
+    stoFit$control <- sa_args
 
     sa_args <-  c(list(N           = dims$n,
                        C_VEC       = dims$cat,
                        CONSTRMAT   = constr_list$CONSTRMAT,
                        CONSTRLOGSD = constr_list$CONSTRLOGSD,
                        LLC         = constr_list$LLC,
-                       THETA_INIT  = tmp@init,
+                       THETA_INIT  = tmp$init,
                        DIH         = diag_inv_H,
                        NTHR        = dims$nthr,
                        NLOAD       = dims$nload,
@@ -239,14 +237,14 @@ fit_plFA <- function(
 
     opt <- do.call(cpp_plSA2, sa_args)
     end_time <- Sys.time()
-    tmp@RTime <- as.numeric(difftime(end_time, start_time, units = 'secs')[1])
+    tmp$RTime <- as.numeric(difftime(end_time, start_time, units = 'secs')[1])
 
-    converge <- new("Convergence")
-    converge@convergence_full <- opt$convergence_full
-    converge@convergence_burn <- opt$convergence_burn
-    converge@proj_after_burn  <- opt$proj_after_burn
-    converge@finite_gr        <- opt$finite_gr
-    converge@neg_pdiff        <- opt$neg_pdiff
+    converge <- list()
+    converge$convergence_full <- opt$convergence_full
+    converge$convergence_burn <- opt$convergence_burn
+    converge$proj_after_burn  <- opt$proj_after_burn
+    converge$finite_gr        <- opt$finite_gr
+    converge$neg_pdiff        <- opt$neg_pdiff
 
 
     if(VERBOSE & !opt$convergence_burn)    message(paste0("Burn-in period did not reach tolerance level ", sa_args$TOL_BURN, ". Stopped at ", sa_args$BURNE, " epochs Try increasing BURNE or STEP0."))
@@ -257,19 +255,19 @@ fit_plFA <- function(
     if(VERBOSE & opt$neg_pdiff)            message("Possible divergent trajectories detected monitoring the full negative pairwise likelihood. Check trajectories visually and evaluate decreasing STEP0.")
 
 
-    stoFit@convergence  <- converge
-    stoFit@path$iters   <- opt$path_iters
-    stoFit@path$theta   <- opt$path_theta
-    stoFit@path$avtheta <- opt$path_avtheta
-    stoFit@path$nll     <- opt$path_nll
-    stoFit@nll          <- opt$nll
-    stoFit@last_iter    <- opt$last_iter
-    stoFit@burnt        <- opt$burnt
-    tmp@stoFit          <- stoFit
-    tmp@theta           <- opt$avtheta
+    stoFit$convergence  <- converge
+    stoFit$path$iters   <- opt$path_iters
+    stoFit$path$theta   <- opt$path_theta
+    stoFit$path$avtheta <- opt$path_avtheta
+    stoFit$path$nll     <- opt$path_nll
+    stoFit$nll          <- opt$nll
+    stoFit$last_iter    <- opt$last_iter
+    stoFit$burnt        <- opt$burnt
+    tmp$stoFit          <- stoFit
+    tmp$theta           <- opt$avtheta
 
 
-    if(VERBOSE) message('Done! (', round(tmp@RTime,2),' secs)')
+    if(VERBOSE) message('Done! (', round(tmp$RTime,2),' secs)')
     RcppParallel::setThreadOptions(numThreads = 1)
     return(tmp)
 
@@ -281,36 +279,3 @@ fit_plFA <- function(
 
   }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

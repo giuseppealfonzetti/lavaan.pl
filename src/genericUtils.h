@@ -28,35 +28,6 @@ namespace params{
         const int NLOAD
     );
 
-    // Eigen::MatrixXd theta2mat(const Eigen::Ref<const Eigen::VectorXd> THETA,
-    //                           const Eigen::Ref<const Eigen::MatrixXd> CONSTRMAT,
-    //                           const int NTHR,
-    //                           const int NLOAD){
-    //
-    //   Eigen::VectorXd vec = params::loadings::theta2vec(THETA, NTHR, NLOAD);
-    //   const int p = CONSTRMAT.rows();
-    //   const int q = CONSTRMAT.cols();
-    //   Eigen::MatrixXd out(p, q);
-    //
-    //   int idx = 0;
-    //
-    //   // construct vector with parameters free to be estimated
-    //   for(int h = 0; h < q; h++){
-    //     for(int j = 0; j < p; j++){
-    //       if(!std::isfinite(CONSTRMAT(j,h))){
-    //         out(j, h)=vec(idx);
-    //         idx ++;
-    //       }else{
-    //         out(j, h)= CONSTRMAT(j, h);
-    //       };
-    //     };
-    //   }
-    //
-    //   return out;
-    //
-    //
-    // }
-
     Eigen::VectorXd mat2vec(const Eigen::Ref<const Eigen::MatrixXd> LOADINGS,
                             const Eigen::Ref<const Eigen::MatrixXd> CONSTRMAT,
                             const int  NLOAD);

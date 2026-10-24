@@ -7,3 +7,5 @@
 playground.R
 docs
 inst/doc
+local/
+.covignore

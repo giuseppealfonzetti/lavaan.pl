@@ -17,8 +17,6 @@ namespace binorm{
   double pbvnorm( double H1, double HK, double R);
 
 
-  // derivative of bivariate cdf wrt a
-  double compute_bcdf_grad(double A, double B, double RHO);
 }
 
 

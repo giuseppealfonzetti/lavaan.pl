@@ -124,28 +124,3 @@ get_theta <- function(THRESHOLDS, LOADINGS, LATENT_COV, CAT, CONSTRMAT, CONSTRVA
   theta <- c(THRESHOLDS, load_vec, lat_vec)
   return(theta)
 }
-
-
-#' #' Extract estimation trajectories
-#' #'
-#' #' Extract trajectories of interest along the stochastic optimisation
-#' #' from a fitted object
-#' #'
-#' #' @param MOD_OBJ Output of [fit_plFA].
-#' #' @param PATH_LAB Label for the trajectory of interest. Use "path_av_theta"
-#' #' for the averaged parameters trajectories.
-#' #'
-#' #'@export
-#' get_tidy_path <- function(MOD_OBJ, PATH_LAB){
-#'   iters <- MOD_OBJ$iterations_subset
-#'   path  <- MOD_OBJ$fit[[PATH_LAB]]
-#'
-#'   out <- dplyr::mutate(dplyr::tibble(iter = iters),
-#'       path_chosen = split(t(path), rep(1:nrow(path), each = ncol(path)))
-#'     )
-#'
-#'   colnames(out) <- c('iter', PATH_LAB)
-#'
-#'   return(out)
-#' }
-

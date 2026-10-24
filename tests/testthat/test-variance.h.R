@@ -123,12 +123,14 @@ if(1){
 }
 
 hessian_setups <- list(
-  list(stdlv = FALSE, corrflag = TRUE,  llc = NULL),
-  list(stdlv = TRUE,  corrflag = TRUE,  llc = NULL),
-  list(stdlv = TRUE,  corrflag = FALSE, llc = NULL),
-  list(stdlv = TRUE,  corrflag = TRUE,  llc = list(list(c(2, 1), c(0.5, 3, 1), c(0.25, 1, 1))))
+  "free latent variances"         = list(stdlv = FALSE, corrflag = TRUE,  llc = NULL),
+  "standardised latent variables" = list(stdlv = TRUE,  corrflag = TRUE,  llc = NULL),
+  "orthogonal latent variables"   = list(stdlv = TRUE,  corrflag = FALSE, llc = NULL),
+  "LLC on free loadings"          = list(stdlv = TRUE,  corrflag = TRUE,  llc = list(list(c(2, 1), c(0.5, 3, 1), c(0.25, 1, 1)))),
+  "LLC referencing a fixed loading" = list(stdlv = TRUE,  corrflag = TRUE,  llc = list(list(c(2, 1), c(0.5, 3, 1), c(0.25, 4, 1))))
 )
-for (setup in hessian_setups) {
+for (setup_name in names(hessian_setups)) {
+  setup <- hessian_setups[[setup_name]]
   set.seed(1)
   p <- 9; q <- 3; n <- 1000
   thr <- c(-1, 0.2, 1.4)
@@ -163,8 +165,7 @@ for (setup in hessian_setups) {
   )
   Hnum <- numDeriv::jacobian(full_ngr, theta)
 
-  test_that(paste0("analytic observed Hessian, STDLV:", setup$stdlv, ", CORRFLAG:", setup$corrflag,
-                   ", LLC:", !is.null(setup$llc)), {
+  test_that(paste0("analytic observed Hessian: ", setup_name), {
     expect_equal(-HJ$gradH / n, full_ngr(theta))
     expect_equal(HJ$H, t(HJ$H))
     expect_equal(HJ$H, (Hnum + t(Hnum)) / 2, tolerance = 1e-4)
