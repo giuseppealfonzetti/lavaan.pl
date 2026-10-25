@@ -45,6 +45,14 @@ cpp_sample_estimators_HJ <- function(THETA, FREQ, DATA, C_VEC, CONSTRMAT, CONSTR
     .Call(`_lavaan_pl_cpp_sample_estimators_HJ`, THETA, FREQ, DATA, C_VEC, CONSTRMAT, CONSTRLOGSD, LLC, N, CORRFLAG, NTHR, NLOAD, NCORR, NVAR)
 }
 
+cpp_saturated <- function(TAU, RHO, FREQ, DATA, C_VEC, ORDER, SCORES) {
+    .Call(`_lavaan_pl_cpp_saturated`, TAU, RHO, FREQ, DATA, C_VEC, ORDER, SCORES)
+}
+
+cpp_saturated_traces <- function(HTT, HTR, D, ST, SR, W, N) {
+    .Call(`_lavaan_pl_cpp_saturated_traces`, HTT, HTR, D, ST, SR, W, N)
+}
+
 #' Compute pairwise frequencies
 #'
 #' @param Y Integer matrix of dimension \eqn{n*p}, where \eqn{n} is the sample size

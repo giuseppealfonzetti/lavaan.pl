@@ -40,14 +40,43 @@ for (nm in names(grid)) {
   })
 }
 
-# mean.var.adjusted test matches lavaan PML
+# mean.var.adjusted test and fit measures match lavaan PML
 local({
-  for (nm in c("ordinal, std.lv", "equality constraints")) {
+  fm <- c("chisq", "df", "chisq.scaled", "df.scaled", "pvalue.scaled", "chisq.scaling.factor",
+          "baseline.chisq", "baseline.df", "baseline.chisq.scaled", "cfi.scaled", "tli.scaled", "rmsea.scaled")
+  for (nm in c("binary, one factor", "ordinal, std.lv", "ordinal, marker", "cross-loading", "equality constraints")) {
     g <- grid[[nm]]
     ours <- cfa(g$model, g$data, std.lv = g$std.lv, test = "mean.var.adjusted")
     ref <- lavaan::cfa(g$model, g$data, std.lv = g$std.lv, estimator = "PML", test = "mean.var.adjusted")
     expect_equal(ours@test[[1]][c("stat", "df")], ref@test[[1]][c("stat", "df")], tolerance = 1e-3)
-    expect_equal(ours@test[[2]][c("stat", "df")], ref@test[[2]][c("stat", "df")], tolerance = 1e-3)
+    expect_equal(ours@test[[2]][c("stat", "df", "pvalue", "scaling.factor")],
+                 ref@test[[2]][c("stat", "df", "pvalue", "scaling.factor")], tolerance = 1e-3)
+    expect_equal(fitMeasures(ours, fm), fitMeasures(ref, fm), tolerance = 1e-3)
+  }
+})
+
+# Nested test matches lavaan's PLRT with the exact restriction
+local({
+  m1 <- "A =~ A1 + A2 + A3 + A4 + A5\nC =~ C1 + C2 + C3 + C4 + C5"
+  f1 <- cfa(m1, bfi, std.lv = TRUE, test = "mean.var.adjusted")
+  h0 <- list(
+    cfa(m1, bfi, std.lv = TRUE, orthogonal = TRUE, test = "mean.var.adjusted"),
+    cfa("A =~ A1 + a*A2 + a*A3 + A4 + A5\nC =~ C1 + b*C2 + b*C3 + C4 + C5", bfi, std.lv = TRUE, test = "mean.var.adjusted")
+  )
+  for (f0 in h0) {
+    ours <- lavTestLRT(f1, f0)
+    expect_equal(lavaan.pl::anova(f1, f0), ours)
+    ref <- suppressWarnings(lavaan::lavTestLRT(f1, f0))
+    m10 <- lavaan:::lav_test_diff_m10(m1 = f1, m0 = f0, test = FALSE)
+    iH <- solve(lavaan::lavTech(m10, "information.observed"))
+    J <- lavaan::lavTech(m10, "first.order")
+    A <- lavaan:::lav_test_diff_a(m1 = f1, m0 = f0, method = "exact")
+    M <- (A %*% iH %*% J %*% iH %*% t(A)) %*% solve(A %*% iH %*% t(A))
+    plrt <- 2 * (f1@optim$logl - f0@optim$logl)
+    expect_equal(ours[2, "Chisq diff"], sum(diag(M)) / sum(diag(M %*% M)) * plrt, tolerance = 1e-4)
+    expect_equal(ours[2, "Df diff"], sum(diag(M))^2 / sum(diag(M %*% M)), tolerance = 1e-4)
+    cols <- c("Df", "PL_AIC", "PL_BIC", "Chisq")
+    expect_equal(unlist(ours[, cols]), unlist(ref[, cols]), tolerance = 1e-6)
   }
 })
 

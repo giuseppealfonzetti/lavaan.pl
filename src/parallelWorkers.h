@@ -173,6 +173,75 @@ namespace parallelWorkers{
 
   };
 
+  // RcppParallel Worker for the saturated model, parametrised by
+  // thresholds and one polychoric correlation per pair.
+  // Returns log-likelihood, gradient and the blocks of the observed
+  // information: thresholds-thresholds, thresholds-correlations and
+  // the (diagonal) correlations-correlations block
+  struct saturatedPairs : public RcppParallel::Worker{
+    const Eigen::Ref<const Eigen::VectorXd> tau;
+    const Eigen::Ref<const Eigen::VectorXd> rho;
+    const Eigen::Ref<const Eigen::VectorXd> c_vec;
+    const Eigen::Ref<const Eigen::MatrixXd> freq;
+    const int order;
+    const bool scores;
+    Eigen::MatrixXd &patscore;
+
+    double ll;
+    Eigen::VectorXd gradient;
+    Eigen::MatrixXd htt;
+    Eigen::MatrixXd htr;
+    Eigen::VectorXd hrr;
+
+    saturatedPairs(
+      const Eigen::Ref<const Eigen::VectorXd> TAU_,
+      const Eigen::Ref<const Eigen::VectorXd> RHO_,
+      const Eigen::Ref<const Eigen::VectorXd> C_VEC_,
+      const Eigen::Ref<const Eigen::MatrixXd> FREQ_,
+      const int ORDER_,
+      const bool SCORES_,
+      Eigen::MatrixXd &PATSCORE_
+    ):
+      tau(TAU_), rho(RHO_), c_vec(C_VEC_), freq(FREQ_), order(ORDER_), scores(SCORES_), patscore(PATSCORE_),
+      ll(0.0),
+      gradient(Eigen::VectorXd::Zero(TAU_.size() + RHO_.size())),
+      htt(Eigen::MatrixXd::Zero(TAU_.size(), TAU_.size())),
+      htr(Eigen::MatrixXd::Zero(TAU_.size(), RHO_.size())),
+      hrr(Eigen::VectorXd::Zero(RHO_.size())){}
+
+    saturatedPairs(const saturatedPairs &OBJ_, RcppParallel::Split):
+      tau(OBJ_.tau), rho(OBJ_.rho), c_vec(OBJ_.c_vec), freq(OBJ_.freq), order(OBJ_.order), scores(OBJ_.scores), patscore(OBJ_.patscore),
+      ll(0.0),
+      gradient(Eigen::VectorXd::Zero(tau.size() + rho.size())),
+      htt(Eigen::MatrixXd::Zero(tau.size(), tau.size())),
+      htr(Eigen::MatrixXd::Zero(tau.size(), rho.size())),
+      hrr(Eigen::VectorXd::Zero(rho.size())){}
+
+    void operator()(std::size_t BEGIN, std::size_t END);
+    void join(const saturatedPairs &RHS);
+  };
+
+  // RcppParallel Worker collecting the casewise scores of the
+  // saturated model from the patternwise scores
+  struct saturatedScores : public RcppParallel::Worker{
+    const Eigen::Ref<const Eigen::MatrixXd> data;
+    const Eigen::Ref<const Eigen::MatrixXd> patscore;
+    const Eigen::Ref<const Eigen::VectorXd> c_vec;
+    Eigen::MatrixXd &st;
+    Eigen::MatrixXd &sr;
+
+    saturatedScores(
+      const Eigen::Ref<const Eigen::MatrixXd> DATA_,
+      const Eigen::Ref<const Eigen::MatrixXd> PATSCORE_,
+      const Eigen::Ref<const Eigen::VectorXd> C_VEC_,
+      Eigen::MatrixXd &ST_,
+      Eigen::MatrixXd &SR_
+    ):
+      data(DATA_), patscore(PATSCORE_), c_vec(C_VEC_), st(ST_), sr(SR_){}
+
+    void operator()(std::size_t BEGIN, std::size_t END);
+  };
+
 }
 
 #endif

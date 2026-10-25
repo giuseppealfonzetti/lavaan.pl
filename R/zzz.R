@@ -2,10 +2,10 @@
 
   # Load lavaan
   packageStartupMessage("Loading required package: lavaan")
-  attach_lavaan(without = "cfa")
+  attach_lavaan(without = c("cfa", "lavTestLRT", "anova"))
 
   # Inform conflicts
-  packageStartupMessage("lavaan.pl ", utils::packageVersion("lavaan.pl"), ": lavaan.pl::cfa() masks lavaan::cfa()")
+  packageStartupMessage("lavaan.pl ", utils::packageVersion("lavaan.pl"), ": lavaan.pl::cfa(), lavTestLRT() and anova() mask lavaan's")
 }
 
 attach_lavaan <- function(without) {

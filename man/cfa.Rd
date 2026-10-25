@@ -57,10 +57,10 @@ process.}
 \item{...}{Additional arguments to be passed to \code{\link[lavaan:lavaan]{lavaan()}}.}
 }
 \value{
-A \link[lavaan:lavaan]{lavaan::lavaan} object. The lavaan.pl fit, from \code{\link[=fit_plFA]{fit_plFA()}}, and
-its variance components, from \code{\link[=computeVar]{computeVar()}}, are stored in
-\verb{@external$lavaan.pl} and \verb{@external$vars}. Methods for \code{lavaan} objects
-work as usual.
+A \link[lavaan:lavaan]{lavaan::lavaan} object. The lavaan.pl fit, from \code{\link[=fit_plFA]{fit_plFA()}}, its
+variance components, from \code{\link[=computeVar]{computeVar()}}, and its test, from
+\code{\link[=computePLRT]{computePLRT()}}, are stored in \verb{@external$lavaan.pl}, \verb{@external$vars} and
+\verb{@external$plrt}. Methods for \code{lavaan} objects work as usual.
 }
 \description{
 Fit a Confirmatory Factor Analysis (CFA) model using the \code{lavaan.pl()} engine
@@ -74,7 +74,7 @@ interest are:
 \describe{
 \item{\code{information}}{The information matrix to use. Only \code{"observed"} is currently supported.}
 \item{\code{se}}{The standard error method to use. Only \code{"robust.huber.white"} is currently supported.}
-\item{\code{test}}{Default \code{"none"}. \code{"standard"} and \code{"mean.var.adjusted"} are computed by lavaan from the lavaan.pl estimates.}
+\item{\code{test}}{Default \code{"none"}. \code{"standard"} and \code{"mean.var.adjusted"} are computed by \code{\link[=computePLRT]{computePLRT()}}.}
 }
 }
 \examples{

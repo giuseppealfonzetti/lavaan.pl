@@ -125,3 +125,42 @@ Rcpp::List fullPairwise::multiThreadSamplEstHJ(
 
   return(output);
 }
+
+Rcpp::List fullPairwise::multiThreadSaturated(
+    const Eigen::Ref<const Eigen::VectorXd> TAU,
+    const Eigen::Ref<const Eigen::VectorXd> RHO,
+    const Eigen::Ref<const Eigen::MatrixXd> FREQ,
+    const Eigen::Ref<const Eigen::MatrixXd> DATA,
+    const Eigen::Ref<const Eigen::VectorXd> C_VEC,
+    const int ORDER,
+    const bool SCORES
+){
+  const int nthr = TAU.size();
+  const int P    = RHO.size();
+  const int n    = DATA.rows();
+  const int order = SCORES ? std::max(ORDER, 1) : ORDER;
+
+  Eigen::MatrixXd patscore = Eigen::MatrixXd::Zero(SCORES ? 2 * C_VEC.maxCoeff() - 1 : 0, SCORES ? FREQ.cols() : 0);
+  parallelWorkers::saturatedPairs sat(TAU, RHO, C_VEC, FREQ, order, SCORES, patscore);
+  RcppParallel::parallelReduce(0, P, sat);
+
+  Rcpp::List output =
+    Rcpp::List::create(
+      Rcpp::Named("ll") = sat.ll,
+      Rcpp::Named("gradient") = sat.gradient,
+      Rcpp::Named("htt") = sat.htt,
+      Rcpp::Named("htr") = sat.htr,
+      Rcpp::Named("hrr") = sat.hrr
+    );
+
+  if(SCORES){
+    Eigen::MatrixXd st = Eigen::MatrixXd::Zero(nthr, n);
+    Eigen::MatrixXd sr = Eigen::MatrixXd::Zero(P, n);
+    parallelWorkers::saturatedScores cases(DATA, patscore, C_VEC, st, sr);
+    RcppParallel::parallelFor(0, n, cases);
+    output["st"] = st;
+    output["sr"] = sr;
+  }
+
+  return(output);
+}

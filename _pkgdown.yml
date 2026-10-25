@@ -25,6 +25,8 @@ reference:
   - title: lavaan wrapper
     contents:
       - cfa
+      - lavTestLRT
+      - anova
       - as_lavaan
 
   - title: Original functions

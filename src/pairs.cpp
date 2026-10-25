@@ -60,12 +60,11 @@ pairs::Setup::Setup(
 }
 
 pairs::Pair::Pair(
-    const Setup &S,
     const Eigen::Ref<const Eigen::VectorXd> C_VEC,
     const int K,
     const int L,
-    const bool GRADFLAG
-): k(K), l(L), ck(C_VEC(K)), cl(C_VEC(L)){
+    const double RHO
+): k(K), l(L), ck(C_VEC(K)), cl(C_VEC(L)), rho(RHO){
 
   // Identifies quantities related to pair (k,l)
   tk = C_VEC.head(K).sum() - K;
@@ -78,6 +77,15 @@ pairs::Pair::Pair(
   for(int u = 1; u < K; u++) offset += C_VEC(u) * C_VEC.head(u).sum();
   // i2 starting index from i1 for item l
   offset += ck * C_VEC.head(L).sum();
+}
+
+pairs::Pair::Pair(
+    const Setup &S,
+    const Eigen::Ref<const Eigen::VectorXd> C_VEC,
+    const int K,
+    const int L,
+    const bool GRADFLAG
+): Pair(C_VEC, K, L, 0){
 
   x = S.sd.cwiseProduct(S.Lam.row(K).transpose());
   y = S.sd.cwiseProduct(S.Lam.row(L).transpose());
@@ -101,7 +109,7 @@ pairs::Pair::Pair(
 }
 
 double pairs::pattern_derivatives(
-    const Setup &S,
+    const Eigen::Ref<const Eigen::VectorXd> TAU,
     const Eigen::Ref<const Eigen::VectorXd> C_VEC,
     const Pair &PR,
     const int SK,
@@ -114,7 +122,7 @@ double pairs::pattern_derivatives(
   const double rho = PR.rho;
 
   // identify thresholds
-  const Eigen::VectorXd th = params::extract_thresholds(S.tau, C_VEC, PR.k, PR.l, SK, SL);
+  const Eigen::VectorXd th = params::extract_thresholds(TAU, C_VEC, PR.k, PR.l, SK, SL);
 
   // compute pi
   const double pe = biprobs::compute_pi(C_VEC, th, rho, PR.k, PR.l, SK, SL) + 1e-8;
@@ -248,7 +256,7 @@ void pairs::pair_contribution(
       // read frequency
       const double n_sksl = FREQ(4, PR.offset + sk * PR.cl + sl);
 
-      const double pe = pattern_derivatives(S, C_VEC, PR, sk, sl, order, g, G2);
+      const double pe = pattern_derivatives(S.tau, C_VEC, PR, sk, sl, order, g, G2);
 
       // update ll
       LL += n_sksl * log(pe);

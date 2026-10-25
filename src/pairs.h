@@ -31,6 +31,12 @@ namespace pairs{
     Eigen::VectorXd x, y, X, Y, grho;
 
     Pair(
+      const Eigen::Ref<const Eigen::VectorXd> C_VEC,
+      const int K,
+      const int L,
+      const double RHO);
+
+    Pair(
       const Setup &S,
       const Eigen::Ref<const Eigen::VectorXd> C_VEC,
       const int K,
@@ -39,7 +45,7 @@ namespace pairs{
   };
 
   double pattern_derivatives(
-      const Setup &S,
+      const Eigen::Ref<const Eigen::VectorXd> TAU,
       const Eigen::Ref<const Eigen::VectorXd> C_VEC,
       const Pair &PR,
       const int SK,

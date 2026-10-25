@@ -195,6 +195,40 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// cpp_saturated
+Rcpp::List cpp_saturated(Eigen::Map<Eigen::VectorXd> TAU, Eigen::Map<Eigen::VectorXd> RHO, Eigen::Map<Eigen::MatrixXd> FREQ, Eigen::Map<Eigen::MatrixXd> DATA, Eigen::Map<Eigen::VectorXd> C_VEC, const int ORDER, const bool SCORES);
+RcppExport SEXP _lavaan_pl_cpp_saturated(SEXP TAUSEXP, SEXP RHOSEXP, SEXP FREQSEXP, SEXP DATASEXP, SEXP C_VECSEXP, SEXP ORDERSEXP, SEXP SCORESSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Eigen::Map<Eigen::VectorXd> >::type TAU(TAUSEXP);
+    Rcpp::traits::input_parameter< Eigen::Map<Eigen::VectorXd> >::type RHO(RHOSEXP);
+    Rcpp::traits::input_parameter< Eigen::Map<Eigen::MatrixXd> >::type FREQ(FREQSEXP);
+    Rcpp::traits::input_parameter< Eigen::Map<Eigen::MatrixXd> >::type DATA(DATASEXP);
+    Rcpp::traits::input_parameter< Eigen::Map<Eigen::VectorXd> >::type C_VEC(C_VECSEXP);
+    Rcpp::traits::input_parameter< const int >::type ORDER(ORDERSEXP);
+    Rcpp::traits::input_parameter< const bool >::type SCORES(SCORESSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_saturated(TAU, RHO, FREQ, DATA, C_VEC, ORDER, SCORES));
+    return rcpp_result_gen;
+END_RCPP
+}
+// cpp_saturated_traces
+Eigen::VectorXd cpp_saturated_traces(Eigen::Map<Eigen::MatrixXd> HTT, Eigen::Map<Eigen::MatrixXd> HTR, Eigen::Map<Eigen::VectorXd> D, Eigen::Map<Eigen::MatrixXd> ST, Eigen::Map<Eigen::MatrixXd> SR, Eigen::Map<Eigen::VectorXd> W, const double N);
+RcppExport SEXP _lavaan_pl_cpp_saturated_traces(SEXP HTTSEXP, SEXP HTRSEXP, SEXP DSEXP, SEXP STSEXP, SEXP SRSEXP, SEXP WSEXP, SEXP NSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Eigen::Map<Eigen::MatrixXd> >::type HTT(HTTSEXP);
+    Rcpp::traits::input_parameter< Eigen::Map<Eigen::MatrixXd> >::type HTR(HTRSEXP);
+    Rcpp::traits::input_parameter< Eigen::Map<Eigen::VectorXd> >::type D(DSEXP);
+    Rcpp::traits::input_parameter< Eigen::Map<Eigen::MatrixXd> >::type ST(STSEXP);
+    Rcpp::traits::input_parameter< Eigen::Map<Eigen::MatrixXd> >::type SR(SRSEXP);
+    Rcpp::traits::input_parameter< Eigen::Map<Eigen::VectorXd> >::type W(WSEXP);
+    Rcpp::traits::input_parameter< const double >::type N(NSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_saturated_traces(HTT, HTR, D, ST, SR, W, N));
+    return rcpp_result_gen;
+END_RCPP
+}
 // pairs_freq
 Eigen::MatrixXd pairs_freq(Eigen::Map<Eigen::MatrixXd> Y, Eigen::Map<Eigen::VectorXd> C_VEC);
 RcppExport SEXP _lavaan_pl_pairs_freq(SEXP YSEXP, SEXP C_VECSEXP) {
@@ -281,6 +315,8 @@ static const R_CallMethodDef CallEntries[] = {
     {"_lavaan_pl_cpp_latvar_mat2vec", (DL_FUNC) &_lavaan_pl_cpp_latvar_mat2vec, 4},
     {"_lavaan_pl_cpp_sa_proj", (DL_FUNC) &_lavaan_pl_cpp_sa_proj, 10},
     {"_lavaan_pl_cpp_sample_estimators_HJ", (DL_FUNC) &_lavaan_pl_cpp_sample_estimators_HJ, 13},
+    {"_lavaan_pl_cpp_saturated", (DL_FUNC) &_lavaan_pl_cpp_saturated, 7},
+    {"_lavaan_pl_cpp_saturated_traces", (DL_FUNC) &_lavaan_pl_cpp_saturated_traces, 7},
     {"_lavaan_pl_pairs_freq", (DL_FUNC) &_lavaan_pl_pairs_freq, 2},
     {"_lavaan_pl_cpp_multiThread_completePairwise", (DL_FUNC) &_lavaan_pl_cpp_multiThread_completePairwise, 14},
     {"_lavaan_pl_cpp_plSA2", (DL_FUNC) &_lavaan_pl_cpp_plSA2, 27},

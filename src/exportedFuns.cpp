@@ -173,3 +173,38 @@ Rcpp::List cpp_sample_estimators_HJ(
 
 
 }
+
+Rcpp::List cpp_saturated(
+    Eigen::Map<Eigen::VectorXd> TAU,
+    Eigen::Map<Eigen::VectorXd> RHO,
+    Eigen::Map<Eigen::MatrixXd> FREQ,
+    Eigen::Map<Eigen::MatrixXd> DATA,
+    Eigen::Map<Eigen::VectorXd> C_VEC,
+    const int ORDER,
+    const bool SCORES
+){
+  return fullPairwise::multiThreadSaturated(TAU, RHO, FREQ, DATA, C_VEC, ORDER, SCORES);
+}
+
+Eigen::VectorXd cpp_saturated_traces(
+    Eigen::Map<Eigen::MatrixXd> HTT,
+    Eigen::Map<Eigen::MatrixXd> HTR,
+    Eigen::Map<Eigen::VectorXd> D,
+    Eigen::Map<Eigen::MatrixXd> ST,
+    Eigen::Map<Eigen::MatrixXd> SR,
+    Eigen::Map<Eigen::VectorXd> W,
+    const double N
+){
+  Eigen::MatrixXd U = SR - HTR.transpose() * HTT.ldlt().solve(ST);
+  U *= W.cwiseSqrt().asDiagonal();
+  const Eigen::VectorXd dinv = D.cwiseInverse();
+  const Eigen::MatrixXd Ud = dinv.asDiagonal() * U;
+  const Eigen::MatrixXd B = HTT - HTR * dinv.asDiagonal() * HTR.transpose();
+  const Eigen::MatrixXd AinvU = Ud + dinv.asDiagonal() * (HTR.transpose() * B.ldlt().solve(HTR * Ud));
+  const Eigen::MatrixXd M = (U.cols() <= U.rows()) ? Eigen::MatrixXd(U.transpose() * AinvU / N) : Eigen::MatrixXd(AinvU * U.transpose() / N);
+
+  Eigen::VectorXd out(2);
+  out(0) = M.trace();
+  out(1) = M.cwiseProduct(M.transpose()).sum();
+  return out;
+}

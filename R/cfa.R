@@ -10,7 +10,7 @@
 #' \describe{
 #'   \item{\code{information}}{The information matrix to use. Only `"observed"` is currently supported.}
 #'   \item{\code{se}}{The standard error method to use. Only `"robust.huber.white"` is currently supported.}
-#'   \item{\code{test}}{Default `"none"`. `"standard"` and `"mean.var.adjusted"` are computed by lavaan from the lavaan.pl estimates.}
+#'   \item{\code{test}}{Default `"none"`. `"standard"` and `"mean.var.adjusted"` are computed by [computePLRT()].}
 #' }
 #'
 #' @param model A description of the user-specified model. Typically, the model
@@ -43,10 +43,10 @@
 #'   process.
 #' @param ... Additional arguments to be passed to [lavaan()].
 #'
-#' @returns A [lavaan::lavaan] object. The lavaan.pl fit, from [fit_plFA()], and
-#'   its variance components, from [computeVar()], are stored in
-#'   `@external$lavaan.pl` and `@external$vars`. Methods for `lavaan` objects
-#'   work as usual.
+#' @returns A [lavaan::lavaan] object. The lavaan.pl fit, from [fit_plFA()], its
+#'   variance components, from [computeVar()], and its test, from
+#'   [computePLRT()], are stored in `@external$lavaan.pl`, `@external$vars` and
+#'   `@external$plrt`. Methods for `lavaan` objects work as usual.
 #'
 #' @references
 #'
@@ -331,7 +331,7 @@ as_lavaan <- function(fit, vars = NULL, template) {
     sloth1 = template@h1
   )
   out@Options[c("optim.method", "se", "test", "baseline")] <-
-    list("nlminb", template@Options$se, template@Options$test, template@Options$baseline)
+    list(if (fit$method == "SA") "SA" else "ucminf", template@Options$se, template@Options$test, template@Options$baseline)
 
   # Change Fit slot (depends whether it is numFit or stoFit) -------------------
   if (fit$method == "ucminf") {
@@ -345,48 +345,43 @@ as_lavaan <- function(fit, vars = NULL, template) {
   }
 
   # Change vcov slot -----------------------------------------------------------
-  vcov_1 <- vcov <- NULL
+  vcov <- NULL
   if (!is.null(vars)) {
     delta <- numDeriv::jacobian(par_lav, fit$theta)
     hinv <- solve(vars$H)
     vcov <- delta %*% hinv %*% vars$J %*% hinv %*% t(delta) / fit$dims$n
     attr(vcov, "E.inv") <- delta %*% hinv %*% t(delta)
-    vcov_1 <- vcov
     if (!is.null(vars$noise)) vcov <- vcov + delta %*% vars$noise %*% t(delta)
     out@vcov <- list(se = out@Options$se, information = out@Options$information[1], vcov = vcov)
     out@ParTable$se <- out@Fit@se <- lavaan___lav_model_vcov_se(out@Model, out@ParTable, vcov = vcov)
   }
 
   # Change test slot -----------------------------------------------------------
+  plrt <- NULL
   if (!identical(out@Options$test, "none")) {
-    x <- out@optim$x
-    attr(x, "fx") <- lavaan___lav_model_objective(
-      lavmodel = out@Model,
-      lavsamplestats = out@SampleStats,
-      lavdata = out@Data,
-      lavcache = out@Cache
-    )
-    out@test <- lavaan___lav_model_test(
-      lavmodel = out@Model,
-      lavpartable = out@ParTable,
-      lavsamplestats = out@SampleStats,
-      lavimplied = out@implied,
-      lavh1 = out@h1,
-      lavoptions = out@Options,
-      x = x,
-      vcov_1 = vcov_1,
-      lavcache = out@Cache,
-      lavdata = out@Data,
-      lavloglik = out@loglik
-    )
-    out@baseline <- lavaan___lav_step15_baseline(
-      lavoptions = out@Options,
-      lavsamplestats = out@SampleStats,
-      lavdata = out@Data,
-      lavcache = out@Cache,
-      lavh1 = out@h1,
-      lavpartable = out@ParTable
-    )
+    plrt <- computePLRT(fit, if (is.null(vars)) computeVar(fit) else vars)
+    tests <- setdiff(out@Options$test, "standard")
+    for (t in setdiff(tests, "mean.var.adjusted")) {
+      warning(sprintf("test option %s not available for estimator PML", t), call. = FALSE)
+    }
+    pml_test <- function(x) {
+      std <- max(x$stat, 0)
+      out_test <- list(standard = list(test = "standard", stat = std, stat.group = std, df = x$df,
+                                       refdistr = "unknown", pvalue = NA))
+      if ("mean.var.adjusted" %in% tests) {
+        out_test$mean.var.adjusted <- list(
+          test = "mean.var.adjusted", stat = x$stat.scaled, stat.group = std / x$scaling.factor,
+          df = x$df.scaled, pvalue = x$pvalue.scaled, scaling.factor = x$scaling.factor,
+          scaled.test.stat = std, scaled.test = "standard", label = "mean+var adjusted correction (PML)",
+          shift.parameter = NA, trace.UGamma = NA, trace.UGamma4 = NA, trace.UGamma2 = NA,
+          UGamma.eigenvalues = NA
+        )
+      }
+      attr(out_test, "info") <- lavaan___lav_test_info_attr(lavdata = out@Data, lavoptions = out@Options)
+      out_test
+    }
+    out@test <- pml_test(plrt$model)
+    if (isTRUE(out@Options$baseline)) out@baseline <- list(test = pml_test(plrt$baseline))
   }
 
   # Change timing slot ---------------------------------------------------------
@@ -394,18 +389,84 @@ as_lavaan <- function(fit, vars = NULL, template) {
   out@timing$vcov <- if (is.null(vars)) 0 else vars$RTime
   out@timing$total <- out@timing$total + fit$RTime + out@timing$vcov
   # Include the entire output of lavaan.pl fit --------------------------------------
-  out@external <- list(lavaan.pl = fit, vars = vars)
+  out@external <- list(lavaan.pl = fit, vars = vars, plrt = plrt)
   # Output ---------------------------------------------------------------------
   out@call <- template@call
   out
 }
 
+#' Likelihood ratio test for nested models
+#'
+#' @param object Object of class `lavaan`.
+#' @param ... Further objects of class `lavaan`, and arguments for [lavaan::lavTestLRT()].
+#' @param model_names Names of the models.
+#' @return An object of class `anova`, as [lavaan::lavTestLRT()]. When all models are fitted by
+#'   [cfa()], the difference tests come from [computePLRT()].
+#' @export
+lavTestLRT <- function(object, ..., model_names = NULL) {
+  dots <- list(...)
+  modp <- vapply(dots, inherits, logical(1), "lavaan")
+  mods <- c(list(object), dots[modp])
+  if (is.null(model_names)) {
+    mc <- as.list(match.call(expand.dots = TRUE))[-1]
+    model_names <- vapply(mc[c(TRUE, modp)], function(x) deparse1(x), "")
+  }
+  ours <- length(mods) > 1 &&
+    all(vapply(mods, function(x) !is.null(x@external$lavaan.pl), logical(1))) &&
+    (is.null(dots$method) || dots$method %in% c("default", "mean.var.adjusted.PLRT")) &&
+    (is.null(dots$type) || tolower(dots$type) == "chisq")
+  if (!ours) {
+    return(lavaan::lavTestLRT(object, ..., model_names = model_names))
+  }
+
+  names(mods) <- make.unique(model_names)
+  mods <- mods[order(vapply(mods, function(x) x@test[[1]]$df, numeric(1)))]
+  fits <- lapply(mods, function(x) x@external$lavaan.pl)
+  dim_theta <- vapply(mods, function(x) {
+    vars <- if (is.null(x@external$vars)) computeVar(x@external$lavaan.pl) else x@external$vars
+    sum(diag(solve(vars$H, vars$J)))
+  }, numeric(1))
+  logl <- vapply(mods, function(x) x@optim$logl, numeric(1))
+  stat_delta <- df_delta <- rep(NA, length(mods))
+  for (m in seq_len(length(mods) - 1)) {
+    out <- computePLRT(fits[[m + 1]], H1 = fits[[m]])$model
+    stat_delta[m + 1] <- out$stat.scaled
+    df_delta[m + 1] <- out$df.scaled
+  }
+
+  val <- data.frame(
+    Df = vapply(mods, function(x) x@test[[1]]$df, numeric(1)),
+    PL_AIC = -2 * logl + 2 * dim_theta,
+    PL_BIC = -2 * logl + dim_theta * log(fits[[1]]$dims$n),
+    Chisq = vapply(mods, function(x) x@test[[1]]$stat, numeric(1)),
+    `Chisq diff` = stat_delta,
+    `Df diff` = df_delta,
+    `Pr(>Chisq)` = stats::pchisq(stat_delta, df_delta, lower.tail = FALSE),
+    row.names = names(mods),
+    check.names = FALSE
+  )
+  attr(val, "heading") <- paste0("\nMean and Variance Adjusted Chi-Squared Difference Test (method = ",
+                                 dQuote("mean.var.adjusted.PLRT"), ", lavaan.pl)\n")
+  class(val) <- c("anova", class(val))
+  val
+}
+
+#' Analysis of variance for nested models
+#'
+#' @param object A fitted model object.
+#' @param ... Further fitted model objects, and arguments for [lavTestLRT()] or [stats::anova()].
+#' @return An object of class `anova`. For objects of class `lavaan`, the output of [lavTestLRT()];
+#'   otherwise, the output of `lavaan::anova()`.
+#' @export
+anova <- function(object, ...) {
+  if (!inherits(object, "lavaan")) return(lavaan::anova(object, ...))
+  mc <- as.list(match.call(expand.dots = TRUE))[-1]
+  modp <- vapply(list(...), inherits, logical(1), "lavaan")
+  lavTestLRT(object, ..., model_names = vapply(mc[c(TRUE, modp)], function(x) deparse1(x), ""))
+}
+
 # Export lavaan functions
-lavaan___lav_step15_baseline <-
-  utils::getFromNamespace("lav_step15_baseline", "lavaan")
-lavaan___lav_model_test <-
-  utils::getFromNamespace("lav_model_test", "lavaan")
+lavaan___lav_test_info_attr <-
+  utils::getFromNamespace("lav_test_info_attr", "lavaan")
 lavaan___lav_model_vcov_se <-
   utils::getFromNamespace("lav_model_vcov_se", "lavaan")
-lavaan___lav_model_objective <-
-  utils::getFromNamespace("lav_model_objective", "lavaan")

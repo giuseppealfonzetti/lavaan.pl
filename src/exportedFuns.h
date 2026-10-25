@@ -117,5 +117,27 @@ Rcpp::List cpp_sample_estimators_HJ(
     const int NVAR
 );
 
+// [[Rcpp::export]]
+Rcpp::List cpp_saturated(
+    Eigen::Map<Eigen::VectorXd> TAU,
+    Eigen::Map<Eigen::VectorXd> RHO,
+    Eigen::Map<Eigen::MatrixXd> FREQ,
+    Eigen::Map<Eigen::MatrixXd> DATA,
+    Eigen::Map<Eigen::VectorXd> C_VEC,
+    const int ORDER,
+    const bool SCORES
+);
+
+// [[Rcpp::export]]
+Eigen::VectorXd cpp_saturated_traces(
+    Eigen::Map<Eigen::MatrixXd> HTT,
+    Eigen::Map<Eigen::MatrixXd> HTR,
+    Eigen::Map<Eigen::VectorXd> D,
+    Eigen::Map<Eigen::MatrixXd> ST,
+    Eigen::Map<Eigen::MatrixXd> SR,
+    Eigen::Map<Eigen::VectorXd> W,
+    const double N
+);
+
 
 #endif
