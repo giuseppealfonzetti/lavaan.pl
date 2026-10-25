@@ -1,38 +1,51 @@
 cm <- build_constrMat(6, 2, "simple")
 S <- matrix(.3, 2, 2); diag(S) <- 1
 Y <- sim_data(300, gen_loadings(cm, SEED = 1, LB = .4, UB = .8), c(-1, 0.3, 1), S, SEED = 3)
-f <- fit_plFA(set_plfa_data(Y), set_plfa_model(cm))
-v <- computeVar(f)
-r <- computePLRT(f, v)
-n <- f$dims$n; nt <- f$dims$nthr; psi <- (nt + 1):f$dims$npar
-sat <- function(tau, rho, order, scores) lavaan.pl:::cpp_saturated(tau, rho, f$data$freq, f$data$Y, f$dims$cat, order, scores)
+Ym <- Y
+set.seed(4)
+for (j in c(2:3, 5:6)) Ym[runif(300) < c(.1, .3, .3, .6)[Y[, if (j < 4) 1 else 4] + 1], j] <- NA
 
-# Saturated fit is stationary
-expect_true(max(abs(sat(r$saturated$tau, r$saturated$rho, 1, FALSE)$gradient)) / n < 1e-6)
-expect_equal(r$model$df, nt + f$dims$pairs - f$dims$npar)
-expect_equal(r$baseline$df, f$dims$pairs)
+# Available cases with missing values first, then complete data
+for (D in list(set_plfa_data(Ym, MISSING = "available.cases"), set_plfa_data(Y))) {
+  f <- fit_plFA(D, set_plfa_model(cm))
+  v <- computeVar(f)
+  r <- computePLRT(f, v)
+  n <- f$dims$n; nt <- f$dims$nthr; psi <- (nt + 1):f$dims$npar
+  sat <- function(tau, rho, order, scores) {
+    lavaan.pl:::cpp_saturated(tau, rho, f$data$freq, f$data$Y, f$dims$cat, order, scores, f$data$ufreq, f$data$uweights)
+  }
 
-# Mean and variance adjustment matches the dense computation
-rho_theta <- function(theta) {
-  gp <- getPar(replace(f, "theta", list(theta)), OPTION = "list")
-  S <- gp$loadings %*% gp$latent_correlations %*% t(gp$loadings)
-  S[upper.tri(S)]
+  # Saturated fit is stationary
+  expect_true(max(abs(sat(r$saturated$tau, r$saturated$rho, 1, FALSE)$gradient)) / n < 1e-6)
+  expect_equal(r$model$df, nt + f$dims$pairs - f$dims$npar)
+  expect_equal(r$baseline$df, f$dims$pairs)
+
+  # Mean and variance adjustment matches the dense computation
+  rho_theta <- function(theta) {
+    gp <- getPar(replace(f, "theta", list(theta)), OPTION = "list")
+    S <- gp$loadings %*% gp$latent_correlations %*% t(gp$loadings)
+    S[upper.tri(S)]
+  }
+  s <- sat(f$theta[1:nt], rho_theta(f$theta), 2, TRUE)
+  Hs <- rbind(cbind(s$htt, s$htr), cbind(t(s$htr), diag(s$hrr))) / n
+  Js <- tcrossprod(rbind(s$st, s$sr)) / n
+  iHs <- solve(Hs)
+  A <- solve(iHs[-(1:nt), -(1:nt)])
+  P1 <- A %*% (iHs %*% Js %*% iHs)[-(1:nt), -(1:nt)]
+  iH <- solve(v$H)
+  G <- (iH %*% v$J %*% iH)[psi, psi]
+  P0 <- solve(iH[psi, psi]) %*% G
+  delta <- numDeriv::jacobian(rho_theta, f$theta)[, psi]
+  E <- sum(diag(P1)) - sum(diag(P0))
+  V <- 2 * sum(diag(P1 %*% P1)) + 2 * sum(diag(P0 %*% P0)) - 4 * sum(diag(t(delta) %*% A %*% delta %*% G %*% P0))
+  expect_equal(r$model$scaling.factor, (V / 2) / E)
+  expect_equal(r$model$df.scaled, E^2 / (V / 2))
+  expect_equal(r$model$stat, 2 * (r$saturated$logl - s$ll))
+
+  # Closed-form independence thresholds maximise the independence pairwise likelihood
+  expect_true(max(abs(sat(r$independence$tau, rep(0, f$dims$pairs), 1, FALSE)$gradient[1:nt])) / n < 1e-6)
+  expect_equal(r$baseline$stat, 2 * (r$saturated$logl - r$independence$logl))
 }
-s <- sat(f$theta[1:nt], rho_theta(f$theta), 2, TRUE)
-Hs <- rbind(cbind(s$htt, s$htr), cbind(t(s$htr), diag(s$hrr))) / n
-Js <- tcrossprod(rbind(s$st, s$sr)) / n
-iHs <- solve(Hs)
-A <- solve(iHs[-(1:nt), -(1:nt)])
-P1 <- A %*% (iHs %*% Js %*% iHs)[-(1:nt), -(1:nt)]
-iH <- solve(v$H)
-G <- (iH %*% v$J %*% iH)[psi, psi]
-P0 <- solve(iH[psi, psi]) %*% G
-delta <- numDeriv::jacobian(rho_theta, f$theta)[, psi]
-E <- sum(diag(P1)) - sum(diag(P0))
-V <- 2 * sum(diag(P1 %*% P1)) + 2 * sum(diag(P0 %*% P0)) - 4 * sum(diag(t(delta) %*% A %*% delta %*% G %*% P0))
-expect_equal(r$model$scaling.factor, (V / 2) / E)
-expect_equal(r$model$df.scaled, E^2 / (V / 2))
-expect_equal(r$model$stat, 2 * (r$saturated$logl - s$ll))
 
 # Nested test: orthogonal against correlated factors, exact restriction on the latent correlation
 f0 <- fit_plFA(set_plfa_data(Y), set_plfa_model(cm, CORRFLAG = FALSE))

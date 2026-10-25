@@ -144,6 +144,8 @@ namespace parallelWorkers{
     const Eigen::Ref<const Eigen::MatrixXd> data;
     const Eigen::Ref<const Eigen::MatrixXd> gradmat;
     const Eigen::Ref<const Eigen::VectorXd> c_vec;
+    const Eigen::Ref<const Eigen::MatrixXd> uscore;
+    const Eigen::Ref<const Eigen::VectorXd> uw;
     // Output quantities:
     Eigen::VectorXd gradient;
     Eigen::MatrixXd variability;
@@ -154,15 +156,17 @@ namespace parallelWorkers{
     casewiseOuterProd(
       const Eigen::Ref<const Eigen::MatrixXd> DATA_,
       const Eigen::Ref<const Eigen::MatrixXd> GRADMAT_,
-      const Eigen::Ref<const Eigen::VectorXd> C_VEC_
+      const Eigen::Ref<const Eigen::VectorXd> C_VEC_,
+      const Eigen::Ref<const Eigen::MatrixXd> USCORE_,
+      const Eigen::Ref<const Eigen::VectorXd> UW_
     ):
-      data(DATA_), gradmat(GRADMAT_), c_vec(C_VEC_),
+      data(DATA_), gradmat(GRADMAT_), c_vec(C_VEC_), uscore(USCORE_), uw(UW_),
       gradient(Eigen::VectorXd::Zero(GRADMAT_.rows())),
       variability(Eigen::MatrixXd::Zero(GRADMAT_.rows(), GRADMAT_.rows())){}
 
     // Constructor 2:
     casewiseOuterProd(const casewiseOuterProd &OBJ_, RcppParallel::Split):
-      data(OBJ_.data), gradmat(OBJ_.gradmat), c_vec(OBJ_.c_vec),
+      data(OBJ_.data), gradmat(OBJ_.gradmat), c_vec(OBJ_.c_vec), uscore(OBJ_.uscore), uw(OBJ_.uw),
       gradient(Eigen::VectorXd::Zero(gradmat.rows())),
       variability(Eigen::MatrixXd::Zero(gradmat.rows(), gradmat.rows())){}
 
@@ -227,6 +231,8 @@ namespace parallelWorkers{
     const Eigen::Ref<const Eigen::MatrixXd> data;
     const Eigen::Ref<const Eigen::MatrixXd> patscore;
     const Eigen::Ref<const Eigen::VectorXd> c_vec;
+    const Eigen::Ref<const Eigen::MatrixXd> uscore;
+    const Eigen::Ref<const Eigen::VectorXd> uw;
     Eigen::MatrixXd &st;
     Eigen::MatrixXd &sr;
 
@@ -234,10 +240,12 @@ namespace parallelWorkers{
       const Eigen::Ref<const Eigen::MatrixXd> DATA_,
       const Eigen::Ref<const Eigen::MatrixXd> PATSCORE_,
       const Eigen::Ref<const Eigen::VectorXd> C_VEC_,
+      const Eigen::Ref<const Eigen::MatrixXd> USCORE_,
+      const Eigen::Ref<const Eigen::VectorXd> UW_,
       Eigen::MatrixXd &ST_,
       Eigen::MatrixXd &SR_
     ):
-      data(DATA_), patscore(PATSCORE_), c_vec(C_VEC_), st(ST_), sr(SR_){}
+      data(DATA_), patscore(PATSCORE_), c_vec(C_VEC_), uscore(USCORE_), uw(UW_), st(ST_), sr(SR_){}
 
     void operator()(std::size_t BEGIN, std::size_t END);
   };

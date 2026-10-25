@@ -19,7 +19,7 @@ A list with the test of the model against \code{H1} or the saturated model \code
 \code{H1}, of the independence model against the saturated model \code{baseline}. Each holds the
 statistic \code{stat}, its degrees of freedom \code{df}, and the mean and variance adjusted \code{stat.scaled}
 (\code{stat} divided by \code{scaling.factor}), \code{df.scaled} and \code{pvalue.scaled}. Also, without \code{H1}, the
-saturated fit \code{saturated}, and the timing \code{RTime}.
+saturated and independence fits \code{saturated} and \code{independence}, and the timing \code{RTime}.
 }
 \description{
 Pairwise likelihood ratio test

@@ -114,7 +114,9 @@ Rcpp::List cpp_sample_estimators_HJ(
     const int NTHR,
     const int NLOAD,
     const int NCORR,
-    const int NVAR
+    const int NVAR,
+    Rcpp::NumericVector UFREQ = Rcpp::NumericVector::create(),
+    Rcpp::NumericVector UW = Rcpp::NumericVector::create()
 );
 
 // [[Rcpp::export]]
@@ -125,7 +127,9 @@ Rcpp::List cpp_saturated(
     Eigen::Map<Eigen::MatrixXd> DATA,
     Eigen::Map<Eigen::VectorXd> C_VEC,
     const int ORDER,
-    const bool SCORES
+    const bool SCORES,
+    Rcpp::NumericVector UFREQ = Rcpp::NumericVector::create(),
+    Rcpp::NumericVector UW = Rcpp::NumericVector::create()
 );
 
 // [[Rcpp::export]]

@@ -53,6 +53,7 @@ print.plfa_data <- function(x, ...) {
   cat(
     "<plfa_data>", x$n, "observations,", x$p, "items (", x$p * (x$p - 1) / 2, "pairs )\n",
     " Categories per item:", paste(range(x$cat), collapse = " to "), "\n",
+    " Missing values:", sum(is.na(x$Y)), "(", x$missing, ")\n",
     " Validation data:", if (is.null(x$valfreq)) "none" else "yes", "\n"
   )
   invisible(x)
@@ -208,6 +209,8 @@ computeVar.PlFaFit <- function(OBJ, NUMDERIV = F, VERBOSE = FALSE){ if(OBJ$metho
                        NVAR        = OBJ$dims$nvar,
                        FREQ        = OBJ$data$freq,
                        DATA        = OBJ$data$Y,
+                       UFREQ       = OBJ$data$ufreq,
+                       UW          = OBJ$data$uweights,
                        METHOD      = OBJ$method,
                        NUMDERIV    = NUMDERIV,
                        NCORES      = OBJ$cores,
@@ -228,6 +231,8 @@ computeVar.PlFaFit <- function(OBJ, NUMDERIV = F, VERBOSE = FALSE){ if(OBJ$metho
                        NVAR        = OBJ$dims$nvar,
                        FREQ        = OBJ$data$freq,
                        DATA        = OBJ$data$Y,
+                       UFREQ       = OBJ$data$ufreq,
+                       UW          = OBJ$data$uweights,
                        METHOD      = OBJ$method,
                        NUMDERIV    = NUMDERIV,
                        NCORES      = OBJ$cores,
@@ -237,7 +242,7 @@ computeVar.PlFaFit <- function(OBJ, NUMDERIV = F, VERBOSE = FALSE){ if(OBJ$metho
 compute_var <- function(THETA, C_VEC, N, IT = NULL, PAIRS = NULL, PPI = NULL,
                         CONSTRMAT, CONSTRLOGSD, LLC, NTHR, NLOAD, NCORR, NVAR,
                         FREQ, DATA, METHOD, NUMDERIV = F, NCORES=1,
-                        VERBOSE = FALSE){
+                        VERBOSE = FALSE, UFREQ = numeric(0), UW = numeric(0)){
 
   start_time <- Sys.time()
 
@@ -277,7 +282,9 @@ compute_var <- function(THETA, C_VEC, N, IT = NULL, PAIRS = NULL, PPI = NULL,
     NTHR = NTHR,
     NLOAD = NLOAD,
     NCORR= NCORR,
-    NVAR = NVAR
+    NVAR = NVAR,
+    UFREQ = UFREQ,
+    UW = UW
   )
   Jhat <- HJ$J
 
@@ -307,7 +314,8 @@ compute_var <- function(THETA, C_VEC, N, IT = NULL, PAIRS = NULL, PPI = NULL,
         NCORR      = NCORR,
         NVAR       = NVAR,
         GRFLAG     = 1,
-        SILENTFLAG = 1
+        SILENTFLAG = 1,
+        UFREQ      = UFREQ
       )
       mod$iter_ngradient/N
     }

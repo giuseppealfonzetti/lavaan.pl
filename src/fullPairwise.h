@@ -18,7 +18,8 @@ namespace fullPairwise{
       const int NCORR,
       const int NVAR,
       const int GRFLAG,
-      const int SILENTFLAG
+      const int SILENTFLAG,
+      const Eigen::Ref<const Eigen::VectorXd> UFREQ
   );
 
 
@@ -37,7 +38,9 @@ namespace fullPairwise{
       const int NTHR,
       const int NLOAD,
       const int NCORR,
-      const int NVAR
+      const int NVAR,
+      const Eigen::Ref<const Eigen::VectorXd> UFREQ,
+      const Eigen::Ref<const Eigen::VectorXd> UW
   );
 
   Rcpp::List multiThreadSaturated(
@@ -47,7 +50,9 @@ namespace fullPairwise{
       const Eigen::Ref<const Eigen::MatrixXd> DATA,
       const Eigen::Ref<const Eigen::VectorXd> C_VEC,
       const int ORDER,
-      const bool SCORES
+      const bool SCORES,
+      const Eigen::Ref<const Eigen::VectorXd> UFREQ,
+      const Eigen::Ref<const Eigen::VectorXd> UW
   );
 }
 

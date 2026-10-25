@@ -18,7 +18,8 @@ cpp_multiThread_completePairwise(
   NCORR,
   NVAR,
   GRFLAG = 0L,
-  SILENTFLAG = 1L
+  SILENTFLAG = 1L,
+  UFREQ = as.numeric(c())
 )
 }
 \arguments{
@@ -49,6 +50,8 @@ cpp_multiThread_completePairwise(
 \item{GRFLAG}{0 to only compute the likelihood. 1 to also compute the gradient.}
 
 \item{SILENTFLAG}{optional for verbose output}
+
+\item{UFREQ}{Univariate frequencies of the available-cases term. Empty for none.}
 }
 \description{
 Evaluate negative log pairwise likelihood or gradient of the complete pool of pairs.

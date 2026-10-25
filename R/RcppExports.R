@@ -41,12 +41,12 @@ cpp_sa_proj <- function(THETA, CONSTRMAT, CONSTRLOGSD, LLC, C_VEC, CORRFLAG, NTH
     .Call(`_lavaan_pl_cpp_sa_proj`, THETA, CONSTRMAT, CONSTRLOGSD, LLC, C_VEC, CORRFLAG, NTHR, NLOAD, NCORR, NVAR)
 }
 
-cpp_sample_estimators_HJ <- function(THETA, FREQ, DATA, C_VEC, CONSTRMAT, CONSTRLOGSD, LLC, N, CORRFLAG, NTHR, NLOAD, NCORR, NVAR) {
-    .Call(`_lavaan_pl_cpp_sample_estimators_HJ`, THETA, FREQ, DATA, C_VEC, CONSTRMAT, CONSTRLOGSD, LLC, N, CORRFLAG, NTHR, NLOAD, NCORR, NVAR)
+cpp_sample_estimators_HJ <- function(THETA, FREQ, DATA, C_VEC, CONSTRMAT, CONSTRLOGSD, LLC, N, CORRFLAG, NTHR, NLOAD, NCORR, NVAR, UFREQ = as.numeric( c()), UW = as.numeric( c())) {
+    .Call(`_lavaan_pl_cpp_sample_estimators_HJ`, THETA, FREQ, DATA, C_VEC, CONSTRMAT, CONSTRLOGSD, LLC, N, CORRFLAG, NTHR, NLOAD, NCORR, NVAR, UFREQ, UW)
 }
 
-cpp_saturated <- function(TAU, RHO, FREQ, DATA, C_VEC, ORDER, SCORES) {
-    .Call(`_lavaan_pl_cpp_saturated`, TAU, RHO, FREQ, DATA, C_VEC, ORDER, SCORES)
+cpp_saturated <- function(TAU, RHO, FREQ, DATA, C_VEC, ORDER, SCORES, UFREQ = as.numeric( c()), UW = as.numeric( c())) {
+    .Call(`_lavaan_pl_cpp_saturated`, TAU, RHO, FREQ, DATA, C_VEC, ORDER, SCORES, UFREQ, UW)
 }
 
 cpp_saturated_traces <- function(HTT, HTR, D, ST, SR, W, N) {
@@ -92,12 +92,13 @@ pairs_freq <- function(Y, C_VEC) {
 #' @param NVAR Number of free latent variance parameters.
 #' @param GRFLAG 0 to only compute the likelihood. 1 to also compute the gradient.
 #' @param SILENTFLAG optional for verbose output
+#' @param UFREQ Univariate frequencies of the available-cases term. Empty for none.
 #'
-cpp_multiThread_completePairwise <- function(N, C_VEC, CONSTRMAT, CONSTRLOGSD, LLC, THETA, FREQ, CORRFLAG, NTHR, NLOAD, NCORR, NVAR, GRFLAG = 0L, SILENTFLAG = 1L) {
-    .Call(`_lavaan_pl_cpp_multiThread_completePairwise`, N, C_VEC, CONSTRMAT, CONSTRLOGSD, LLC, THETA, FREQ, CORRFLAG, NTHR, NLOAD, NCORR, NVAR, GRFLAG, SILENTFLAG)
+cpp_multiThread_completePairwise <- function(N, C_VEC, CONSTRMAT, CONSTRLOGSD, LLC, THETA, FREQ, CORRFLAG, NTHR, NLOAD, NCORR, NVAR, GRFLAG = 0L, SILENTFLAG = 1L, UFREQ = as.numeric( c())) {
+    .Call(`_lavaan_pl_cpp_multiThread_completePairwise`, N, C_VEC, CONSTRMAT, CONSTRLOGSD, LLC, THETA, FREQ, CORRFLAG, NTHR, NLOAD, NCORR, NVAR, GRFLAG, SILENTFLAG, UFREQ)
 }
 
-cpp_plSA2 <- function(FREQ, VALFREQ, N, C_VEC, CONSTRMAT, CONSTRLOGSD, LLC, THETA_INIT, NTHR, NLOAD, NCORR, NVAR, PAIRS_PER_ITERATION, STEP0, STEP1, STEP2, STEP3, BURNE, MAXE, EPOCHS_PER_CHECK, MAX_TOL_COUNTER, TOL_BURN, TOL_END, CHECK_TOL, SEED, VERBOSE, VERBOSE_ITER = FALSE) {
-    .Call(`_lavaan_pl_cpp_plSA2`, FREQ, VALFREQ, N, C_VEC, CONSTRMAT, CONSTRLOGSD, LLC, THETA_INIT, NTHR, NLOAD, NCORR, NVAR, PAIRS_PER_ITERATION, STEP0, STEP1, STEP2, STEP3, BURNE, MAXE, EPOCHS_PER_CHECK, MAX_TOL_COUNTER, TOL_BURN, TOL_END, CHECK_TOL, SEED, VERBOSE, VERBOSE_ITER)
+cpp_plSA2 <- function(FREQ, VALFREQ, N, C_VEC, CONSTRMAT, CONSTRLOGSD, LLC, THETA_INIT, NTHR, NLOAD, NCORR, NVAR, PAIRS_PER_ITERATION, STEP0, STEP1, STEP2, STEP3, BURNE, MAXE, EPOCHS_PER_CHECK, MAX_TOL_COUNTER, TOL_BURN, TOL_END, CHECK_TOL, SEED, VERBOSE, VERBOSE_ITER = FALSE, UFREQ = as.numeric( c()), VALUFREQ = as.numeric( c())) {
+    .Call(`_lavaan_pl_cpp_plSA2`, FREQ, VALFREQ, N, C_VEC, CONSTRMAT, CONSTRLOGSD, LLC, THETA_INIT, NTHR, NLOAD, NCORR, NVAR, PAIRS_PER_ITERATION, STEP0, STEP1, STEP2, STEP3, BURNE, MAXE, EPOCHS_PER_CHECK, MAX_TOL_COUNTER, TOL_BURN, TOL_END, CHECK_TOL, SEED, VERBOSE, VERBOSE_ITER, UFREQ, VALUFREQ)
 }
 

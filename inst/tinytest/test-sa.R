@@ -47,3 +47,15 @@ expect_true(all(diag(lavaan::vcov(fit)) >= diag(lavaan::vcov(plain))))
 expect_true(any(diag(lavaan::vcov(fit)) > diag(lavaan::vcov(plain))))
 expect_equal(attr(fit@vcov$vcov, "E.inv"), attr(plain@vcov$vcov, "E.inv"))
 expect_true(lavaan::lavInspect(as_lavaan(fb, NULL, template), "converged"))
+
+# SA with available cases lands close to the PML fit with available cases
+Ym <- Y
+set.seed(6)
+for (h in 1:q) {
+  idx <- which(is.na(cm[, h]))
+  for (j in idx[-1]) Ym[runif(n) < c(.1, .25, .25, .5)[Y[, idx[1]] + 1], j] <- NA
+}
+Dm <- set_plfa_data(unname(Ym), MISSING = "available.cases")
+pml_m <- fit_plFA(Dm, M)
+sa_m <- fit_plFA(Dm, M, CONTROL = set_sa_control())
+expect_true(max(abs(getPar(sa_m, OPTION = "transformed") - getPar(pml_m, OPTION = "transformed"))) < 0.02)

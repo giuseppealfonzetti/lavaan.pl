@@ -149,7 +149,9 @@ Rcpp::List cpp_sample_estimators_HJ(
     const int NTHR,
     const int NLOAD,
     const int NCORR,
-    const int NVAR
+    const int NVAR,
+    Rcpp::NumericVector UFREQ,
+    Rcpp::NumericVector UW
 ){
   // Rcpp::Rcout << "ef|theta:\n";
   // Rcpp::Rcout << THETA.transpose()<<"\n";
@@ -166,7 +168,9 @@ Rcpp::List cpp_sample_estimators_HJ(
     NTHR,
     NLOAD,
     NCORR,
-    NVAR
+    NVAR,
+    Eigen::Map<Eigen::VectorXd>(UFREQ.begin(), UFREQ.size()),
+    Eigen::Map<Eigen::VectorXd>(UW.begin(), UW.size())
   );
 
   return output;
@@ -181,9 +185,13 @@ Rcpp::List cpp_saturated(
     Eigen::Map<Eigen::MatrixXd> DATA,
     Eigen::Map<Eigen::VectorXd> C_VEC,
     const int ORDER,
-    const bool SCORES
+    const bool SCORES,
+    Rcpp::NumericVector UFREQ,
+    Rcpp::NumericVector UW
 ){
-  return fullPairwise::multiThreadSaturated(TAU, RHO, FREQ, DATA, C_VEC, ORDER, SCORES);
+  return fullPairwise::multiThreadSaturated(TAU, RHO, FREQ, DATA, C_VEC, ORDER, SCORES,
+                                            Eigen::Map<Eigen::VectorXd>(UFREQ.begin(), UFREQ.size()),
+                                            Eigen::Map<Eigen::VectorXd>(UW.begin(), UW.size()));
 }
 
 Eigen::VectorXd cpp_saturated_traces(

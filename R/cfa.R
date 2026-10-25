@@ -11,6 +11,7 @@
 #'   \item{\code{information}}{The information matrix to use. Only `"observed"` is currently supported.}
 #'   \item{\code{se}}{The standard error method to use. Only `"robust.huber.white"` is currently supported.}
 #'   \item{\code{test}}{Default `"none"`. `"standard"` and `"mean.var.adjusted"` are computed by [computePLRT()].}
+#'   \item{\code{missing}}{Default `"listwise"`. `"pairwise"` and `"available.cases"` use the complete pairs and the available cases of Katsikatsou et al. (2022).}
 #' }
 #'
 #' @param model A description of the user-specified model. Typically, the model
@@ -54,6 +55,11 @@
 #' Pairwise likelihood estimation for factor analysis models with ordinal data.
 #' *Computational Statistics & Data Analysis*, *56*(12), 4243--4258.
 #' <https://doi.org/10.1016/j.csda.2012.04.010>
+#'
+#' Katsikatsou, M., Moustaki, I., & Jamil, H. (2022). Pairwise likelihood
+#' estimation for confirmatory factor analysis models with categorical variables
+#' and data that are missing at random. *British Journal of Mathematical and
+#' Statistical Psychology*, *75*(1), 23--45. <https://doi.org/10.1111/bmsp.12243>
 #'
 #' Alfonzetti, G., Bellio, R., Chen, Y., & Moustaki, I. (2025). Pairwise
 #' stochastic approximation for confirmatory factor analysis of categorical
@@ -207,11 +213,12 @@ spec_from_lavaan <- function(template, start = NULL, valdata = NULL) {
   }
 
   data <- template@Data@X[[1]] - 1
-  if (anyNA(data)) {
-    stop("Missing data are not currently supported.", call. = FALSE)
+  missing <- template@Options$missing
+  if (!missing %in% c("listwise", "pairwise", "available.cases")) {
+    stop("missing = \"", missing, "\" is not currently supported; use \"listwise\", \"pairwise\" or \"available.cases\".", call. = FALSE)
   }
   nlev <- template@Data@ov$nlev[match(template@Data@ov.names[[1]], template@Data@ov$name)]
-  if (any(apply(data, 2, max) + 1 != nlev)) {
+  if (any(apply(data, 2, max, na.rm = TRUE) + 1 != nlev)) {
     stop("Every category of every item must be observed at least once.", call. = FALSE)
   }
 
@@ -294,7 +301,7 @@ spec_from_lavaan <- function(template, start = NULL, valdata = NULL) {
     cpp_latvar_mat2vec(start_glist$psi, log(sqrt(constrvar)), if (corrflag) q * (q - 1) / 2 else 0, sum(is.na(constrvar)))
   )
 
-  list(DATA = set_plfa_data(data, valdata), MODEL = model, THETA = init)
+  list(DATA = set_plfa_data(data, valdata, MISSING = missing), MODEL = model, THETA = init)
 }
 
 #' Convert a lavaan.pl fit into a lavaan object

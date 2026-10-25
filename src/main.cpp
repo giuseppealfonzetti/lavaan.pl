@@ -36,6 +36,7 @@
 //' @param NVAR Number of free latent variance parameters.
 //' @param GRFLAG 0 to only compute the likelihood. 1 to also compute the gradient.
 //' @param SILENTFLAG optional for verbose output
+//' @param UFREQ Univariate frequencies of the available-cases term. Empty for none.
 //'
 // [[Rcpp::export]]
 Rcpp::List cpp_multiThread_completePairwise(
@@ -52,9 +53,10 @@ Rcpp::List cpp_multiThread_completePairwise(
     const int NCORR,
     const int NVAR,
     const int GRFLAG = 0,
-    const int SILENTFLAG = 1
+    const int SILENTFLAG = 1,
+    Rcpp::NumericVector UFREQ = Rcpp::NumericVector::create()
 ){
-
+  const Eigen::Map<Eigen::VectorXd> ufreq(UFREQ.begin(), UFREQ.size());
 
 
   // output list
@@ -72,7 +74,8 @@ Rcpp::List cpp_multiThread_completePairwise(
     NCORR,
     NVAR,
     GRFLAG,
-    SILENTFLAG
+    SILENTFLAG,
+    ufreq
   );
 
   return(output);
@@ -107,8 +110,13 @@ Rcpp::List cpp_plSA2(
     const int CHECK_TOL,
     const int SEED,
     const bool VERBOSE,
-    bool VERBOSE_ITER=false
+    bool VERBOSE_ITER=false,
+    Rcpp::NumericVector UFREQ = Rcpp::NumericVector::create(),
+    Rcpp::NumericVector VALUFREQ = Rcpp::NumericVector::create()
 ){
+  const Eigen::Map<Eigen::VectorXd> ufreq(UFREQ.begin(), UFREQ.size());
+  const Eigen::Map<Eigen::VectorXd> valufreq(VALUFREQ.begin(), VALUFREQ.size());
+  Eigen::MatrixXd hdummy, udummy;
 
   if(!VERBOSE) VERBOSE_ITER=false;
 
@@ -178,7 +186,8 @@ Rcpp::List cpp_plSA2(
     NCORR,
     NVAR,
     0,
-    1
+    1,
+    valufreq
   )["iter_nll"];
   nll/=N;
   if(VERBOSE) Rcpp::Rcout << "Initial full npll: "<< nll << " | iterations per epoch:"<<maxtpe << "\n";
@@ -262,6 +271,12 @@ Rcpp::List cpp_plSA2(
 
       iter_gradient = -iteration_subset.subset_gradient;
       iter_gradient *= scale;
+      if(ufreq.size() > 0){
+        double ull = 0;
+        Eigen::VectorXd ugrad = Eigen::VectorXd::Zero(d);
+        pairs::univariate_contribution(theta.head(NTHR), C_VEC, ufreq, 1, ull, ugrad, hdummy, udummy);
+        iter_gradient -= scale * prob * ugrad;
+      }
 
 
       //////////////////////////
@@ -347,6 +362,10 @@ Rcpp::List cpp_plSA2(
                                                     1, 0, theta, full_pool);
       RcppParallel::parallelReduce(0, pairs, fullpool_worker);
       nll = -fullpool_worker.subset_ll/n;
+      double ull = 0;
+      Eigen::VectorXd ugrad;
+      pairs::univariate_contribution(theta.head(NTHR), C_VEC, valufreq, 0, ull, ugrad, hdummy, udummy);
+      nll -= ull/n;
     }
 
 

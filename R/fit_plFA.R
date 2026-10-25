@@ -72,7 +72,7 @@ fit_plFA <- function(
   RcppParallel::setThreadOptions(numThreads = NCORES)
 
   # Check Initialisation
-  tmp$init <- check_init(INIT$THETA, DATA$freq, dims, MODEL, INIT_METHOD, VERBOSE, INIT_CONTROL = INIT$CONTROL)
+  tmp$init <- check_init(INIT$THETA, DATA$freq, dims, MODEL, INIT_METHOD, VERBOSE, INIT_CONTROL = INIT$CONTROL, UFREQ = DATA$ufreq)
 
   # Numerical optimisation
   if(METHOD == 'ucminf'){
@@ -96,7 +96,8 @@ fit_plFA <- function(
         NLOAD      = dims$nload,
         NCORR      = dims$ncorr,
         NVAR       = dims$nvar,
-        SILENTFLAG = 1
+        SILENTFLAG = 1,
+        UFREQ      = DATA$ufreq
       )
       out <- mod$iter_nll/dims$n
       return(out)
@@ -118,7 +119,8 @@ fit_plFA <- function(
         NCORR      = dims$ncorr,
         NVAR       = dims$nvar,
         GRFLAG     = 1,
-        SILENTFLAG = 1
+        SILENTFLAG = 1,
+        UFREQ      = DATA$ufreq
       )
 
       out <- mod$iter_ngradient/dims$n
@@ -170,7 +172,8 @@ fit_plFA <- function(
                        NLOAD       = dims$nload,
                        NCORR       = dims$ncorr,
                        NVAR        = dims$nvar
-    ), unclass(CONTROL), VERBOSE = VERBOSE)
+    ), unclass(CONTROL), VERBOSE = VERBOSE, UFREQ = list(DATA$ufreq),
+    VALUFREQ = list(if(is.null(DATA$valfreq)) DATA$ufreq else numeric(0)))
 
     opt <- do.call(cpp_plSA2, sa_args)
     end_time <- Sys.time()

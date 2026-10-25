@@ -80,6 +80,44 @@ local({
   }
 })
 
+# Missing data (Katsikatsou et al., 2022, model 5 with MAR missingness) match lavaan PML
+local({
+  cm <- build_constrMat(12, 2, "simple")
+  L <- cm; L[is.na(L)] <- c(.4, .5, .6, .7, .8, .9, .4, .5, .6, .7, .8, .9)
+  Yc <- sim_data(1000, L, c(-1.5, .5, 1.5), matrix(c(1, .6, .6, 1), 2), SEED = 4)
+  Y <- Yl <- Yc
+  set.seed(5)
+  pm <- c(.119, .269, .269, .731)
+  for (j in 2:6) Y[runif(1000) < pm[Yc[, 1] + 1], j] <- NA
+  for (j in 8:12) Y[runif(1000) < pm[Yc[, 7] + 1], j] <- NA
+  Yl[, c(2, 8)] <- Y[, c(2, 8)]
+  colnames(Y) <- colnames(Yl) <- paste0("y", 1:12)
+  mod <- "f1 =~ y1 + y2 + y3 + y4 + y5 + y6\nf2 =~ y7 + y8 + y9 + y10 + y11 + y12"
+  fm <- c("chisq", "chisq.scaled", "df.scaled", "pvalue.scaled", "baseline.chisq.scaled", "cfi.scaled", "tli.scaled")
+  for (mi in c("listwise", "pairwise", "available.cases")) {
+    dat <- as.data.frame(lapply(as.data.frame(if (mi == "listwise") Yl else Y), ordered))
+    ours <- suppressWarnings(cfa(mod, dat, std.lv = TRUE, missing = mi, test = "mean.var.adjusted"))
+    ref <- lavaan::cfa(mod, dat, std.lv = TRUE, estimator = "PML", missing = mi, test = "mean.var.adjusted")
+    pe <- parameterEstimates(ours)
+    pr <- parameterEstimates(ref)
+    expect_equal(lavaan::lavInspect(ours, "nobs"), lavaan::lavInspect(ref, "nobs"))
+    expect_equal(pe$est, pr$est, tolerance = 1e-4)
+    expect_equal(pe$se, pr$se, tolerance = 1e-3)
+    expect_equal(ours@optim$logl, ref@optim$logl, tolerance = 1e-6)
+    expect_equal(fitMeasures(ours, fm), fitMeasures(ref, fm), tolerance = 1e-3)
+    if (mi == "listwise") next
+    f0 <- suppressWarnings(cfa(mod, dat, std.lv = TRUE, orthogonal = TRUE, missing = mi, test = "mean.var.adjusted"))
+    m10 <- lavaan:::lav_test_diff_m10(m1 = ours, m0 = f0, test = FALSE)
+    iH <- solve(lavaan::lavTech(m10, "information.observed"))
+    J <- lavaan::lavTech(m10, "first.order")
+    A <- lavaan:::lav_test_diff_a(m1 = ours, m0 = f0, method = "exact")
+    M <- (A %*% iH %*% J %*% iH %*% t(A)) %*% solve(A %*% iH %*% t(A))
+    expect_equal(lavTestLRT(ours, f0)[2, "Chisq diff"],
+                 sum(diag(M)) / sum(diag(M %*% M)) * 2 * (ours@optim$logl - f0@optim$logl), tolerance = 1e-4)
+  }
+  expect_error(cfa(mod, as.data.frame(lapply(as.data.frame(Y), ordered)), std.lv = TRUE, missing = "doubly.robust"))
+})
+
 # unsupported models are rejected
 local({
   expect_error(cfa("A =~ A1 + A2 + A3\nC =~ C1 + C2 + C3\nA ~~ 0.3*C", bfi, std.lv = TRUE), "covariances")

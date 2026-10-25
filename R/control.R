@@ -188,7 +188,7 @@ check_init_par <- function(PAR, DIMS, CONSTR_LIST){
 
   return(PAR)
 }
-check_init <- function(INIT, FREQ, DIMS, CONSTR_LIST, INIT_METHOD=c("SA", "custom", "standard"), VERBOSE=FALSE, INIT_CONTROL=set_sa_init_control()){
+check_init <- function(INIT, FREQ, DIMS, CONSTR_LIST, INIT_METHOD=c("SA", "custom", "standard"), VERBOSE=FALSE, INIT_CONTROL=set_sa_init_control(), UFREQ=numeric(0)){
 
   INIT_METHOD <- check_init_method(DIMS=DIMS, INIT_METHOD = INIT_METHOD, INIT = INIT)
 
@@ -216,7 +216,7 @@ check_init <- function(INIT, FREQ, DIMS, CONSTR_LIST, INIT_METHOD=c("SA", "custo
 
   if(INIT_METHOD=="SA"){
     if(VERBOSE) message('- Initialising with SA ...', appendLF = FALSE)
-    INIT <- init_par_with_plSA(DIMS, CONSTR_LIST, FREQ, INIT_CONTROL, INIT)
+    INIT <- init_par_with_plSA(DIMS, CONSTR_LIST, FREQ, INIT_CONTROL, INIT, UFREQ)
     if(VERBOSE) message(' Done.')
   }
 
@@ -239,19 +239,34 @@ check_init_method <- function(DIMS, INIT_METHOD = c("SA", "custom", "standard"),
 #'@param VALDATA Validation data used to monitor convergence of stochastic
 #'  approximations. If `NULL`, data passed via `DATA` is used for monitoring
 #'  purposes.
+#'@param MISSING Treatment of missing values (`NA`): `"listwise"` drops incomplete observations,
+#'  `"pairwise"` uses the complete pairs and `"available.cases"` the available cases of
+#'  Katsikatsou et al. (2022).
 #'
 #' @return An object of class `plfa_data` with the data matrix `Y`, its dimensions `n` and `p`,
 #'   the number of categories of each item `cat`, the pairwise frequency tables `freq` and
-#'   `valfreq`, and the time spent computing them `freqTime`.
+#'   `valfreq`, the treatment of missing values `missing`, the unit weights `uweights` and
+#'   univariate frequencies `ufreq` of the available-cases term, and the time spent computing
+#'   them `freqTime`.
 #'
 #' @export
-set_plfa_data <- function(DATA, VALDATA = NULL) {
+set_plfa_data <- function(DATA, VALDATA = NULL, MISSING = c("listwise", "pairwise", "available.cases")) {
+  MISSING <- match.arg(MISSING)
   Y <- check_data(DATA)
-  if (anyNA(Y)) stop("Missing data are not currently supported.")
-  cat <- apply(Y, 2, max) + 1
+  if (MISSING == "listwise" && anyNA(Y)) {
+    keep <- stats::complete.cases(Y)
+    message(sum(!keep), " incomplete observations removed (MISSING = \"listwise\").")
+    Y <- Y[keep, , drop = FALSE]
+  }
+  stopifnot(nrow(Y) > 0, colSums(!is.na(Y)) > 0)
+  cat <- apply(Y, 2, max, na.rm = TRUE) + 1
   stopifnot(cat > 1)
   freq_start_time <- Sys.time()
   freq <- pairs_freq(Y, cat)
+  uweights <- if (MISSING == "available.cases") rowSums(is.na(Y)) else rep(0, nrow(Y))
+  ufreq <- unlist(lapply(seq_len(ncol(Y)), function(j) {
+    vapply(seq_len(cat[j]) - 1, function(a) sum(uweights[Y[, j] %in% a]), numeric(1))
+  }))
   valfreq <- NULL
   if (!is.null(VALDATA)) {
     stopifnot(
@@ -271,6 +286,9 @@ set_plfa_data <- function(DATA, VALDATA = NULL) {
     cat = cat,
     freq = freq,
     valfreq = valfreq,
+    missing = MISSING,
+    uweights = uweights,
+    ufreq = ufreq,
     freqTime = as.numeric(difftime(Sys.time(), freq_start_time, units = "secs"))
   )
   class(out) <- "plfa_data"

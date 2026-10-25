@@ -130,9 +130,11 @@ void parallelWorkers::casewiseOuterProd::operator()(std::size_t BEGIN, std::size
 
 
 
+      if(std::isnan(data(i, k))) continue;
       const int sk = data(i, k);
 
       for(int l = 0; l < k; l++){
+        if(std::isnan(data(i, l))) continue;
         const int cl = c_vec(l);
 
         // i2 starting index from i1 dor item l
@@ -157,6 +159,12 @@ void parallelWorkers::casewiseOuterProd::operator()(std::size_t BEGIN, std::size
 
 
 
+      }
+    }
+
+    if(uw.size() > 0 && uw(i) > 0){
+      for(int k = 0, uk = 0; k < p; uk += c_vec(k), k++){
+        if(!std::isnan(data(i, k))) gradienti.head(uscore.rows()) += uw(i) * uscore.col(uk + data(i, k));
       }
     }
 
@@ -244,10 +252,16 @@ void parallelWorkers::saturatedScores::operator()(std::size_t BEGIN, std::size_t
   for(std::size_t i = BEGIN; i < END; i++){
     for(std::size_t r = 0; r < prs.size(); r++){
       const pairs::Pair &PR = prs[r];
+      if(std::isnan(data(i, PR.k)) || std::isnan(data(i, PR.l))) continue;
       const int col = PR.offset + data(i, PR.k) * PR.cl + data(i, PR.l);
       for(int a = 0; a < PR.ck - 1; a++) st(PR.tk + a, i) += patscore(a, col);
       for(int b = 0; b < PR.cl - 1; b++) st(PR.tl + b, i) += patscore(PR.ck - 1 + b, col);
       sr(r, i) = patscore(PR.mt, col);
+    }
+    if(uw.size() > 0 && uw(i) > 0){
+      for(int k = 0, uk = 0; k < p; uk += c_vec(k), k++){
+        if(!std::isnan(data(i, k))) st.col(i) += uw(i) * uscore.col(uk + data(i, k));
+      }
     }
   }
 }

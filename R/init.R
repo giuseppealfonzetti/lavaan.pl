@@ -30,7 +30,7 @@ init_transformed_latsd <- function(DIMS, CONSTR_LIST){
   rep(0, sum(is.na(CONSTR_LIST$CONSTRLOGSD)))
 }
 
-init_par_with_plSA <- function(DIMS, CONSTR_LIST, FREQ, INIT_CONTROL, INIT){
+init_par_with_plSA <- function(DIMS, CONSTR_LIST, FREQ, INIT_CONTROL, INIT, UFREQ = numeric(0)){
 
   start_par <- INIT
   if(is.null(INIT_CONTROL$STEP0)) INIT_CONTROL$STEP0 <- sqrt(1/DIMS$d)
@@ -47,7 +47,7 @@ init_par_with_plSA <- function(DIMS, CONSTR_LIST, FREQ, INIT_CONTROL, INIT){
                      NLOAD       = DIMS$nload,
                      NCORR       = DIMS$ncorr,
                      NVAR        = DIMS$nvar
-  ), unclass(INIT_CONTROL), VERBOSE = FALSE)
+  ), unclass(INIT_CONTROL), VERBOSE = FALSE, UFREQ = list(UFREQ), VALUFREQ = list(UFREQ))
 
   sto_init <- do.call(cpp_plSA2, cpp_args)
 

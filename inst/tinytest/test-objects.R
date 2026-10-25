@@ -13,7 +13,9 @@ local({
 
   Yna <- Y
   Yna[1, 1] <- NA
-  expect_error(set_plfa_data(Yna), "Missing data")
+  expect_message(d_na <- set_plfa_data(Yna), "1 incomplete observations removed")
+  expect_equal(d_na$n, nrow(Y) - 1)
+  expect_error(set_plfa_data(Yna, MISSING = "complete"))
   expect_error(set_plfa_data(Y, VALDATA = Y[, 1:5]))
   expect_error(set_plfa_data(Y, VALDATA = Y + 1))
 })

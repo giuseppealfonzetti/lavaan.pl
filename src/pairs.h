@@ -56,6 +56,19 @@ namespace pairs{
 
   Eigen::MatrixXd rho_hessian(const Setup &S, const Pair &PR);
 
+  // Univariate log-likelihood of the observed items, with
+  // frequencies UFREQ weighted by the number of missing items
+  // of each unit (available-cases term)
+  void univariate_contribution(
+      const Eigen::Ref<const Eigen::VectorXd> TAU,
+      const Eigen::Ref<const Eigen::VectorXd> C_VEC,
+      const Eigen::Ref<const Eigen::VectorXd> UFREQ,
+      const int ORDER,
+      double &LL,
+      Eigen::VectorXd &GRADIENT,
+      Eigen::MatrixXd &HESSIAN,
+      Eigen::MatrixXd &USCORE);
+
   // Single pair contribution to
   // 1. Log-likelihood
   // 2. Gradient

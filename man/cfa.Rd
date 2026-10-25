@@ -75,6 +75,7 @@ interest are:
 \item{\code{information}}{The information matrix to use. Only \code{"observed"} is currently supported.}
 \item{\code{se}}{The standard error method to use. Only \code{"robust.huber.white"} is currently supported.}
 \item{\code{test}}{Default \code{"none"}. \code{"standard"} and \code{"mean.var.adjusted"} are computed by \code{\link[=computePLRT]{computePLRT()}}.}
+\item{\code{missing}}{Default \code{"listwise"}. \code{"pairwise"} and \code{"available.cases"} use the complete pairs and the available cases of Katsikatsou et al. (2022).}
 }
 }
 \examples{
@@ -89,6 +90,11 @@ Katsikatsou, M., Moustaki, I., Yang-Wallentin, F., & Jöreskog, K. G. (2012).
 Pairwise likelihood estimation for factor analysis models with ordinal data.
 \emph{Computational Statistics & Data Analysis}, \emph{56}(12), 4243--4258.
 \url{https://doi.org/10.1016/j.csda.2012.04.010}
+
+Katsikatsou, M., Moustaki, I., & Jamil, H. (2022). Pairwise likelihood
+estimation for confirmatory factor analysis models with categorical variables
+and data that are missing at random. \emph{British Journal of Mathematical and
+Statistical Psychology}, \emph{75}(1), 23--45. \url{https://doi.org/10.1111/bmsp.12243}
 
 Alfonzetti, G., Bellio, R., Chen, Y., & Moustaki, I. (2025). Pairwise
 stochastic approximation for confirmatory factor analysis of categorical

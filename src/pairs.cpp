@@ -229,6 +229,46 @@ Eigen::MatrixXd pairs::rho_hessian(const Setup &S, const Pair &PR){
   return hrho;
 }
 
+void pairs::univariate_contribution(
+    const Eigen::Ref<const Eigen::VectorXd> TAU,
+    const Eigen::Ref<const Eigen::VectorXd> C_VEC,
+    const Eigen::Ref<const Eigen::VectorXd> UFREQ,
+    const int ORDER,
+    double &LL,
+    Eigen::VectorXd &GRADIENT,
+    Eigen::MatrixXd &HESSIAN,
+    Eigen::MatrixXd &USCORE
+){
+  if(UFREQ.size() == 0) return;
+  for(int k = 0, uk = 0; k < C_VEC.size(); uk += C_VEC(k), k++){
+    const int ck = C_VEC(k), tk = uk - k;
+    for(int a = 0; a < ck; a++){
+      const double nc = UFREQ(uk + a);
+      const bool up = a < ck - 1, dw = a > 0;
+      const double hi = up ? TAU(tk + a) : 0, lo = dw ? TAU(tk + a - 1) : 0;
+      const double pe = (up ? R::pnorm(hi, 0, 1, 1, 0) : 1) - (dw ? R::pnorm(lo, 0, 1, 1, 0) : 0) + 1e-8;
+      LL += nc * log(pe);
+      if(ORDER == 0) continue;
+
+      const double ghi = up ? R::dnorm(hi, 0, 1, 0) : 0, glo = dw ? -R::dnorm(lo, 0, 1, 0) : 0;
+      if(up) GRADIENT(tk + a) += nc * ghi / pe;
+      if(dw) GRADIENT(tk + a - 1) += nc * glo / pe;
+      if(USCORE.size() > 0){
+        if(up) USCORE(tk + a, uk + a) = ghi / pe;
+        if(dw) USCORE(tk + a - 1, uk + a) = glo / pe;
+      }
+      if(ORDER == 2){
+        if(up) HESSIAN(tk + a, tk + a) += nc * (ghi * ghi / (pe * pe) + hi * ghi / pe);
+        if(dw) HESSIAN(tk + a - 1, tk + a - 1) += nc * (glo * glo / (pe * pe) + lo * glo / pe);
+        if(up && dw){
+          HESSIAN(tk + a, tk + a - 1) += nc * ghi * glo / (pe * pe);
+          HESSIAN(tk + a - 1, tk + a) += nc * ghi * glo / (pe * pe);
+        }
+      }
+    }
+  }
+}
+
 // Single pair contribution to
 // 1. Log-likelihood
 // 2. Gradient

@@ -7,7 +7,11 @@
 \usage{
 \method{print}{plfa_data}(x, ...)
 
-set_plfa_data(DATA, VALDATA = NULL)
+set_plfa_data(
+  DATA,
+  VALDATA = NULL,
+  MISSING = c("listwise", "pairwise", "available.cases")
+)
 }
 \arguments{
 \item{x}{A \code{plfa_data} object.}
@@ -20,11 +24,17 @@ coded starting from zero.}
 \item{VALDATA}{Validation data used to monitor convergence of stochastic
 approximations. If \code{NULL}, data passed via \code{DATA} is used for monitoring
 purposes.}
+
+\item{MISSING}{Treatment of missing values (\code{NA}): \code{"listwise"} drops incomplete observations,
+\code{"pairwise"} uses the complete pairs and \code{"available.cases"} the available cases of
+Katsikatsou et al. (2022).}
 }
 \value{
 An object of class \code{plfa_data} with the data matrix \code{Y}, its dimensions \code{n} and \code{p},
 the number of categories of each item \code{cat}, the pairwise frequency tables \code{freq} and
-\code{valfreq}, and the time spent computing them \code{freqTime}.
+\code{valfreq}, the treatment of missing values \code{missing}, the unit weights \code{uweights} and
+univariate frequencies \code{ufreq} of the available-cases term, and the time spent computing
+them \code{freqTime}.
 }
 \description{
 Print method for \code{plfa_data} objects

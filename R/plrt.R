@@ -7,7 +7,7 @@
 #'   `H1`, of the independence model against the saturated model `baseline`. Each holds the
 #'   statistic `stat`, its degrees of freedom `df`, and the mean and variance adjusted `stat.scaled`
 #'   (`stat` divided by `scaling.factor`), `df.scaled` and `pvalue.scaled`. Also, without `H1`, the
-#'   saturated fit `saturated`, and the timing `RTime`.
+#'   saturated and independence fits `saturated` and `independence`, and the timing `RTime`.
 #' @export
 computePLRT <- function(OBJ, VARS = computeVar(OBJ), H1 = NULL) UseMethod('computePLRT')
 #' Pairwise likelihood ratio test
@@ -19,7 +19,7 @@ computePLRT <- function(OBJ, VARS = computeVar(OBJ), H1 = NULL) UseMethod('compu
 #'   `H1`, of the independence model against the saturated model `baseline`. Each holds the
 #'   statistic `stat`, its degrees of freedom `df`, and the mean and variance adjusted `stat.scaled`
 #'   (`stat` divided by `scaling.factor`), `df.scaled` and `pvalue.scaled`. Also, without `H1`, the
-#'   saturated fit `saturated`, and the timing `RTime`.
+#'   saturated and independence fits `saturated` and `independence`, and the timing `RTime`.
 #' @export
 computePLRT.PlFaFit <- function(OBJ, VARS = computeVar(OBJ), H1 = NULL){
 
@@ -39,12 +39,15 @@ computePLRT.PlFaFit <- function(OBJ, VARS = computeVar(OBJ), H1 = NULL){
   # given by the Jacobian of the embedding of OBJ into H1
   if(!is.null(H1)){
     stopifnot(inherits(H1, "PlFaFit"))
-    if(!identical(OBJ$data$freq, H1$data$freq) || H1$dims$npar <= dims$npar) stop('OBJ is not nested in H1.')
+    if(!identical(OBJ$data$freq, H1$data$freq) || !identical(OBJ$data$ufreq, H1$data$ufreq) || H1$dims$npar <= dims$npar) {
+      stop('OBJ is not nested in H1.')
+    }
     nll <- function(FIT, THETA){
       cpp_multiThread_completePairwise(
         N = n, C_VEC = dims$cat, CONSTRMAT = FIT$model$CONSTRMAT, CONSTRLOGSD = FIT$model$CONSTRLOGSD,
         LLC = FIT$model$LLC, THETA = THETA, FREQ = FIT$data$freq, CORRFLAG = FIT$model$CORRFLAG,
-        NTHR = FIT$dims$nthr, NLOAD = FIT$dims$nload, NCORR = FIT$dims$ncorr, NVAR = FIT$dims$nvar
+        NTHR = FIT$dims$nthr, NLOAD = FIT$dims$nload, NCORR = FIT$dims$ncorr, NVAR = FIT$dims$nvar,
+        UFREQ = FIT$data$ufreq
       )$iter_nll
     }
     emb <- function(theta){
@@ -61,7 +64,7 @@ computePLRT.PlFaFit <- function(OBJ, VARS = computeVar(OBJ), H1 = NULL){
       THETA = theta1, FREQ = H1$data$freq, DATA = H1$data$Y, C_VEC = H1$dims$cat,
       CONSTRMAT = H1$model$CONSTRMAT, CONSTRLOGSD = H1$model$CONSTRLOGSD, LLC = H1$model$LLC, N = n,
       CORRFLAG = H1$model$CORRFLAG, NTHR = H1$dims$nthr, NLOAD = H1$dims$nload, NCORR = H1$dims$ncorr,
-      NVAR = H1$dims$nvar
+      NVAR = H1$dims$nvar, UFREQ = H1$data$ufreq, UW = H1$data$uweights
     )
     M <- HJ$J %*% (solve(HJ$H) - K %*% solve(crossprod(K, HJ$H %*% K), t(K)))
     model <- adjust(STAT = 2 * (nll0 - nll(H1, H1$theta)),
@@ -75,15 +78,20 @@ computePLRT.PlFaFit <- function(OBJ, VARS = computeVar(OBJ), H1 = NULL){
   # Unique response patterns and their counts
   Y <- OBJ$data$Y
   Yu <- unique(Y)
-  w <- as.numeric(tabulate(match(do.call(paste, as.data.frame(Y)), do.call(paste, as.data.frame(Yu)))))
+  key <- match(do.call(paste, as.data.frame(Y)), do.call(paste, as.data.frame(Yu)))
+  w <- as.numeric(tabulate(key))
+  uw <- OBJ$data$uweights[match(seq_len(nrow(Yu)), key)]
 
   sat <- function(tau, rho, order, scores = FALSE){
-    cpp_saturated(tau, rho, OBJ$data$freq, Yu, dims$cat, order, scores)
+    cpp_saturated(tau, rho, OBJ$data$freq, Yu, dims$cat, order, scores, OBJ$data$ufreq, uw)
   }
 
-  # Independence model: thresholds from the univariate margins
+  # Independence model: thresholds from the univariate margins, with unit weights
+  # given by the number of pairs and univariate terms each observed item enters
+  v <- rowSums(!is.na(Y)) - 1 + OBJ$data$uweights
   tau_ind <- unlist(lapply(seq_len(dims$p), function(j){
-    stats::qnorm(cumsum(tabulate(Y[, j] + 1, dims$cat[j]))[-dims$cat[j]] / n)
+    pj <- vapply(seq_len(dims$cat[j]) - 1, function(a) sum(v[Y[, j] %in% a]), numeric(1))
+    stats::qnorm(cumsum(pj)[-dims$cat[j]] / sum(pj))
   }))
 
   # Saturated model: Newton steps through the Schur complement of the diagonal
@@ -155,6 +163,7 @@ computePLRT.PlFaFit <- function(OBJ, VARS = computeVar(OBJ), H1 = NULL){
     model = model,
     baseline = baseline,
     saturated = list(tau = tau, rho = rho, logl = o$ll, iterations = iter),
+    independence = list(tau = tau_ind, logl = tb$ll),
     RTime = as.numeric(difftime(end_time, start_time, units = 'secs')[1])
   )
 }
