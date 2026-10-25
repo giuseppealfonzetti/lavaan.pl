@@ -89,7 +89,6 @@ Rcpp::List cpp_plSA2(
     Eigen::Map<Eigen::VectorXd> CONSTRLOGSD,
     const std::vector<std::vector<std::vector<double>>> LLC,
     Eigen::Map<Eigen::VectorXd> THETA_INIT,
-    Eigen::Map<Eigen::VectorXd> DIH,
     const int NTHR,
     const int NLOAD,
     const int NCORR,
@@ -121,7 +120,7 @@ Rcpp::List cpp_plSA2(
   if(d!=NTHR+NLOAD+NCORR+NVAR) Rcpp::stop("check theta dimensions");
   if(PAIRS_PER_ITERATION>pairs)Rcpp::stop("too many pairs per iterations");
 
-  int burnt;
+  int burnt              = 0;
   int burne              = BURNE;
   const double prob      = static_cast<double>(PAIRS_PER_ITERATION)/static_cast<double>(pairs);
   int tol_counter        = 0;
@@ -172,7 +171,7 @@ Rcpp::List cpp_plSA2(
     CONSTRLOGSD,
     LLC,
     theta,
-    FREQ,
+    VALFREQ,
     corrflag,
     NTHR,
     NLOAD,
@@ -199,7 +198,7 @@ Rcpp::List cpp_plSA2(
   int  convergence_full = 0;
 
 
-  int last_iter;
+  int last_iter = 0;
   double pdiff = 0;
 
 
@@ -281,7 +280,6 @@ Rcpp::List cpp_plSA2(
         iter_gradient.segment(NTHR, NLOAD) *= 5;
         if(NCORR>0) iter_gradient.segment(NTHR+NLOAD, NCORR) *= 100;
         if(NVAR>0)  iter_gradient.segment(NTHR+NLOAD+NCORR, NVAR) *= 5;
-        // iter_gradient =iter_gradient.array()*DIH.array();
 
 
 
@@ -303,7 +301,7 @@ Rcpp::List cpp_plSA2(
       // Post update loadings projection, if needed //
       ///////////////////////////////////////////////
 
-      bool checkevent;
+      bool checkevent = false;
       sa::proj2(CONSTRMAT, CONSTRLOGSD, LLC, C_VEC, corrflag, NTHR, NLOAD, NCORR, NVAR, theta, checkevent);
       if(checkevent) post_index.push_back(t);
       if(checkevent && epoch>burne) proj_after_burn=true;

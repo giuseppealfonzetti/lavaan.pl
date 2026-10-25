@@ -340,16 +340,19 @@ as_lavaan <- function(fit, vars = NULL, template) {
       (fit$numFit$convergence == 4L && fit$numFit$info[["maxgradient"]] < template@Options$optim.dx.tol)
   } else {
     out@optim$iterations <- out@Fit@iterations <- as.integer(fit$stoFit$last_iter)
-    out@optim$converged <- out@Fit@converged <- fit$stoFit$convergence$convergence_full == 1
+    out@optim$converged <- out@Fit@converged <- fit$stoFit$convergence$convergence_full == 1 ||
+      (!fit$control$CHECK_TOL && fit$stoFit$convergence$convergence_full == 0)
   }
 
   # Change vcov slot -----------------------------------------------------------
-  vcov <- NULL
+  vcov_1 <- vcov <- NULL
   if (!is.null(vars)) {
     delta <- numDeriv::jacobian(par_lav, fit$theta)
     hinv <- solve(vars$H)
     vcov <- delta %*% hinv %*% vars$J %*% hinv %*% t(delta) / fit$dims$n
     attr(vcov, "E.inv") <- delta %*% hinv %*% t(delta)
+    vcov_1 <- vcov
+    if (!is.null(vars$noise)) vcov <- vcov + delta %*% vars$noise %*% t(delta)
     out@vcov <- list(se = out@Options$se, information = out@Options$information[1], vcov = vcov)
     out@ParTable$se <- out@Fit@se <- lavaan___lav_model_vcov_se(out@Model, out@ParTable, vcov = vcov)
   }
@@ -371,7 +374,7 @@ as_lavaan <- function(fit, vars = NULL, template) {
       lavh1 = out@h1,
       lavoptions = out@Options,
       x = x,
-      vcov_1 = vcov,
+      vcov_1 = vcov_1,
       lavcache = out@Cache,
       lavdata = out@Data,
       lavloglik = out@loglik

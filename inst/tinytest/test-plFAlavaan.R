@@ -110,7 +110,7 @@ local({
     O =~ O1 + O2 + O3 + O4 + O5
   "
 
-  fit <- cfa(mod, bfi, std.lv = TRUE, control = set_sa_control(), se = "none")
+  fit <- suppressWarnings(cfa(mod, bfi, std.lv = TRUE, control = set_sa_control(), se = "none"))
 
   expect_inherits(fit, "lavaan")
   expect_identical(as.character(class(fit)), "lavaan")

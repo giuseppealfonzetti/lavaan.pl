@@ -42,7 +42,7 @@ fit_plFA <- function(
 
   # Identify model dimensions
   dims <- check_dims(DATA$Y, MODEL)
-  if(METHOD=="SA" && dims$p<20) message("METHOD='SA' not recommended with less than 20 items.")
+  if(METHOD=="SA" && dims$p<40) warning("SA defaults are tuned for models with at least 40 items: check the estimates against set_ucminf_control().", call. = FALSE)
   INIT_METHOD <- check_init_method(dims, INIT$METHOD, INIT$THETA)
 
   tmp <- structure(
@@ -73,8 +73,6 @@ fit_plFA <- function(
 
   # Check Initialisation
   tmp$init <- check_init(INIT$THETA, DATA$freq, dims, MODEL, INIT_METHOD, VERBOSE, INIT_CONTROL = INIT$CONTROL)
-
-  diag_inv_H <- rep(1,length(tmp$init))
 
   # Numerical optimisation
   if(METHOD == 'ucminf'){
@@ -168,7 +166,6 @@ fit_plFA <- function(
                        CONSTRLOGSD = MODEL$CONSTRLOGSD,
                        LLC         = MODEL$LLC,
                        THETA_INIT  = tmp$init,
-                       DIH         = diag_inv_H,
                        NTHR        = dims$nthr,
                        NLOAD       = dims$nload,
                        NCORR       = dims$ncorr,

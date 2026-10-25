@@ -426,6 +426,7 @@ set_sa_control <- function(
     is.numeric(STEP3), length(STEP3) == 1, STEP3 > 0,
     is.numeric(BURNE), length(BURNE) == 1, BURNE >= 0,
     is.numeric(MAXE), length(MAXE) == 1, MAXE >= 0,
+    BURNE < MAXE,
     is.numeric(EPOCHS_PER_CHECK), length(EPOCHS_PER_CHECK) == 1, EPOCHS_PER_CHECK >= 1,
     is.logical(CHECK_TOL), length(CHECK_TOL) == 1,
     is.numeric(MAX_TOL_COUNTER), length(MAX_TOL_COUNTER) == 1, MAX_TOL_COUNTER >= 1,

@@ -141,7 +141,6 @@ fit <- lavaan.pl:::cpp_plSA2(
   CONSTRLOGSD=constr_list$CONSTRLOGSD,
   LLC = constr_list$LLC,
   THETA_INIT = init,
-  DIH = rep(1, length(init)),
   NTHR = nthr,
   NLOAD=nload,
   NCORR=ncorr,

@@ -43,7 +43,6 @@ init_par_with_plSA <- function(DIMS, CONSTR_LIST, FREQ, INIT_CONTROL, INIT){
                      CONSTRLOGSD = CONSTR_LIST$CONSTRLOGSD,
                      LLC         = CONSTR_LIST$LLC,
                      THETA_INIT  = start_par,
-                     DIH         = rep(1, length(start_par)),
                      NTHR        = DIMS$nthr,
                      NLOAD       = DIMS$nload,
                      NCORR       = DIMS$ncorr,

@@ -178,7 +178,8 @@ extract_par <- function(THETA, OPTION = c('list', 'raw', 'transformed'),
 #' @return A list with the Jacobian `trJacob` of the transformation to
 #'   interpretable parameters, `H`, `J`, the sandwich `vcov` and its diagonal
 #'   `asymptotic_variance` on the transformed scale, `optimisation_noise` (SA
-#'   fits only) and the timing `RTime`.
+#'   fits only), the optimisation noise matrix `noise` on the optimisation scale
+#'   (SA fits only) and the timing `RTime`.
 #' @export
 computeVar <- function(OBJ, NUMDERIV = F, VERBOSE = FALSE) UseMethod('computeVar')
 #' Compute variance of the estimates
@@ -188,7 +189,8 @@ computeVar <- function(OBJ, NUMDERIV = F, VERBOSE = FALSE) UseMethod('computeVar
 #' @return A list with the Jacobian `trJacob` of the transformation to
 #'   interpretable parameters, `H`, `J`, the sandwich `vcov` and its diagonal
 #'   `asymptotic_variance` on the transformed scale, `optimisation_noise` (SA
-#'   fits only) and the timing `RTime`.
+#'   fits only), the optimisation noise matrix `noise` on the optimisation scale
+#'   (SA fits only) and the timing `RTime`.
 #' @export
 computeVar.PlFaFit <- function(OBJ, NUMDERIV = F, VERBOSE = FALSE){ if(OBJ$method == 'ucminf'){
             compute_var(THETA      = OBJ$theta,
@@ -214,7 +216,7 @@ computeVar.PlFaFit <- function(OBJ, NUMDERIV = F, VERBOSE = FALSE){ if(OBJ$metho
             compute_var(THETA      = OBJ$theta,
                        C_VEC       = OBJ$dims$cat,
                        N           = OBJ$dims$n,
-                       IT          = OBJ$stoFit$last_iter - OBJ$control$BURN,
+                       IT          = OBJ$stoFit$last_iter - OBJ$stoFit$burnt,
                        PAIRS       = OBJ$dims$pairs,
                        PPI         = OBJ$control$PAIRS_PER_ITERATION,
                        CONSTRMAT   = OBJ$model$CONSTRMAT,
@@ -285,6 +287,7 @@ compute_var <- function(THETA, C_VEC, N, IT = NULL, PAIRS = NULL, PPI = NULL,
 
   # Compute H if needed
   opt_noise <- NA
+  noise <- NULL
   Hhat <- HJ$H
   if(NUMDERIV){
     if (isTRUE(VERBOSE)) message('- Computing H numerically...')
@@ -322,13 +325,14 @@ compute_var <- function(THETA, C_VEC, N, IT = NULL, PAIRS = NULL, PPI = NULL,
 
   vcov <- trJacob %*% invH %*% Jhat %*% invH %*% t(trJacob)
 
-  if(METHOD =='ucminf'){
-    asy_var <- diag(vcov)
-  } else {
-    asy_var <- diag(vcov)
+  asy_var <- diag(vcov)
+  if(METHOD == 'SA'){
     a1 <- PAIRS*(PAIRS - PPI)/(PPI*(PAIRS-1))
     a2 <- (PAIRS-PPI)/(PPI*(PAIRS-1))
-    opt_noise <- diag( trJacob %*% (invH%*%(a1*Hhat - a2*Jhat)%*%invH/(N*IT) ) %*% t(trJacob) )
+    noise <- invH%*%(a1*Hhat - a2*Jhat)%*%invH/(N*IT)
+    eig <- eigen((noise + t(noise))/2, symmetric = TRUE)
+    noise <- eig$vectors %*% (pmax(eig$values, 0) * t(eig$vectors))
+    opt_noise <- diag(trJacob %*% noise %*% t(trJacob))
   }
 
   end_time <- Sys.time()
@@ -344,6 +348,7 @@ compute_var <- function(THETA, C_VEC, N, IT = NULL, PAIRS = NULL, PPI = NULL,
       vcov = vcov,
       asymptotic_variance = asy_var,
       optimisation_noise = opt_noise,
+      noise = noise,
       RTime = totaltime
     )
   )

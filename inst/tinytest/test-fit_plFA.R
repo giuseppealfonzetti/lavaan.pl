@@ -68,12 +68,12 @@ if(1){
     LATENT_COV = S)
   constr_list <- list(CONSTRMAT=A, CORRFLAG=corrflag, CONSTRVAR=exp(constr_lsd)^2, STDLV=stdlv, LLC=llc)
 
-  plFit <- fit_plFA(
+  plFit <- suppressWarnings(fit_plFA(
     DATA = set_plfa_data(dat),
     MODEL = do.call(set_plfa_model, constr_list),
     INIT = set_init(METHOD = "standard"),
-    CONTROL = set_sa_control(BURNE=0, MAXE=0, PAIRS_PER_ITERATION=1, EPOCHS_PER_CHECK=1),
-    VERBOSE = FALSE)
+    CONTROL = set_sa_control(BURNE=0, MAXE=1, PAIRS_PER_ITERATION=1, EPOCHS_PER_CHECK=1),
+    VERBOSE = FALSE))
 
   plFit$stoFit$path$nll
 
@@ -87,7 +87,6 @@ if(1){
     CONSTRLOGSD=plFit$model$CONSTRLOGSD,
     LLC = plFit$model$LLC,
     THETA_INIT = plFit$init,
-    DIH = rep(1, length(plFit$init)),
     NTHR = plFit$dims$nthr,
     NLOAD= plFit$dims$nload,
     NCORR= plFit$dims$ncorr,
@@ -177,12 +176,12 @@ if(1){
     LATENT_COV = S)
   constr_list <- list(CONSTRMAT=A, CORRFLAG=corrflag, CONSTRVAR=exp(constr_lsd)^2, STDLV=stdlv, LLC=llc)
 
-  plFit <- fit_plFA(
+  plFit <- suppressWarnings(fit_plFA(
     DATA = set_plfa_data(dat),
     MODEL = do.call(set_plfa_model, constr_list),
     INIT = set_init(METHOD = "standard"),
     CONTROL = set_sa_control(BURNE=1, MAXE=3, PAIRS_PER_ITERATION=8, EPOCHS_PER_CHECK=1),
-    VERBOSE = FALSE)
+    VERBOSE = FALSE))
 
   plFit$stoFit$path$nll
 
@@ -196,7 +195,6 @@ if(1){
     CONSTRLOGSD=plFit$model$CONSTRLOGSD,
     LLC = plFit$model$LLC,
     THETA_INIT = plFit$init,
-    DIH = rep(1, length(plFit$init)),
     NTHR = plFit$dims$nthr,
     NLOAD= plFit$dims$nload,
     NCORR= plFit$dims$ncorr,
@@ -283,12 +281,12 @@ if(1){
     LATENT_COV = S)
   constr_list <- list(CONSTRMAT=A, CORRFLAG=corrflag, CONSTRVAR=exp(constr_lsd)^2, STDLV=stdlv, LLC=llc)
 
-  plFit <- fit_plFA(
+  plFit <- suppressWarnings(fit_plFA(
     DATA = set_plfa_data(dat),
     MODEL = do.call(set_plfa_model, constr_list),
     INIT = set_init(METHOD = "standard"),
     CONTROL = set_sa_control(),
-    VERBOSE = FALSE)
+    VERBOSE = FALSE))
 
   # finite nll
   local({expect_true(all(is.finite(plFit$stoFit$path$nll)))})
@@ -356,12 +354,12 @@ if(1){
     LATENT_COV = S)
   constr_list <- list(CONSTRMAT=A, CORRFLAG=corrflag, CONSTRVAR=exp(constr_lsd)^2, STDLV=stdlv, LLC=llc)
 
-  plFit <- fit_plFA(
+  plFit <- suppressWarnings(fit_plFA(
     DATA = set_plfa_data(dat),
     MODEL = do.call(set_plfa_model, constr_list),
     INIT = set_init(METHOD = "SA"),
     CONTROL = set_sa_control(),
-    VERBOSE = FALSE)
+    VERBOSE = FALSE))
 
   # finite nll
   local({expect_true(all(is.finite(plFit$stoFit$path$nll)))})

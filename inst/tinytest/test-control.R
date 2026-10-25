@@ -22,6 +22,7 @@ local({
   expect_error(set_ucminf_control(MAXEVAL = 0))
   expect_error(set_ucminf_control(GRTOL = -1))
   expect_error(set_sa_control(BURNE = -1))
+  expect_error(set_sa_control(BURNE = 30, MAXE = 30))
   expect_error(set_sa_control(CHECK_TOL = 1))
   expect_error(set_sa_init_control(STEP0 = 0))
 })
@@ -29,7 +30,8 @@ local({
 # fit_plFA() checks and honours its control objects
 local({
   expect_error(fit_plFA(D, cl, CONTROL = list(MAXEVAL = 5)), "inherits")
-  expect_identical(fit_plFA(D, cl, CONTROL = set_sa_control(MAXE = 1, BURNE = 0, PAIRS_PER_ITERATION = 2))$method, "SA")
+  expect_warning(fit <- fit_plFA(D, cl, CONTROL = set_sa_control(MAXE = 1, BURNE = 0, PAIRS_PER_ITERATION = 2)), "at least 40 items")
+  expect_identical(fit$method, "SA")
   fit <- fit_plFA(D, cl, CONTROL = set_ucminf_control(MAXEVAL = 5))
   expect_true(fit$numFit$info[["neval"]] <= 5)
 })
