@@ -89,7 +89,6 @@ Eigen::VectorXd params::extract_thresholds(const Eigen::Ref<const Eigen::VectorX
 
     Eigen::MatrixXd theta2mat(const Eigen::Ref<const Eigen::VectorXd> THETA,
                               const Eigen::Ref<const Eigen::MatrixXd> CONSTRMAT,
-                              const std::vector<std::vector<std::vector<double>>> LLC,
                               const int NTHR,
                               const int NLOAD){
 
@@ -112,25 +111,6 @@ Eigen::VectorXd params::extract_thresholds(const Eigen::Ref<const Eigen::VectorX
             out(j, h)= double(CONSTRMAT(j, h));
           };
         };
-      }
-
-      for(int idx_lc=0; idx_lc<LLC.size(); idx_lc++){
-        const int target_row = LLC.at(idx_lc).at(0).at(0)-1;
-        const int target_col = LLC.at(idx_lc).at(0).at(1)-1;
-        const int n_loads_involved = LLC.at(idx_lc).size();
-
-
-        out(target_row, target_col) = 0;
-
-        for(int idx_var = 1; idx_var<n_loads_involved; idx_var++){
-          const double coeff = LLC.at(idx_lc).at(idx_var).at(0);
-          const int target_row_var = LLC.at(idx_lc).at(idx_var).at(1)-1;
-          const int target_col_var = LLC.at(idx_lc).at(idx_var).at(2)-1;
-
-
-          out(target_row, target_col) += coeff* out(target_row_var, target_col_var);
-
-        }
       }
 
 

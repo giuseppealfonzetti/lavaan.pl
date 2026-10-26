@@ -27,7 +27,7 @@ for (mi in c("pairwise", "available.cases")) {
   dims <- f$dims
   obj <- function(theta, gr) {
     out <- lavaan.pl:::cpp_multiThread_completePairwise(
-      N = dims$n, C_VEC = dims$cat, CONSTRMAT = M$CONSTRMAT, CONSTRLOGSD = M$CONSTRLOGSD, LLC = M$LLC,
+      N = dims$n, C_VEC = dims$cat, CONSTRMAT = M$CONSTRMAT, CONSTRLOGSD = M$CONSTRLOGSD,
       THETA = theta, FREQ = D$freq, CORRFLAG = M$CORRFLAG, NTHR = dims$nthr, NLOAD = dims$nload,
       NCORR = dims$ncorr, NVAR = dims$nvar, GRFLAG = gr, UFREQ = D$ufreq
     )
@@ -36,7 +36,7 @@ for (mi in c("pairwise", "available.cases")) {
   th <- f$theta + 0.05
   hj <- lavaan.pl:::cpp_sample_estimators_HJ(
     THETA = th, FREQ = D$freq, DATA = D$Y, C_VEC = dims$cat, CONSTRMAT = M$CONSTRMAT,
-    CONSTRLOGSD = M$CONSTRLOGSD, LLC = M$LLC, N = dims$n, CORRFLAG = M$CORRFLAG, NTHR = dims$nthr,
+    CONSTRLOGSD = M$CONSTRLOGSD, N = dims$n, CORRFLAG = M$CORRFLAG, NTHR = dims$nthr,
     NLOAD = dims$nload, NCORR = dims$ncorr, NVAR = dims$nvar, UFREQ = D$ufreq, UW = D$uweights
   )
   expect_equal(obj(th, 1), numDeriv::grad(function(x) obj(x, 0), th), tolerance = 1e-4)

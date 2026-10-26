@@ -13,7 +13,6 @@ namespace parallelWorkers{
     //// Global:
     const Eigen::Ref<const Eigen::MatrixXd> constrmat;
     const Eigen::Ref<const Eigen::VectorXd> constrsd;
-    const std::vector<std::vector<std::vector<double>>> llc;
     const Eigen::Ref<const Eigen::VectorXd> c_vec;
     const Eigen::Ref<const Eigen::MatrixXd> pairs_table;
     const Eigen::Ref<const Eigen::MatrixXd> items_pairs;
@@ -37,7 +36,6 @@ namespace parallelWorkers{
     pairsGradient(
       const Eigen::Ref<const Eigen::MatrixXd> CONSTRMAT_,
       const Eigen::Ref<const Eigen::VectorXd> CONSTRSD_,
-      const std::vector<std::vector<std::vector<double>>> LLC_,
       const Eigen::Ref<const Eigen::VectorXd> C_VEC_,
       const Eigen::Ref<const Eigen::MatrixXd> PAIRS_TABLE_,
       const Eigen::Ref<const Eigen::MatrixXd> ITEMS_PAIRS_,
@@ -51,14 +49,14 @@ namespace parallelWorkers{
       const Eigen::VectorXd &THETA_,
       const std::vector<int> &INDEX_VECTOR_
     ):
-      constrmat(CONSTRMAT_), constrsd(CONSTRSD_), llc(LLC_), c_vec(C_VEC_), pairs_table(PAIRS_TABLE_), items_pairs(ITEMS_PAIRS_),
+      constrmat(CONSTRMAT_), constrsd(CONSTRSD_), c_vec(C_VEC_), pairs_table(PAIRS_TABLE_), items_pairs(ITEMS_PAIRS_),
       corrFLAG(CORRFLAG_), nthr(NTHR_), nload(NLOAD_), ncorr(NCORR_), nvar(NVAR_), silentFLAG(SILENTFLAG_), gradFLAG(GRADFLAG_),
       theta(THETA_), index_vector(INDEX_VECTOR_), subset_ll(0.0),
       subset_gradient(Eigen::VectorXd::Zero(THETA_.size())){}
 
     // Constructor 2:
     pairsGradient(const pairsGradient &OBJ_, RcppParallel::Split):
-      constrmat(OBJ_.constrmat), constrsd(OBJ_.constrsd), llc(OBJ_.llc), c_vec(OBJ_.c_vec), pairs_table(OBJ_.pairs_table), items_pairs(OBJ_.items_pairs),
+      constrmat(OBJ_.constrmat), constrsd(OBJ_.constrsd), c_vec(OBJ_.c_vec), pairs_table(OBJ_.pairs_table), items_pairs(OBJ_.items_pairs),
       corrFLAG(OBJ_.corrFLAG), nthr(OBJ_.nthr), nload(OBJ_.nload), ncorr(OBJ_.ncorr), nvar(OBJ_.nvar),
       silentFLAG(OBJ_.silentFLAG), gradFLAG(OBJ_.gradFLAG),
       theta(OBJ_.theta), index_vector(OBJ_.index_vector), subset_ll(0.0),
@@ -79,7 +77,6 @@ namespace parallelWorkers{
     //// Global:
     const Eigen::Ref<const Eigen::MatrixXd> constrmat;
     const Eigen::Ref<const Eigen::VectorXd> constrsd;
-    const std::vector<std::vector<std::vector<double>>> llc;
     const Eigen::Ref<const Eigen::VectorXd> c_vec;
     const Eigen::Ref<const Eigen::MatrixXd> freq;
     const int corrFLAG;
@@ -101,7 +98,6 @@ namespace parallelWorkers{
     patternwiseOuterProd(
       const Eigen::Ref<const Eigen::MatrixXd> CONSTRMAT_,
       const Eigen::Ref<const Eigen::VectorXd> CONSTRSD_,
-      const std::vector<std::vector<std::vector<double>>> LLC_,
       const Eigen::Ref<const Eigen::VectorXd> C_VEC_,
       const Eigen::Ref<const Eigen::MatrixXd> FREQ_,
       const int CORRFLAG_,
@@ -113,7 +109,7 @@ namespace parallelWorkers{
       Eigen::MatrixXd &GRADMAT_
 
     ):
-      constrmat(CONSTRMAT_), constrsd(CONSTRSD_), llc(LLC_), c_vec(C_VEC_), freq(FREQ_),
+      constrmat(CONSTRMAT_), constrsd(CONSTRSD_), c_vec(C_VEC_), freq(FREQ_),
       corrFLAG(CORRFLAG_), nthr(NTHR_), nload(NLOAD_), ncorr(NCORR_), nvar(NVAR_),
       theta(THETA_),
       gradmat(GRADMAT_),
@@ -123,7 +119,7 @@ namespace parallelWorkers{
 
     // Constructor 2:
     patternwiseOuterProd(const patternwiseOuterProd &OBJ_, RcppParallel::Split):
-      constrmat(OBJ_.constrmat), constrsd(OBJ_.constrsd), llc(OBJ_.llc), c_vec(OBJ_.c_vec), freq(OBJ_.freq),
+      constrmat(OBJ_.constrmat), constrsd(OBJ_.constrsd), c_vec(OBJ_.c_vec), freq(OBJ_.freq),
       corrFLAG(OBJ_.corrFLAG), nthr(OBJ_.nthr), nload(OBJ_.nload), ncorr(OBJ_.ncorr), nvar(OBJ_.nvar),
       theta(OBJ_.theta),
       gradmat(OBJ_.gradmat),
@@ -146,9 +142,15 @@ namespace parallelWorkers{
     const Eigen::Ref<const Eigen::VectorXd> c_vec;
     const Eigen::Ref<const Eigen::MatrixXd> uscore;
     const Eigen::Ref<const Eigen::VectorXd> uw;
+    // Unit weights of the scores in the gradient (gw) and in J (jw),
+    // and cluster indices (cl). Empty for none.
+    const Eigen::Ref<const Eigen::VectorXd> gw;
+    const Eigen::Ref<const Eigen::VectorXd> jw;
+    const Eigen::Ref<const Eigen::VectorXd> cl;
     // Output quantities:
     Eigen::VectorXd gradient;
     Eigen::MatrixXd variability;
+    Eigen::MatrixXd ztot;
 
 
 
@@ -158,17 +160,24 @@ namespace parallelWorkers{
       const Eigen::Ref<const Eigen::MatrixXd> GRADMAT_,
       const Eigen::Ref<const Eigen::VectorXd> C_VEC_,
       const Eigen::Ref<const Eigen::MatrixXd> USCORE_,
-      const Eigen::Ref<const Eigen::VectorXd> UW_
+      const Eigen::Ref<const Eigen::VectorXd> UW_,
+      const Eigen::Ref<const Eigen::VectorXd> GW_,
+      const Eigen::Ref<const Eigen::VectorXd> JW_,
+      const Eigen::Ref<const Eigen::VectorXd> CL_,
+      const int NCL_
     ):
-      data(DATA_), gradmat(GRADMAT_), c_vec(C_VEC_), uscore(USCORE_), uw(UW_),
+      data(DATA_), gradmat(GRADMAT_), c_vec(C_VEC_), uscore(USCORE_), uw(UW_), gw(GW_), jw(JW_), cl(CL_),
       gradient(Eigen::VectorXd::Zero(GRADMAT_.rows())),
-      variability(Eigen::MatrixXd::Zero(GRADMAT_.rows(), GRADMAT_.rows())){}
+      variability(Eigen::MatrixXd::Zero(GRADMAT_.rows(), GRADMAT_.rows())),
+      ztot(Eigen::MatrixXd::Zero(GRADMAT_.rows(), NCL_)){}
 
     // Constructor 2:
     casewiseOuterProd(const casewiseOuterProd &OBJ_, RcppParallel::Split):
       data(OBJ_.data), gradmat(OBJ_.gradmat), c_vec(OBJ_.c_vec), uscore(OBJ_.uscore), uw(OBJ_.uw),
+      gw(OBJ_.gw), jw(OBJ_.jw), cl(OBJ_.cl),
       gradient(Eigen::VectorXd::Zero(gradmat.rows())),
-      variability(Eigen::MatrixXd::Zero(gradmat.rows(), gradmat.rows())){}
+      variability(Eigen::MatrixXd::Zero(gradmat.rows(), gradmat.rows())),
+      ztot(Eigen::MatrixXd::Zero(gradmat.rows(), OBJ_.ztot.cols())){}
 
     // MEMBER FUNCTIONS:
     //// Overload operator () for main computation:

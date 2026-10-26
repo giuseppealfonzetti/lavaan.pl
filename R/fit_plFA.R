@@ -44,6 +44,9 @@ fit_plFA <- function(
   dims <- check_dims(DATA$Y, MODEL)
   if(METHOD=="SA" && dims$p<40) warning("SA defaults are tuned for models with at least 40 items: check the estimates against set_ucminf_control().", call. = FALSE)
   INIT_METHOD <- check_init_method(dims, INIT$METHOD, INIT$THETA)
+  lc <- lincon(MODEL$CONSTRAINTS, dims, corrflag_code(MODEL) == 2)
+  if(METHOD == "SA" && corrflag_code(MODEL) == 2) stop("LATCOV = \"direct\" is not currently supported with SA; use set_ucminf_control().", call. = FALSE)
+  if(METHOD == "SA" && length(lc$free_idx) < dims$d) stop("CONSTRAINTS are not currently supported with SA; use set_ucminf_control().", call. = FALSE)
 
   tmp <- structure(
     list(data = DATA,
@@ -58,8 +61,9 @@ fit_plFA <- function(
                      nload = dims$nload,
                      ncorr = dims$ncorr,
                      nvar  = dims$nvar,
-                     npar  = dims$d),
-         method = METHOD),
+                     npar  = length(lc$free_idx)),
+         method = METHOD,
+         lincon = lc),
     class = "PlFaFit")
 
   # Version
@@ -73,6 +77,47 @@ fit_plFA <- function(
 
   # Check Initialisation
   tmp$init <- check_init(INIT$THETA, DATA$freq, dims, MODEL, INIT_METHOD, VERBOSE, INIT_CONTROL = INIT$CONTROL, UFREQ = DATA$ufreq)
+
+  # With the direct parametrisation, points with a non positive definite latent
+  # covariance matrix are outside the parameter space
+  pd <- function(theta){
+    if(corrflag_code(MODEL) != 2) return(TRUE)
+    S <- cpp_latvar_theta2mat(theta, MODEL$CONSTRLOGSD, dims$nthr, dims$nload, dims$ncorr, dims$nvar, dims$q, 2L)
+    !inherits(try(chol(S), silent = TRUE), "try-error")
+  }
+
+  # Direct parametrisation: warm start from the LKJ fit without the constraints on
+  # the latent covariances, which is better conditioned
+  if(METHOD == "ucminf" && corrflag_code(MODEL) == 2 && pd(tmp$init)){
+    lat <- dims$nthr + dims$nload + seq_len(dims$ncorr + dims$nvar)
+    warm_model <- MODEL
+    warm_model$LATCOV <- "lkj"
+    if(!is.null(MODEL$CONSTRAINTS)){
+      keep <- rowSums(MODEL$CONSTRAINTS$A[, dims$nthr + dims$nload + seq_len(dims$ncorr), drop = FALSE] != 0) == 0
+      warm_model$CONSTRAINTS <- if(any(keep)) list(A = MODEL$CONSTRAINTS$A[keep, , drop = FALSE], b = MODEL$CONSTRAINTS$b[keep])
+    }
+    S0 <- cpp_latvar_theta2mat(tmp$init, MODEL$CONSTRLOGSD, dims$nthr, dims$nload, dims$ncorr, dims$nvar, dims$q, 2L)
+    warm_init <- tmp$init
+    warm_init[lat] <- cpp_latvar_mat2vec(S0, MODEL$CONSTRLOGSD, dims$ncorr, dims$nvar, 1L)
+    warm <- fit_plFA(DATA, warm_model, CONTROL, set_init(THETA = warm_init), NCORES)
+    theta <- warm$theta
+    theta[lat] <- cpp_latvar_mat2vec(getPar(warm, OPTION = "list")$latent_correlations, MODEL$CONSTRLOGSD, dims$ncorr, dims$nvar, 2L)
+    # Least-squares projection on the constraints, shrinking the free latent
+    # covariances until positive definite
+    x <- as.vector(solve(crossprod(lc$K), crossprod(lc$K, theta - lc$c)))
+    cov_free <- lc$free_idx %in% (dims$nthr + dims$nload + seq_len(dims$ncorr))
+    for(i in 1:20){
+      theta <- as.vector(lc$K %*% x + lc$c)
+      if(all(is.finite(theta)) && pd(theta)) break
+      x[cov_free] <- 0.8 * x[cov_free]
+    }
+    nll <- function(theta) cpp_multiThread_completePairwise(N = dims$n, C_VEC = dims$cat, CONSTRMAT = MODEL$CONSTRMAT,
+      CONSTRLOGSD = MODEL$CONSTRLOGSD, THETA = theta, FREQ = DATA$freq, CORRFLAG = 2L, NTHR = dims$nthr, NLOAD = dims$nload,
+      NCORR = dims$ncorr, NVAR = dims$nvar, UFREQ = DATA$ufreq)$iter_nll
+    start <- as.vector(lc$K %*% tmp$init[lc$free_idx] + lc$c)
+    if(all(is.finite(theta)) && pd(theta) && isTRUE(nll(theta) < if(pd(start)) nll(start) else Inf)) tmp$init <- theta
+  }
+  tmp$init <- as.vector(lc$K %*% tmp$init[lc$free_idx] + lc$c)
 
   # Numerical optimisation
   if(METHOD == 'ucminf'){
@@ -88,10 +133,9 @@ fit_plFA <- function(
         C_VEC      = dims$cat,
         CONSTRMAT  = MODEL$CONSTRMAT,
         CONSTRLOGSD= MODEL$CONSTRLOGSD,
-        LLC        = MODEL$LLC,
         FREQ       = DATA$freq,
         THETA      = par_vec,
-        CORRFLAG   = MODEL$CORRFLAG,
+        CORRFLAG   = corrflag_code(MODEL),
         NTHR       = dims$nthr,
         NLOAD      = dims$nload,
         NCORR      = dims$ncorr,
@@ -110,10 +154,9 @@ fit_plFA <- function(
         C_VEC      = dims$cat,
         CONSTRMAT  = MODEL$CONSTRMAT,
         CONSTRLOGSD= MODEL$CONSTRLOGSD,
-        LLC        = MODEL$LLC,
         FREQ       = DATA$freq,
         THETA      = par_vec,
-        CORRFLAG   = MODEL$CORRFLAG,
+        CORRFLAG   = corrflag_code(MODEL),
         NTHR       = dims$nthr,
         NLOAD      = dims$nload,
         NCORR      = dims$ncorr,
@@ -129,9 +172,15 @@ fit_plFA <- function(
 
     # list of ucminf args
     args <- list(
-      'par' = tmp$init,
-      'fn' = Rwr_ncl,
-      'gr' = Rwr_ngr,
+      'par' = tmp$init[lc$free_idx],
+      'fn' = function(x){
+        theta <- as.vector(lc$K %*% x + lc$c)
+        if(pd(theta)) Rwr_ncl(theta) else Inf
+      },
+      'gr' = function(x){
+        theta <- as.vector(lc$K %*% x + lc$c)
+        if(pd(theta)) as.vector(crossprod(lc$K, Rwr_ngr(theta))) else rep(0, length(x))
+      },
       'control' = list(grtol = CONTROL$GRTOL, xtol = CONTROL$XTOL, stepmax = CONTROL$STEPMAX, maxeval = CONTROL$MAXEVAL),
       'hessian' = 0)
 
@@ -141,7 +190,7 @@ fit_plFA <- function(
 
     end_time <- Sys.time()
     tmp$numFit <- opt
-    tmp$theta <- opt$par
+    tmp$theta <- as.vector(lc$K %*% opt$par + lc$c)
     tmp$RTime <- as.numeric(difftime(end_time, start_time, units = 'secs')[1])
 
 
@@ -166,7 +215,6 @@ fit_plFA <- function(
                        C_VEC       = dims$cat,
                        CONSTRMAT   = MODEL$CONSTRMAT,
                        CONSTRLOGSD = MODEL$CONSTRLOGSD,
-                       LLC         = MODEL$LLC,
                        THETA_INIT  = tmp$init,
                        NTHR        = dims$nthr,
                        NLOAD       = dims$nload,

@@ -15,7 +15,7 @@ check_cnstr_stdlv <- function(STDLV){
   stopifnot(is.logical(STDLV))
   return(STDLV)
 }
-check_cnstr_loadings <- function(MAT, STDLV, LLC=NULL){
+check_cnstr_loadings <- function(MAT, STDLV){
   stopifnot(is.matrix(MAT))
   stopifnot(is.numeric(MAT))
   stopifnot(!is.infinite(sum(MAT, na.rm = TRUE)))
@@ -30,12 +30,6 @@ check_cnstr_loadings <- function(MAT, STDLV, LLC=NULL){
           if(all(MAT[1:(fna-1),j]==0))MAT[fna,j] <- 1
         }
       }
-    }
-  }
-
-  if(!is.null(LLC)){
-    for (idx_lc in 1:length(LLC)) {
-      MAT[LLC[[idx_lc]][[1]][1], LLC[[idx_lc]][[1]][2]] <- 1
     }
   }
 
@@ -59,8 +53,8 @@ check_cnstr <- function(LIST){
   ls <- list()
   ls$CORRFLAG <- check_cnstr_corrflag(LIST$CORRFLAG)
   ls$STDLV    <- check_cnstr_stdlv(LIST$STDLV)
-  ls$LLC <- LIST$LLC
-  ls$CONSTRMAT <- check_cnstr_loadings(LIST$CONSTRMAT, STDLV = ls$STDLV, LLC = ls$LLC)
+  ls$CONSTRAINTS <- LIST$CONSTRAINTS
+  ls$CONSTRMAT <- check_cnstr_loadings(LIST$CONSTRMAT, STDLV = ls$STDLV)
   q <- ncol(ls$CONSTRMAT)
   ls$CONSTRLOGSD <- check_cnstr_latvar(LIST$CONSTRVAR, Q=q, STDLV = ls$STDLV)
 
@@ -161,7 +155,6 @@ check_init_par <- function(PAR, DIMS, CONSTR_LIST){
 
   L <- cpp_loadings_theta2mat(THETA     = PAR,
                               CONSTRMAT = CONSTR_LIST$CONSTRMAT,
-                              LLC       = CONSTR_LIST$LLC,
                               NTHR      = DIMS$nthr,
                               NLOAD     = DIMS$nload)
   check_loadings(L)
@@ -171,14 +164,15 @@ check_init_par <- function(PAR, DIMS, CONSTR_LIST){
                             NLOAD       = DIMS$nload,
                             NCORR       = DIMS$ncorr,
                             NVAR        = DIMS$nvar,
-                            Q           = DIMS$q)
+                            Q           = DIMS$q,
+                            CORRFLAG    = corrflag_code(CONSTR_LIST))
   check_latcov(S)
   Sy <- L%*%S%*%t(L)
   if(!all(diag(Sy)<=1)) warning("Negative error variances implied by init parameters")
+  if (corrflag_code(CONSTR_LIST) == 2) return(PAR)
   PAR <- cpp_sa_proj( THETA=PAR,
                       CONSTRMAT=CONSTR_LIST$CONSTRMAT,
                       CONSTRLOGSD=CONSTR_LIST$CONSTRLOGSD,
-                      LLC=CONSTR_LIST$LLC,
                       C_VEC=DIMS$cat,
                       CORRFLAG=CONSTR_LIST$CORRFLAG,
                       NTHR=DIMS$nthr,
@@ -201,10 +195,9 @@ check_init <- function(INIT, FREQ, DIMS, CONSTR_LIST, INIT_METHOD=c("SA", "custo
     transformed_rhos_init  <- init_transformed_latcorr(DIMS, CONSTR_LIST)
     transformed_latsd_init <- init_transformed_latsd(DIMS, CONSTR_LIST)
     INIT <- c(lambda0_init, lambda_init, transformed_rhos_init, transformed_latsd_init)
-    INIT <- cpp_sa_proj(THETA=INIT,
+    if (corrflag_code(CONSTR_LIST) != 2) INIT <- cpp_sa_proj(THETA=INIT,
                         CONSTRMAT=CONSTR_LIST$CONSTRMAT,
                         CONSTRLOGSD=CONSTR_LIST$CONSTRLOGSD,
-                        LLC=CONSTR_LIST$LLC,
                         C_VEC=DIMS$cat,
                         CORRFLAG=CONSTR_LIST$CORRFLAG,
                         NTHR=DIMS$nthr,
@@ -242,30 +235,54 @@ check_init_method <- function(DIMS, INIT_METHOD = c("SA", "custom", "standard"),
 #'@param MISSING Treatment of missing values (`NA`): `"listwise"` drops incomplete observations,
 #'  `"pairwise"` uses the complete pairs and `"available.cases"` the available cases of
 #'  Katsikatsou et al. (2022).
+#'@param WEIGHTS Sampling weights, one per observation, normalised to sum to the number of
+#'  observations. If `NULL`, unit weights.
+#'@param WEIGHTS_TYPE Type of sampling weights, as in lavaan: `"design"` or `"frequency"`.
+#'@param CLUSTER Cluster membership, one per observation, for cluster-robust standard errors. If
+#'  `NULL`, observations are independent.
 #'
 #' @return An object of class `plfa_data` with the data matrix `Y`, its dimensions `n` and `p`,
 #'   the number of categories of each item `cat`, the pairwise frequency tables `freq` and
 #'   `valfreq`, the treatment of missing values `missing`, the unit weights `uweights` and
-#'   univariate frequencies `ufreq` of the available-cases term, and the time spent computing
-#'   them `freqTime`.
+#'   univariate frequencies `ufreq` of the available-cases term, the normalised sampling weights
+#'   `weights` and their factors on the scores `jweights`, the cluster indices `cluster`, and the
+#'   time spent computing the frequencies `freqTime`.
 #'
 #' @export
-set_plfa_data <- function(DATA, VALDATA = NULL, MISSING = c("listwise", "pairwise", "available.cases")) {
+set_plfa_data <- function(DATA, VALDATA = NULL, MISSING = c("listwise", "pairwise", "available.cases"),
+                          WEIGHTS = NULL, WEIGHTS_TYPE = c("design", "frequency"), CLUSTER = NULL) {
   MISSING <- match.arg(MISSING)
+  WEIGHTS_TYPE <- match.arg(WEIGHTS_TYPE)
   Y <- check_data(DATA)
+  stopifnot(
+    is.null(WEIGHTS) || (is.numeric(WEIGHTS) && length(WEIGHTS) == nrow(Y) && all(is.finite(WEIGHTS)) && all(WEIGHTS >= 0)),
+    is.null(CLUSTER) || (length(CLUSTER) == nrow(Y) && !anyNA(CLUSTER))
+  )
   if (MISSING == "listwise" && anyNA(Y)) {
     keep <- stats::complete.cases(Y)
     message(sum(!keep), " incomplete observations removed (MISSING = \"listwise\").")
     Y <- Y[keep, , drop = FALSE]
+    if (!is.null(WEIGHTS)) WEIGHTS <- WEIGHTS[keep]
+    if (!is.null(CLUSTER)) CLUSTER <- CLUSTER[keep]
   }
   stopifnot(nrow(Y) > 0, colSums(!is.na(Y)) > 0)
   cat <- apply(Y, 2, max, na.rm = TRUE) + 1
   stopifnot(cat > 1)
+  weights <- jweights <- cluster <- numeric(0)
+  if (!is.null(WEIGHTS)) {
+    weights <- WEIGHTS / sum(WEIGHTS) * nrow(Y)
+    jweights <- if (WEIGHTS_TYPE == "design") weights else sqrt(weights)
+  }
+  if (!is.null(CLUSTER)) {
+    cluster <- as.numeric(match(CLUSTER, unique(CLUSTER)) - 1)
+    stopifnot(length(unique(cluster)) > 1)
+  }
   freq_start_time <- Sys.time()
-  freq <- pairs_freq(Y, cat)
+  freq <- pairs_freq(Y, cat, weights)
   uweights <- if (MISSING == "available.cases") rowSums(is.na(Y)) else rep(0, nrow(Y))
+  uw <- if (length(weights)) uweights * weights else uweights
   ufreq <- unlist(lapply(seq_len(ncol(Y)), function(j) {
-    vapply(seq_len(cat[j]) - 1, function(a) sum(uweights[Y[, j] %in% a]), numeric(1))
+    vapply(seq_len(cat[j]) - 1, function(a) sum(uw[Y[, j] %in% a]), numeric(1))
   }))
   valfreq <- NULL
   if (!is.null(VALDATA)) {
@@ -289,6 +306,9 @@ set_plfa_data <- function(DATA, VALDATA = NULL, MISSING = c("listwise", "pairwis
     missing = MISSING,
     uweights = uweights,
     ufreq = ufreq,
+    weights = weights,
+    jweights = jweights,
+    cluster = cluster,
     freqTime = as.numeric(difftime(Sys.time(), freq_start_time, units = "secs"))
   )
   class(out) <- "plfa_data"
@@ -308,41 +328,102 @@ set_plfa_data <- function(DATA, VALDATA = NULL, MISSING = c("listwise", "pairwis
 #'  otherwise.
 #' @param STDLV Logical indicator. Set it to
 #'  `TRUE` to fix latent variables scale. Set it `FALSE` to fix loadings scale.
-#' @param LLC Linear loadings constraints. Expects a list
-#'  of constraints. The argument `LLC` is expected to be a list of constraints,
-#'  e.g. `LLC <- list(constraint_1, constraint2, ...)`, where each
-#'  constraint is defined by a list itself. For example, to impose the
-#'  constraint "L_(2,1)=0.5L_(5,2)+0.25L_(9,3)" you have to write `constraint_1
-#'  <- list(c(2,1), c(0.5,5,2), c(0.25, 9,3))`. That is: the first vector of the
-#'  list is 2-dimensional and stores the coordinates of the constrained loading.
-#'  Each of the successive triplets represent a linear coefficient followed by
-#'  the coordinates of the loading of reference. You can set up an arbitrary
-#'  number of triplets in each constraint.
+#' @param CONSTRAINTS Linear equality constraints `A %*% theta = b` on the parameter vector, as
+#'  `list(A = , b = )`, with one column of `A` per parameter in the order of [theta_names()]. Each
+#'  constraint involves either thresholds, loadings, latent covariances (with `LATCOV = "direct"`) or
+#'  latent log standard deviations.
+#' @param LATCOV Parametrisation of the latent correlations: `"lkj"` (Cholesky factor with Fisher-z
+#'  angles, always positive definite) or `"direct"` (the latent covariances themselves, which allows
+#'  linear constraints on them).
 #'
 #' @return An object of class `plfa_model` with the identified loading constraints `CONSTRMAT`,
 #'   the log standard deviations of the latent variables `CONSTRLOGSD` (`NA` when free),
-#'   `CORRFLAG`, `STDLV`, `LLC`, and the numbers of items `p` and latent variables `q`.
+#'   `CORRFLAG`, `STDLV`, `CONSTRAINTS`, `LATCOV`, and the numbers of items `p` and latent variables `q`.
 #'
 #' @export
-set_plfa_model <- function(CONSTRMAT, CONSTRVAR = NULL, CORRFLAG = TRUE, STDLV = TRUE, LLC = NULL) {
+set_plfa_model <- function(CONSTRMAT, CONSTRVAR = NULL, CORRFLAG = TRUE, STDLV = TRUE, CONSTRAINTS = NULL,
+                           LATCOV = c("lkj", "direct")) {
+  LATCOV <- match.arg(LATCOV)
   if (is.matrix(CONSTRMAT) && all(is.na(CONSTRMAT))) storage.mode(CONSTRMAT) <- "double"
   stopifnot(is.matrix(CONSTRMAT))
-  if (!is.null(LLC)) {
+  if (!is.null(CONSTRAINTS)) {
     stopifnot(
-      is.list(LLC),
-      all(vapply(LLC, function(lc) {
-        if (!is.list(lc) || length(lc[[1]]) != 2 || any(lengths(lc[-1]) != 3) ||
-            !all(vapply(lc, function(x) is.numeric(x) && all(is.finite(x)), NA))) return(FALSE)
-        coords <- vapply(lc, function(x) x[length(x) - 1:0], numeric(2))
-        all(coords[1, ] %in% seq_len(nrow(CONSTRMAT))) && all(coords[2, ] %in% seq_len(ncol(CONSTRMAT)))
-      }, NA))
+      is.list(CONSTRAINTS), is.matrix(CONSTRAINTS$A), is.numeric(CONSTRAINTS$A), all(is.finite(CONSTRAINTS$A)),
+      is.numeric(CONSTRAINTS$b), length(CONSTRAINTS$b) == nrow(CONSTRAINTS$A), all(is.finite(CONSTRAINTS$b))
     )
   }
-  out <- check_cnstr(list(CONSTRMAT = CONSTRMAT, CONSTRVAR = CONSTRVAR, CORRFLAG = CORRFLAG, STDLV = STDLV, LLC = LLC))
+  out <- check_cnstr(list(CONSTRMAT = CONSTRMAT, CONSTRVAR = CONSTRVAR, CORRFLAG = CORRFLAG, STDLV = STDLV,
+                          CONSTRAINTS = CONSTRAINTS))
+  if (LATCOV == "direct" && !out$CORRFLAG) stop("LATCOV = \"direct\" requires CORRFLAG = TRUE.")
+  out$LATCOV <- LATCOV
   out$p <- nrow(out$CONSTRMAT)
   out$q <- ncol(out$CONSTRMAT)
   class(out) <- "plfa_model"
   out
+}
+
+#' Names of the model parameters
+#'
+#' @param DATA Data object from [set_plfa_data()].
+#' @param MODEL Model object from [set_plfa_model()].
+#' @return The names of the parameters in the order used by [fit_plFA()]: thresholds `tau[i,k]`,
+#'   free loadings `lambda[j,h]`, latent correlation parameters `eta[r,c]` and free latent log
+#'   standard deviations `logsd[h]`.
+#' @export
+theta_names <- function(DATA, MODEL) {
+  stopifnot(inherits(DATA, "plfa_data"), inherits(MODEL, "plfa_model"))
+  idx <- which(is.na(MODEL$CONSTRMAT), arr.ind = TRUE)
+  q <- MODEL$q
+  c(
+    unlist(lapply(seq_len(DATA$p), function(i) sprintf("tau[%d,%d]", i, seq_len(DATA$cat[i] - 1)))),
+    sprintf("lambda[%d,%d]", idx[, 1], idx[, 2]),
+    if (MODEL$CORRFLAG && q > 1) unlist(lapply(2:q, function(h) {
+      sprintf(if (corrflag_code(MODEL) == 2) "psi[%d,%d]" else "eta[%d,%d]", seq_len(h - 1), h)
+    })),
+    sprintf("logsd[%d]", which(is.na(MODEL$CONSTRLOGSD)))
+  )
+}
+
+corrflag_code <- function(MODEL) {
+  if (!MODEL$CORRFLAG) 0L else if (identical(MODEL$LATCOV, "direct")) 2L else 1L
+}
+
+lincon <- function(CONSTRAINTS, DIMS, DIRECT = FALSE) {
+  d <- DIMS$d
+  if (is.null(CONSTRAINTS) || nrow(CONSTRAINTS$A) == 0) return(list(K = diag(d), c = rep(0, d), free_idx = seq_len(d)))
+  A <- CONSTRAINTS$A
+  b <- CONSTRAINTS$b
+  if (ncol(A) != d) stop("CONSTRAINTS$A must have one column per parameter (", d, "), in the order of theta_names().")
+  block <- rep(1:4, c(DIMS$nthr, DIMS$nload, DIMS$ncorr, DIMS$nvar))
+  for (r in seq_len(nrow(A))) {
+    blk <- unique(block[A[r, ] != 0])
+    if (any(blk == 3) && !DIRECT) stop("Constraints on the latent correlations require LATCOV = \"direct\".")
+    if (length(blk) > 1) stop("Each constraint must involve either thresholds, loadings, latent covariances or latent log standard deviations.")
+  }
+  piv <- integer(0)
+  for (j in seq_len(d)) {
+    r <- length(piv) + 1
+    if (r > nrow(A)) break
+    i <- r - 1 + which.max(abs(A[r:nrow(A), j]))
+    if (abs(A[i, j]) < 1e-10) next
+    A[c(r, i), ] <- A[c(i, r), ]
+    b[c(r, i)] <- b[c(i, r)]
+    b[r] <- b[r] / A[r, j]
+    A[r, ] <- A[r, ] / A[r, j]
+    b[-r] <- b[-r] - A[-r, j] * b[r]
+    A[-r, ] <- A[-r, , drop = FALSE] - outer(A[-r, j], A[r, ])
+    piv <- c(piv, j)
+  }
+  if (any(abs(b[-seq_along(piv)]) > 1e-8)) stop("CONSTRAINTS are inconsistent.")
+  free_idx <- setdiff(seq_len(d), piv)
+  K <- matrix(0, d, length(free_idx))
+  K[cbind(free_idx, seq_along(free_idx))] <- 1
+  cvec <- rep(0, d)
+  for (r in seq_along(piv)) {
+    K[piv[r], ] <- -A[r, free_idx]
+    cvec[piv[r]] <- b[r]
+  }
+  list(K = K, c = cvec, free_idx = free_idx)
 }
 
 #' Starting values for pairwise likelihood estimation

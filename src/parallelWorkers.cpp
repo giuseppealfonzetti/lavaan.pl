@@ -6,7 +6,7 @@ void parallelWorkers::pairsGradient::operator()(std::size_t BEGIN, std::size_t E
   int d = theta.size();
 
   // rearrange parameters
-  const pairs::Setup S(theta, constrmat, constrsd, llc, nthr, nload, ncorr, nvar);
+  const pairs::Setup S(theta, constrmat, constrsd, nthr, nload, ncorr, nvar, corrFLAG);
 
   for (int h = BEGIN; h < END; h++){
 
@@ -48,7 +48,7 @@ void parallelWorkers::patternwiseOuterProd::operator()(std::size_t BEGIN, std::s
   const int p = constrmat.rows();
 
   // rearrange parameters
-  const pairs::Setup S(theta, constrmat, constrsd, llc, nthr, nload, ncorr, nvar);
+  const pairs::Setup S(theta, constrmat, constrsd, nthr, nload, ncorr, nvar, corrFLAG);
   const int m = S.m;
 
   std::vector<int> pk, pl;
@@ -168,8 +168,14 @@ void parallelWorkers::casewiseOuterProd::operator()(std::size_t BEGIN, std::size
       }
     }
 
-    gradient += gradienti;
-    variability += gradienti * gradienti.transpose();
+    const double gwi = gw.size() > 0 ? gw(i) : 1;
+    gradient += gwi * gradienti;
+    if(cl.size() > 0){
+      ztot.col(cl(i)) += gwi * gradienti;
+    }else{
+      const double jwi = jw.size() > 0 ? jw(i) : 1;
+      variability += jwi * jwi * gradienti * gradienti.transpose();
+    }
 
   }
 }
@@ -177,6 +183,7 @@ void parallelWorkers::casewiseOuterProd::operator()(std::size_t BEGIN, std::size
 void parallelWorkers::casewiseOuterProd::join(const casewiseOuterProd &RHS){
   gradient += RHS.gradient;
   variability += RHS.variability;
+  ztot += RHS.ztot;
 }
 
 

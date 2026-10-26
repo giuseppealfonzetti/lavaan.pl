@@ -13,7 +13,6 @@ full_ngr <- function(par_vec){
     C_VEC      = dims$cat,
     CONSTRMAT  = constr_list$CONSTRMAT,
     CONSTRLOGSD= constr_list$CONSTRLOGSD,
-    LLC        = constr_list$LLC,
     FREQ       = f,
     THETA      = par_vec,
     CORRFLAG   = constr_list$CORRFLAG,
@@ -37,12 +36,11 @@ if(1){
 
   # Simple loading matrix constraints
   A <- build_constrMat(P = p, Q = q, STRUCT = 'simple')
-  llc <- NULL
-  A <- lavaan.pl:::check_cnstr_loadings(A, STDLV=stdlv, LLC = llc)
+  A <- lavaan.pl:::check_cnstr_loadings(A, STDLV=stdlv)
 
 
   # Draw some random loadings according to constraints
-  Load <- gen_loadings(CONSTRMAT = A, STDLV = stdlv, LLC=llc)
+  Load <- gen_loadings(CONSTRMAT = A, STDLV = stdlv)
   nload <- sum(is.na(A))
 
   # Generate random latent correlation matrix
@@ -88,7 +86,7 @@ if(1){
   f <- compute_frequencies(Y = dat, C_VEC = cat)
 
   dat <- lavaan.pl:::check_data(dat)
-  constr_list <- lavaan.pl:::check_cnstr(list(CONSTRMAT=A, CORRFLAG=corrflag, CONSTRVAR=exp(constr_lsd)^2, STDLV=stdlv, LLC=llc))
+  constr_list <- lavaan.pl:::check_cnstr(list(CONSTRMAT=A, CORRFLAG=corrflag, CONSTRVAR=exp(constr_lsd)^2, STDLV=stdlv))
   dims <- lavaan.pl:::check_dims(dat, constr_list)
 
   RcppParallel::setThreadOptions(numThreads = 1)
@@ -99,7 +97,6 @@ if(1){
     C_VEC = cat,
     CONSTRMAT = constr_list$CONSTRMAT,
     CONSTRLOGSD = constr_list$CONSTRLOGSD,
-    LLC = constr_list$LLC,
     N = dims$n,
     CORRFLAG = constr_list$CORRFLAG,
     NTHR = dims$nthr,
@@ -124,11 +121,9 @@ if(1){
 }
 
 hessian_setups <- list(
-  "free latent variances"         = list(stdlv = FALSE, corrflag = TRUE,  llc = NULL),
-  "standardised latent variables" = list(stdlv = TRUE,  corrflag = TRUE,  llc = NULL),
-  "orthogonal latent variables"   = list(stdlv = TRUE,  corrflag = FALSE, llc = NULL),
-  "LLC on free loadings"          = list(stdlv = TRUE,  corrflag = TRUE,  llc = list(list(c(2, 1), c(0.5, 3, 1), c(0.25, 1, 1)))),
-  "LLC referencing a fixed loading" = list(stdlv = TRUE,  corrflag = TRUE,  llc = list(list(c(2, 1), c(0.5, 3, 1), c(0.25, 4, 1))))
+  "free latent variances"         = list(stdlv = FALSE, corrflag = TRUE),
+  "standardised latent variables" = list(stdlv = TRUE,  corrflag = TRUE),
+  "orthogonal latent variables"   = list(stdlv = TRUE,  corrflag = FALSE)
 )
 for (setup_name in names(hessian_setups)) {
   setup <- hessian_setups[[setup_name]]
@@ -139,8 +134,8 @@ for (setup_name in names(hessian_setups)) {
   constrvar <- if (setup$stdlv) NULL else rep(NA, q)
 
   A <- lavaan.pl:::check_cnstr_loadings(build_constrMat(P = p, Q = q, STRUCT = "crossed", CROSS = 1),
-                            STDLV = setup$stdlv, LLC = setup$llc)
-  Load <- gen_loadings(CONSTRMAT = A, STDLV = setup$stdlv, LLC = setup$llc, LB = .3, UB = .6)
+                            STDLV = setup$stdlv)
+  Load <- gen_loadings(CONSTRMAT = A, STDLV = setup$stdlv, LB = .3, UB = .6)
   ncorr <- if (setup$corrflag) q * (q - 1) / 2 else 0
   R <- lavaan.pl:::cpp_latvar_vec2cmat(VEC = rnorm(q * (q - 1) / 2) * setup$corrflag, NCORR = ncorr, Q = q)
   lsd <- lavaan.pl:::check_cnstr_latvar(constrvar, q, setup$stdlv)
@@ -149,7 +144,7 @@ for (setup_name in names(hessian_setups)) {
 
   dat <- sim_data(SAMPLE_SIZE = n, LOADINGS = Load, THRESHOLDS = thr, LATENT_COV = S)
   constr_list <- lavaan.pl:::check_cnstr(list(CONSTRMAT = A, CORRFLAG = setup$corrflag, CONSTRVAR = constrvar,
-                                  STDLV = setup$stdlv, LLC = setup$llc))
+                                  STDLV = setup$stdlv))
   dims <- lavaan.pl:::check_dims(dat, constr_list)
   f <- compute_frequencies(Y = dat, C_VEC = cat)
 
@@ -160,7 +155,7 @@ for (setup_name in names(hessian_setups)) {
   RcppParallel::setThreadOptions(numThreads = 2)
   HJ <- lavaan.pl:::cpp_sample_estimators_HJ(
     THETA = theta, FREQ = f, DATA = dat, C_VEC = cat,
-    CONSTRMAT = constr_list$CONSTRMAT, CONSTRLOGSD = constr_list$CONSTRLOGSD, LLC = constr_list$LLC,
+    CONSTRMAT = constr_list$CONSTRMAT, CONSTRLOGSD = constr_list$CONSTRLOGSD,
     N = n, CORRFLAG = constr_list$CORRFLAG,
     NTHR = dims$nthr, NLOAD = dims$nload, NCORR = dims$ncorr, NVAR = dims$nvar
   )

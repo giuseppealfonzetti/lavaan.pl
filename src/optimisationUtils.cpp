@@ -2,7 +2,6 @@
 void sa::proj2(
     Eigen::Map<Eigen::MatrixXd> CONSTRMAT,
     Eigen::Map<Eigen::VectorXd> CONSTRLOGSD,
-    const std::vector<std::vector<std::vector<double>>> LLC,
     Eigen::Map<Eigen::VectorXd> C_VEC,
     const int CORRFLAG,
     const int NTHR,
@@ -16,7 +15,7 @@ void sa::proj2(
   const int q = CONSTRMAT.cols(); // number of latents
 
   // rearrange parameters
-  Eigen::MatrixXd Lam             = params::loadings::theta2mat(THETA, CONSTRMAT, LLC, NTHR, NLOAD);
+  Eigen::MatrixXd Lam             = params::loadings::theta2mat(THETA, CONSTRMAT, NTHR, NLOAD);
   Eigen::MatrixXd Ru              = params::latvar::theta2cmat(THETA, NTHR, NLOAD, NCORR, NVAR, q);
   Eigen::MatrixXd Du              = params::latvar::theta2dmat(THETA, CONSTRLOGSD, NTHR, NLOAD, NCORR, NVAR, q);
   Eigen::MatrixXd Sigma_u         = Du * Ru * Du;

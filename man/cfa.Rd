@@ -76,6 +76,7 @@ interest are:
 \item{\code{se}}{The standard error method to use. Only \code{"robust.huber.white"} is currently supported.}
 \item{\code{test}}{Default \code{"none"}. \code{"standard"} and \code{"mean.var.adjusted"} are computed by \code{\link[=computePLRT]{computePLRT()}}.}
 \item{\code{missing}}{Default \code{"listwise"}. \code{"pairwise"} and \code{"available.cases"} use the complete pairs and the available cases of Katsikatsou et al. (2022).}
+\item{\code{sampling.weights}, \code{cluster}}{Sampling weights, of type \code{"design"} or \code{"frequency"}, and cluster-robust standard errors, as in lavaan.}
 }
 }
 \examples{

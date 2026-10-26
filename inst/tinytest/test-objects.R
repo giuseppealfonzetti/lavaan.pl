@@ -36,9 +36,9 @@ local({
   expect_true(all(is.na(marker$CONSTRLOGSD)))
 
   expect_inherits(set_plfa_model(matrix(NA, 6, 1)), "plfa_model")
-  expect_inherits(set_plfa_model(A, LLC = list(list(c(2, 1), c(0.5, 3, 1)))), "plfa_model")
-  expect_error(set_plfa_model(A, LLC = list(list(c(7, 1), c(0.5, 3, 1)))))
-  expect_error(set_plfa_model(A, LLC = list(list(c(2, 1), c(3, 1)))))
+  expect_inherits(set_plfa_model(A, CONSTRAINTS = list(A = matrix(c(1, -1), 1, 2), b = 0)), "plfa_model")
+  expect_error(set_plfa_model(A, CONSTRAINTS = list(A = matrix(1, 1, 2), b = c(0, 1))))
+  expect_error(set_plfa_model(A, CONSTRAINTS = list(A = 1, b = 0)))
 })
 
 # set_init() validates its arguments

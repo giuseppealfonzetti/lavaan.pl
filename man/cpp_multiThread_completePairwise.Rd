@@ -9,7 +9,6 @@ cpp_multiThread_completePairwise(
   C_VEC,
   CONSTRMAT,
   CONSTRLOGSD,
-  LLC,
   THETA,
   FREQ,
   CORRFLAG,
@@ -30,8 +29,6 @@ cpp_multiThread_completePairwise(
 \item{CONSTRMAT}{\eqn{p*q}-dimensional matrix. Elements set to \code{NA} refers to free loading parameters. Elements set to numerical values denote fixed values constraints.}
 
 \item{CONSTRLOGSD}{\eqn{q}-dimensional vector. Elements set to \code{NA} refers to free latent log standard deviations parameters. Elements set to numerical values denote fixed values constraints.}
-
-\item{LLC}{Linear loadings constraints. Expects a list of constraints. See \link{fit_plFA} documentation.}
 
 \item{THETA}{Parameter vector}
 

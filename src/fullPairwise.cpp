@@ -5,7 +5,6 @@ Rcpp::List fullPairwise::multiThreadContribution(
     const Eigen::Ref<const Eigen::VectorXd> C_VEC,
     const Eigen::Ref<const Eigen::MatrixXd> CONSTRMAT,
     const Eigen::Ref<const Eigen::VectorXd> CONSTRLOGSD,
-    const std::vector<std::vector<std::vector<double>>> LLC,
     const Eigen::Ref<const Eigen::VectorXd> THETA,
     const Eigen::Ref<const Eigen::MatrixXd> FREQ,
     const int CORRFLAG,
@@ -45,7 +44,7 @@ Rcpp::List fullPairwise::multiThreadContribution(
   double iter_ll = 0;
   Eigen::VectorXd iter_gradient = Eigen::VectorXd::Zero(d);
 
-  parallelWorkers::pairsGradient fullpool(CONSTRMAT, CONSTRLOGSD, LLC, C_VEC, FREQ, items_pairs, CORRFLAG, NTHR, NLOAD, NCORR, NVAR,
+  parallelWorkers::pairsGradient fullpool(CONSTRMAT, CONSTRLOGSD, C_VEC, FREQ, items_pairs, CORRFLAG, NTHR, NLOAD, NCORR, NVAR,
                                           SILENTFLAG, GRFLAG, theta, vector_pairs);
   RcppParallel::parallelReduce(0, R, fullpool);
   iter_ll = fullpool.subset_ll;
@@ -72,7 +71,6 @@ Rcpp::List fullPairwise::multiThreadSamplEstHJ(
     const Eigen::Ref<const Eigen::VectorXd> C_VEC,
     const Eigen::Ref<const Eigen::MatrixXd> CONSTRMAT,
     const Eigen::Ref<const Eigen::VectorXd> CONSTRLOGSD,
-    const std::vector<std::vector<std::vector<double>>> LLC,
     int N,
     int CORRFLAG,
     const int NTHR,
@@ -80,7 +78,10 @@ Rcpp::List fullPairwise::multiThreadSamplEstHJ(
     const int NCORR,
     const int NVAR,
     const Eigen::Ref<const Eigen::VectorXd> UFREQ,
-    const Eigen::Ref<const Eigen::VectorXd> UW
+    const Eigen::Ref<const Eigen::VectorXd> UW,
+    const Eigen::Ref<const Eigen::VectorXd> GW,
+    const Eigen::Ref<const Eigen::VectorXd> JW,
+    const Eigen::Ref<const Eigen::VectorXd> CL
 ){
   const int d  = THETA.size();
   const int pp = FREQ.cols();
@@ -91,7 +92,6 @@ Rcpp::List fullPairwise::multiThreadSamplEstHJ(
   parallelWorkers::patternwiseOuterProd estH(
       CONSTRMAT,
       CONSTRLOGSD,
-      LLC,
       C_VEC,
       FREQ,
       CORRFLAG,
@@ -116,12 +116,21 @@ Rcpp::List fullPairwise::multiThreadSamplEstHJ(
       gradmat,
       C_VEC,
       uscore,
-      UW
+      UW,
+      GW,
+      JW,
+      CL,
+      CL.size() > 0 ? static_cast<int>(CL.maxCoeff()) + 1 : 0
   );
 
   RcppParallel::parallelReduce(0, n, estJ);
   Eigen::VectorXd gradJ = estJ.gradient;
   Eigen::MatrixXd J = estJ.variability;
+  if(CL.size() > 0){
+    const double G = estJ.ztot.cols();
+    const Eigen::MatrixXd zc = estJ.ztot.colwise() - estJ.ztot.rowwise().mean();
+    J = G / (G - 1) * zc * zc.transpose();
+  }
 
 
   Rcpp::List output =

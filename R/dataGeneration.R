@@ -86,14 +86,13 @@ build_constrMat <- function(P, Q, STRUCT = c('simple', 'triangular', 'crossed'),
 #' that the corresponding element in the loading matrix is free to be estimated.
 #' A cell equal to \eqn{0} fixes the corresponding element in the loading matrix
 #' to \eqn{0}.
-#' @param LLC Linear loadings constraints. Expects a list of constraints. See [fit_plFA] documentation.
 #' @param SEED Random seed.
 #' @param LB Lower bound for uniform random generator. Default set to 0.
 #' @param UB Upper bound for uniform random generator. Default set to 1.
 #' @param STDLV  Logical indicator. Set it to `TRUE` to fix latent variables scale. Set it `FALSE` to fix loadings scale.
 #' @export
-gen_loadings <- function(CONSTRMAT, FIXED = NULL,  SEED = 123, LB = 0, UB = 1, STDLV=TRUE, LLC=NULL){
-  CONSTRMAT <- check_cnstr_loadings(CONSTRMAT, STDLV = STDLV, LLC=LLC)
+gen_loadings <- function(CONSTRMAT, FIXED = NULL,  SEED = 123, LB = 0, UB = 1, STDLV=TRUE){
+  CONSTRMAT <- check_cnstr_loadings(CONSTRMAT, STDLV = STDLV)
 
   set.seed(SEED)
   p <- check_p(nrow(CONSTRMAT))
@@ -111,16 +110,6 @@ gen_loadings <- function(CONSTRMAT, FIXED = NULL,  SEED = 123, LB = 0, UB = 1, S
       for (h in 1:q) {
         if(is.na(out[j,h])) out[j,h] <- FIXED
       }
-    }
-  }
-
-  if(!is.null(LLC)){
-    for (idx_lc in 1:length(LLC)) {
-      val <- 0
-      for (idx_var in 2:length(LLC[[idx_lc]])) {
-        val <- val + LLC[[idx_lc]][[idx_var]][1]*out[LLC[[idx_lc]][[idx_var]][2], LLC[[idx_lc]][[idx_var]][3]]
-      }
-      out[LLC[[idx_lc]][[1]][1], LLC[[idx_lc]][[1]][2]] <- val
     }
   }
 

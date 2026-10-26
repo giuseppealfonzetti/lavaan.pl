@@ -22,13 +22,10 @@ nthr <- sum(cat)-p
 
   # Simple loading matrix constraints
   A <- build_constrMat(P = p, Q = q, STRUCT = 'simple')
-  llc <- list(list(c(2,1), c(1.5,6,2), c(2,10, 3)),
-              list(c(3,1), c(3,7,2))
-              )
-  A <- lavaan.pl:::check_cnstr_loadings(A, STDLV=stdlv, LLC = llc)
+  A <- lavaan.pl:::check_cnstr_loadings(A, STDLV=stdlv)
 
   # Draw some random loadings according to constraints
-  Load <- gen_loadings(CONSTRMAT = A, STDLV = stdlv, LLC=llc)
+  Load <- gen_loadings(CONSTRMAT = A, STDLV = stdlv)
   nload <- sum(is.na(A))
 
   # Generate random latent correlation matrix
@@ -86,7 +83,6 @@ nthr <- sum(cat)-p
       lavaan.pl:::cpp_loadings_theta2mat(
         THETA = theta,
         CONSTRMAT = A,
-        LLC = llc,
         NTHR = nthr,
         NLOAD = nload
       ),
@@ -163,13 +159,10 @@ nthr <- sum(cat)-p
 
   # Simple loading matrix constraints
   A <- build_constrMat(P = p, Q = q, STRUCT = 'simple')
-  llc <- list(list(c(2,1), c(1,6,2), c(2,10, 3)),
-              list(c(3,1), c(3,7,2))
-  )
-  A <- lavaan.pl:::check_cnstr_loadings(A, stdlv, llc)
+  A <- lavaan.pl:::check_cnstr_loadings(A, stdlv)
 
   # Draw some random loadings according to constraints
-  Load <- gen_loadings(CONSTRMAT = A, STDLV = stdlv, LLC=llc)
+  Load <- gen_loadings(CONSTRMAT = A, STDLV = stdlv)
   nload <- sum(is.na(A))
 
   # Generate random latent correlation matrix
@@ -227,7 +220,6 @@ nthr <- sum(cat)-p
                        lavaan.pl:::cpp_loadings_theta2mat(
                          THETA = theta,
                          CONSTRMAT = A,
-                         LLC = llc,
                          NTHR = nthr,
                          NLOAD = nload
                        ),
@@ -320,13 +312,10 @@ nthr <- sum(cat)-p
 
   # Simple loading matrix constraints
   A <- build_constrMat(P = p, Q = q, STRUCT = 'simple')
-  llc <- list(list(c(2,1), c(1,6,2), c(2,10, 3)),
-              list(c(3,1), c(3,7,2))
-  )
-  A <- lavaan.pl:::check_cnstr_loadings(A, stdlv, llc)
+  A <- lavaan.pl:::check_cnstr_loadings(A, stdlv)
 
   # Draw some random loadings according to constraints
-  Load <- gen_loadings(CONSTRMAT = A, STDLV = stdlv, LLC=llc)
+  Load <- gen_loadings(CONSTRMAT = A, STDLV = stdlv)
   nload <- sum(is.na(A))
 
   # Generate random latent correlation matrix
@@ -384,7 +373,6 @@ nthr <- sum(cat)-p
                        lavaan.pl:::cpp_loadings_theta2mat(
                          THETA = theta,
                          CONSTRMAT = A,
-                         LLC = llc,
                          NTHR = nthr,
                          NLOAD = nload
                        ),
@@ -476,13 +464,10 @@ nthr <- sum(cat)-p
 
   # Simple loading matrix constraints
   A <- build_constrMat(P = p, Q = q, STRUCT = 'simple')
-  llc <- list(list(c(2,1), c(1,6,2), c(2,10, 3)),
-              list(c(3,1), c(3,7,2))
-  )
-  A <- lavaan.pl:::check_cnstr_loadings(A, stdlv, llc)
+  A <- lavaan.pl:::check_cnstr_loadings(A, stdlv)
 
   # Draw some random loadings according to constraints
-  Load <- gen_loadings(CONSTRMAT = A, STDLV = stdlv, LLC=llc)
+  Load <- gen_loadings(CONSTRMAT = A, STDLV = stdlv)
   nload <- sum(is.na(A))
 
   # Generate random latent correlation matrix
@@ -540,7 +525,6 @@ nthr <- sum(cat)-p
                        lavaan.pl:::cpp_loadings_theta2mat(
                          THETA = theta,
                          CONSTRMAT = A,
-                         LLC = llc,
                          NTHR = nthr,
                          NLOAD = nload
                        ),
@@ -617,13 +601,10 @@ nthr <- sum(cat)-p
 
   # Simple loading matrix constraints
   A <- build_constrMat(P = p, Q = q, STRUCT = 'simple')
-  llc <- list(list(c(2,1), c(1,6,2), c(2,10, 3)),
-              list(c(3,1), c(3,7,2))
-  )
-  A <- lavaan.pl:::check_cnstr_loadings(A, stdlv, llc)
+  A <- lavaan.pl:::check_cnstr_loadings(A, stdlv)
 
   # Draw some random loadings according to constraints
-  Load <- gen_loadings(CONSTRMAT = A, STDLV = stdlv, LLC=llc)
+  Load <- gen_loadings(CONSTRMAT = A, STDLV = stdlv)
   nload <- sum(is.na(A))
 
   # Generate random latent correlation matrix
@@ -681,7 +662,6 @@ nthr <- sum(cat)-p
                        lavaan.pl:::cpp_loadings_theta2mat(
                          THETA = theta,
                          CONSTRMAT = A,
-                         LLC = llc,
                          NTHR = nthr,
                          NLOAD = nload
                        ),

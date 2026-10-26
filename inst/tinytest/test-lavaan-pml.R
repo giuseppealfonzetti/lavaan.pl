@@ -118,10 +118,119 @@ local({
   expect_error(cfa(mod, as.data.frame(lapply(as.data.frame(Y), ordered)), std.lv = TRUE, missing = "doubly.robust"))
 })
 
+# Sampling weights and clusters match lavaan PML
+local({
+  d <- as.data.frame(bfi)
+  items <- c("A1", "A2", "A3", "A4", "C1", "C2", "C3", "C4")
+  for (v in items) d[[v]] <- ordered(d[[v]])
+  set.seed(1)
+  d <- d[complete.cases(d[, items]), ][sample(2000, 400), ]
+  d$w <- runif(400, .2, 3)
+  d$cl <- rep(1:40, length.out = 400)
+  dm <- d
+  for (j in c("A2", "A3", "C2", "C3")) dm[[j]][runif(400) < .15] <- NA
+  mod <- "A =~ A1 + A2 + A3 + A4\nC =~ C1 + C2 + C3 + C4"
+  fm <- c("chisq", "chisq.scaled", "df.scaled", "baseline.chisq.scaled", "cfi.scaled")
+  cases <- list(
+    list(data = d, a = list(sampling.weights = "w")),
+    list(data = d, a = list(sampling.weights = "w", sampling.weights.type = "frequency")),
+    list(data = d, a = list(cluster = "cl")),
+    list(data = d, a = list(sampling.weights = "w", cluster = "cl")),
+    list(data = dm, a = list(sampling.weights = "w", missing = "pairwise"))
+  )
+  for (cs in cases) {
+    tst <- if (is.null(cs$a$cluster)) "mean.var.adjusted" else "none"
+    ours <- suppressWarnings(do.call(cfa, c(list(mod, cs$data, std.lv = TRUE, test = tst), cs$a)))
+    ref <- suppressWarnings(do.call(lavaan::cfa, c(list(mod, cs$data, std.lv = TRUE, estimator = "PML", test = tst), cs$a)))
+    expect_equal(parameterEstimates(ours)$est, parameterEstimates(ref)$est, tolerance = 1e-4)
+    expect_equal(parameterEstimates(ours)$se, parameterEstimates(ref)$se, tolerance = 1e-3)
+    expect_equal(ours@optim$logl, ref@optim$logl, tolerance = 1e-6)
+    if (tst != "none") expect_equal(fitMeasures(ours, fm), fitMeasures(ref, fm), tolerance = 1e-3)
+  }
+  expect_error(cfa("A =~ A1 + a*A2 + A3\nC =~ C1 + C2 + C3\na > 2", d, std.lv = TRUE), "Inequality constraints")
+  expect_error(cfa("A =~ A1 + a*A2 + b*A3\nC =~ C1 + C2 + C3\na > b", d, std.lv = TRUE), "Inequality constraints")
+  expect_error(cfa(mod, d, std.lv = TRUE, bounds = "standard"), "bounds")
+  expect_error(cfa(mod, d, std.lv = TRUE, sampling.weights = "w", sampling.weights.normalization = "none"), "normalization")
+})
+
+# Linear constraints on thresholds, loadings and latent variances match lavaan PML
+local({
+  d <- as.data.frame(bfi)
+  items <- c("A1", "A2", "A3", "A4", "C1", "C2", "C3", "C4")
+  for (v in items) d[[v]] <- ordered(d[[v]])
+  set.seed(1)
+  d <- d[complete.cases(d[, items]), ][sample(2000, 600), ]
+  base <- "A =~ A1 + A2 + A3 + A4\nC =~ C1 + C2 + C3 + C4"
+  fm <- c("chisq", "chisq.scaled", "df.scaled", "baseline.chisq.scaled", "cfi.scaled")
+  cases <- list(
+    list(m = "A =~ A1 + a*A2 + b*A3 + A4\nC =~ C1 + C2 + C3 + C4\na == 0.5*b + 0.1", lv = TRUE),
+    list(m = paste(base, "\nA1 | -0.4*t1"), lv = TRUE),
+    list(m = paste(base, "\nA ~~ v*A\nC ~~ v*C"), lv = FALSE),
+    list(m = paste(base, "\nA ~~ v1*A\nC ~~ v2*C\nv1 == 2*v2"), lv = FALSE)
+  )
+  for (cs in cases) {
+    ours <- suppressWarnings(cfa(cs$m, d, std.lv = cs$lv, test = "mean.var.adjusted"))
+    ref <- suppressWarnings(lavaan::cfa(cs$m, d, std.lv = cs$lv, estimator = "PML", test = "mean.var.adjusted"))
+    expect_equal(parameterEstimates(ours)$est, parameterEstimates(ref)$est, tolerance = 1e-4)
+    expect_equal(parameterEstimates(ours)$se, parameterEstimates(ref)$se, tolerance = 1e-3)
+    expect_equal(ours@optim$logl, ref@optim$logl, tolerance = 1e-6)
+    expect_equal(fitMeasures(ours, fm), fitMeasures(ref, fm), tolerance = 1e-3)
+  }
+  # Equal thresholds: lavaan does not converge; its own gradient vanishes on the constraint space at our solution
+  f <- cfa(paste(base, "\nA3 | t*t3\nA4 | t*t3"), d, std.lv = TRUE)
+  g <- lavaan::lavTech(f, "gradient")
+  jc <- f@Model@ceq.JAC
+  N <- qr.Q(qr(t(jc)), complete = TRUE)[, -seq_len(nrow(jc)), drop = FALSE]
+  expect_true(max(abs(crossprod(N, g))) < 1e-4 * max(abs(g)))
+})
+
+# Fixed and constrained latent covariances (direct parametrisation) match lavaan PML
+local({
+  d <- as.data.frame(bfi)
+  items <- c(paste0("A", 1:4), paste0("C", 1:4), paste0("E", 1:4))
+  for (v in items) d[[v]] <- ordered(d[[v]])
+  set.seed(1)
+  d <- d[complete.cases(d[, items]), ][sample(2000, 800), ]
+  three <- "A =~ A1 + A2 + A3 + A4\nC =~ C1 + C2 + C3 + C4\nE =~ E1 + E2 + E3 + E4"
+  fm <- c("chisq", "chisq.scaled", "df.scaled", "baseline.chisq.scaled", "cfi.scaled")
+  cases <- list(
+    list(m = paste(three, "\nA ~~ 0*E"), lv = TRUE),
+    list(m = paste(three, "\nA ~~ 0.3*C"), lv = TRUE),
+    list(m = paste(three, "\nA ~~ r*C\nA ~~ r*E"), lv = TRUE),
+    list(m = paste(three, "\nA ~~ 0.1*E"), lv = FALSE),
+    list(m = paste(three, "\nA ~~ r*C\nA ~~ r*E"), lv = FALSE)
+  )
+  for (cs in cases) {
+    ours <- suppressWarnings(cfa(cs$m, d, std.lv = cs$lv, test = "mean.var.adjusted"))
+    ref <- suppressWarnings(lavaan::cfa(cs$m, d, std.lv = cs$lv, estimator = "PML", test = "mean.var.adjusted"))
+    expect_identical(ours@external$lavaan.pl$model$LATCOV, "direct")
+    expect_equal(parameterEstimates(ours)$est, parameterEstimates(ref)$est, tolerance = 1e-4)
+    expect_equal(parameterEstimates(ours)$se, parameterEstimates(ref)$se, tolerance = 1e-3)
+    expect_equal(ours@optim$logl, ref@optim$logl, tolerance = 1e-6)
+    expect_equal(fitMeasures(ours, fm), fitMeasures(ref, fm), tolerance = 1e-3)
+  }
+  # Bifactor: several local optima; ours is at least as good as lavaan's
+  mb <- paste(three, "\nG =~ A1 + A2 + C1 + C2 + E1 + E2\nG ~~ 0*A\nG ~~ 0*C\nG ~~ 0*E")
+  ours <- suppressWarnings(cfa(mb, d, std.lv = TRUE))
+  ref <- suppressWarnings(lavaan::cfa(mb, d, std.lv = TRUE, estimator = "PML"))
+  expect_true(ours@optim$logl >= ref@optim$logl - 1e-6)
+  # Nested test across parametrisations, against lavaan's exact restriction
+  f1 <- cfa(three, d, std.lv = TRUE, test = "mean.var.adjusted")
+  f0 <- cfa(paste(three, "\nA ~~ 0*E"), d, std.lv = TRUE, test = "mean.var.adjusted")
+  m10 <- lavaan:::lav_test_diff_m10(m1 = f1, m0 = f0, test = FALSE)
+  iH <- solve(lavaan::lavTech(m10, "information.observed"))
+  J <- lavaan::lavTech(m10, "first.order")
+  A <- lavaan:::lav_test_diff_a(m1 = f1, m0 = f0, method = "exact")
+  M <- (A %*% iH %*% J %*% iH %*% t(A)) %*% solve(A %*% iH %*% t(A))
+  expect_equal(lavTestLRT(f1, f0)[2, "Chisq diff"],
+               sum(diag(M)) / sum(diag(M %*% M)) * 2 * (f1@optim$logl - f0@optim$logl), tolerance = 1e-4)
+})
+
 # unsupported models are rejected
 local({
-  expect_error(cfa("A =~ A1 + A2 + A3\nC =~ C1 + C2 + C3\nA ~~ 0.3*C", bfi, std.lv = TRUE), "covariances")
-  expect_error(cfa("A =~ A1 + A2 + A3\nA1 | -1*t1", bfi, std.lv = TRUE), "threshold")
+  expect_error(cfa("A =~ A1 + A2 + A3\nC =~ C1 + C2 + C3\nA ~~ v*A\nA ~~ c*C\nc == v", bfi, std.lv = FALSE), "covariances and variances")
+  expect_error(cfa("A =~ A1 + A2 + A3\nC =~ C1 + C2 + C3\nA ~~ v1*A\nC ~~ v2*C\nv1 == v2 + 0.5", bfi, std.lv = FALSE), "variances")
+  expect_error(cfa("A =~ A1 + a*A2 + A3\nA1 | t*t1\na == t", bfi, std.lv = TRUE), "either thresholds")
   expect_error(cfa("A =~ A1 + A2 + A3\nA1 ~~ A2", bfi, std.lv = TRUE), "residual")
   expect_error(cfa("A =~ A1 + A2 + A3\nC =~ C1 + C2 + C3\nC ~ A", bfi, std.lv = TRUE), "regression")
   expect_error(cfa("A =~ A1 + A2 + A3", bfi, std.lv = TRUE, parameterization = "theta"), "parameterization")

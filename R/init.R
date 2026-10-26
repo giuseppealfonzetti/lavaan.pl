@@ -41,7 +41,6 @@ init_par_with_plSA <- function(DIMS, CONSTR_LIST, FREQ, INIT_CONTROL, INIT, UFRE
                      C_VEC       = DIMS$cat,
                      CONSTRMAT   = CONSTR_LIST$CONSTRMAT,
                      CONSTRLOGSD = CONSTR_LIST$CONSTRLOGSD,
-                     LLC         = CONSTR_LIST$LLC,
                      THETA_INIT  = start_par,
                      NTHR        = DIMS$nthr,
                      NLOAD       = DIMS$nload,

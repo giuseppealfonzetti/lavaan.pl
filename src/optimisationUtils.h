@@ -10,7 +10,6 @@ namespace sa{
   void proj2(
         Eigen::Map<Eigen::MatrixXd> CONSTRMAT,
         Eigen::Map<Eigen::VectorXd> CONSTRLOGSD,
-        const std::vector<std::vector<std::vector<double>>> LLC,
         Eigen::Map<Eigen::VectorXd> C_VEC,
         const int CORRFLAG,
         const int NTHR,

@@ -12,6 +12,7 @@
 #'   \item{\code{se}}{The standard error method to use. Only `"robust.huber.white"` is currently supported.}
 #'   \item{\code{test}}{Default `"none"`. `"standard"` and `"mean.var.adjusted"` are computed by [computePLRT()].}
 #'   \item{\code{missing}}{Default `"listwise"`. `"pairwise"` and `"available.cases"` use the complete pairs and the available cases of Katsikatsou et al. (2022).}
+#'   \item{\code{sampling.weights}, \code{cluster}}{Sampling weights, of type `"design"` or `"frequency"`, and cluster-robust standard errors, as in lavaan.}
 #' }
 #'
 #' @param model A description of the user-specified model. Typically, the model
@@ -198,8 +199,8 @@ spec_from_lavaan <- function(template, start = NULL, valdata = NULL) {
   if (any(pt$op %in% c("~", "<~")) || any(pt$op == "=~" & pt$rhs %in% lv)) {
     stop("Structural regressions and higher-order factors are not currently supported.", call. = FALSE)
   }
-  if (any(pt$op %in% c("<", ">"))) {
-    stop("Inequality constraints are not currently supported.", call. = FALSE)
+  if (nrow(template@Model@cin.JAC) > 0L || any(is.finite(c(pt$lower[pt$free > 0], pt$upper[pt$free > 0])))) {
+    stop("Inequality constraints and parameter bounds are not currently supported.", call. = FALSE)
   }
   if (any(pt$free > 0 & pt$op == "~~" & !(pt$lhs %in% lv & pt$rhs %in% lv))) {
     stop("Free residual variances or covariances are not currently supported.", call. = FALSE)
@@ -207,9 +208,6 @@ spec_from_lavaan <- function(template, start = NULL, valdata = NULL) {
   other <- pt$free > 0 & !(pt$op %in% c("=~", "~~", "|"))
   if (any(other)) {
     stop(paste0("Free `", paste(unique(pt$op[other]), collapse = "`, `"), "` parameters are not currently supported."), call. = FALSE)
-  }
-  if (any(pt$free[pt$op == "|"] == 0)) {
-    stop("Fixed thresholds are not currently supported.", call. = FALSE)
   }
 
   data <- template@Data@X[[1]] - 1
@@ -226,15 +224,13 @@ spec_from_lavaan <- function(template, start = NULL, valdata = NULL) {
   est <- lapply(lavaan::lavInspect(template, "est"), unclass)
   q <- ncol(free$lambda)
 
-  # CORRFLAG
+  # Latent correlations: LKJ when all free and unconstrained, orthogonal when all
+  # fixed to zero, direct covariances otherwise
   off <- lower.tri(free$psi)
-  if (all(free$psi[off] > 0)) {
-    corrflag <- TRUE
-  } else if (all(free$psi[off] == 0 & est$psi[off] == 0)) {
-    corrflag <- FALSE
-  } else {
-    stop("Latent covariances must be either all free or all fixed to zero.", call. = FALSE)
-  }
+  cov_x <- free$psi[off][free$psi[off] > 0]
+  cov_con <- nrow(template@Model@ceq.JAC) > 0L && any(template@Model@ceq.JAC[, cov_x, drop = FALSE] != 0)
+  corrflag <- !all(free$psi[off] == 0 & est$psi[off] == 0)
+  latcov <- if (corrflag && (!all(free$psi[off] > 0) || cov_con)) "direct" else "lkj"
   constrvar <- diag(est$psi)
   constrvar[diag(free$psi) > 0] <- NA
   if (any(constrvar <= 0, na.rm = TRUE)) {
@@ -245,35 +241,70 @@ spec_from_lavaan <- function(template, start = NULL, valdata = NULL) {
   constrmat <- est$lambda
   constrmat[free$lambda > 0] <- NA
 
-  # Linear loadings constraints
-  llc <- NULL
+  # Linear equality constraints A theta = b, in lavaan.pl's parameter order
+  if (isTRUE(template@Model@ceq.simple.only)) {
+    stop("ceq.simple = TRUE is not currently supported.", call. = FALSE)
+  }
+  if (length(template@Model@ceq.nonlinear.idx) > 0L) {
+    stop("Nonlinear equality constraints are not currently supported.", call. = FALSE)
+  }
+  nthr <- length(est$tau)
+  nload <- sum(is.na(constrmat))
+  ncorr <- if (corrflag) q * (q - 1) / 2 else 0
+  vfree <- diag(free$psi) > 0
+  d <- nthr + nload + ncorr + sum(vfree)
+  pos <- type <- rep(NA, template@Model@nx.free)
+  pos[free$tau[free$tau > 0]] <- which(free$tau > 0)
+  type[free$tau[free$tau > 0]] <- "tau"
+  pos[free$lambda[free$lambda > 0]] <- nthr + seq_len(nload)
+  type[free$lambda[free$lambda > 0]] <- "lambda"
+  pos[diag(free$psi)[vfree]] <- nthr + nload + ncorr + seq_len(sum(vfree))
+  type[diag(free$psi)[vfree]] <- "var"
+  type[cov_x] <- "cov"
+  cpos <- matrix(NA, q, q)
+  if (corrflag) {
+    cpos[upper.tri(cpos)] <- nthr + nload + seq_len(ncorr)
+    cpos[lower.tri(cpos)] <- t(cpos)[lower.tri(cpos)]
+    pos[cov_x] <- cpos[off][free$psi[off] > 0]
+  }
   jac <- template@Model@ceq.JAC
-  if (nrow(jac) > 0L) {
-    if (length(template@Model@ceq.nonlinear.idx) > 0L || any(template@Model@ceq.rhs != 0)) {
-      stop("Only homogeneous linear equality constraints are currently supported.", call. = FALSE)
+  rhs <- template@Model@ceq.rhs
+  A <- matrix(0, 0, d)
+  b <- numeric(0)
+  for (r in seq_len(nrow(jac))) {
+    nz <- which(jac[r, ] != 0)
+    row <- numeric(d)
+    if (any(type[nz] == "cov") && any(type[nz] == "var")) {
+      stop("Constraints mixing latent covariances and variances are not currently supported.", call. = FALSE)
+    } else if (all(type[nz] == "var")) {
+      k <- if (length(nz) == 2L && rhs[r] == 0) -jac[r, nz[2]] / jac[r, nz[1]] else NA
+      if (!isTRUE(k > 0)) {
+        stop("Constraints on latent variances must be equalities or ratios (v1 == k*v2).", call. = FALSE)
+      }
+      row[pos[nz]] <- c(1, -1)
+      A <- rbind(A, row)
+      b <- c(b, log(k) / 2)
+    } else if (any(type[nz] == "var")) {
+      stop("Constraints mixing latent variances with other parameters are not currently supported.", call. = FALSE)
+    } else {
+      row[pos[nz]] <- jac[r, nz]
+      A <- rbind(A, row)
+      b <- c(b, rhs[r])
     }
-    load_idx <- free$lambda[free$lambda > 0]
-    if (any(jac[, -load_idx] != 0)) {
-      stop("Equality constraints are only supported on factor loadings.", call. = FALSE)
+  }
+  for (k in which(free$tau == 0)) {
+    row <- numeric(d)
+    row[k] <- 1
+    A <- rbind(A, row)
+    b <- c(b, est$tau[k])
+  }
+  if (latcov == "direct") {
+    for (k in which(off & free$psi == 0)) {
+      row <- numeric(d)
+      row[cpos[k]] <- 1
+      A <- rbind(A, row)
+      b <- c(b, est$psi[k])
     }
-    jac <- jac[, load_idx, drop = FALSE]
-    piv <- integer(0)
-    for (j in seq_len(ncol(jac))) {
-      r <- length(piv) + 1L
-      if (r > nrow(jac)) break
-      i <- r - 1L + which.max(abs(jac[r:nrow(jac), j]))
-      if (abs(jac[i, j]) < 1e-10) next
-      jac[c(r, i), ] <- jac[c(i, r), ]
-      jac[r, ] <- jac[r, ] / jac[r, j]
-      jac[-r, ] <- jac[-r, , drop = FALSE] - outer(jac[-r, j], jac[r, ])
-      piv <- c(piv, j)
-    }
-    coords <- t(vapply(load_idx, function(i) as.numeric(which(free$lambda == i, arr.ind = TRUE)), numeric(2)))
-    llc <- lapply(seq_along(piv), function(r) {
-      refs <- setdiff(which(abs(jac[r, ]) > 1e-10), piv)
-      c(list(coords[piv[r], ]), lapply(refs, function(j) c(-jac[r, j], coords[j, ])))
-    })
-    constrmat[coords[piv, , drop = FALSE]] <- 1
   }
 
   # Build constraint list
@@ -282,7 +313,8 @@ spec_from_lavaan <- function(template, start = NULL, valdata = NULL) {
     CONSTRVAR = constrvar,
     CORRFLAG = corrflag,
     STDLV = !anyNA(constrvar),
-    LLC = llc
+    CONSTRAINTS = if (nrow(A) > 0L) list(A = unname(A), b = b),
+    LATCOV = latcov
   )
   if (!identical(is.na(model$CONSTRMAT), is.na(constrmat))) {
     stop("This identification of the latent variables is not currently supported.", call. = FALSE)
@@ -292,16 +324,31 @@ spec_from_lavaan <- function(template, start = NULL, valdata = NULL) {
   # correlations, then latent variances.
   if (is.null(start)) {
     start_glist <- lapply(lavaan::lavInspect(template, "start"), unclass)
+    start_glist$tau[] <- unlist(lapply(seq_len(ncol(data)), function(j) {
+      stats::qnorm(cumsum(tabulate(data[, j] + 1, nlev[j]))[-nlev[j]] / sum(!is.na(data[, j])))
+    }))
   } else {
     start_glist <- lavaan::lav_model_set_parameters(template@Model, as.numeric(start))@GLIST
   }
   init <- c(
     as.numeric(start_glist$tau),
     cpp_loadings_mat2vec(start_glist$lambda, constrmat, sum(is.na(constrmat))),
-    cpp_latvar_mat2vec(start_glist$psi, log(sqrt(constrvar)), if (corrflag) q * (q - 1) / 2 else 0, sum(is.na(constrvar)))
+    cpp_latvar_mat2vec(start_glist$psi, log(sqrt(constrvar)), if (corrflag) q * (q - 1) / 2 else 0, sum(is.na(constrvar)),
+                       corrflag_code(model))
   )
 
-  list(DATA = set_plfa_data(data, valdata, MISSING = missing), MODEL = model, THETA = init)
+  weights <- NULL
+  if (length(template@Data@sampling.weights) > 0L) {
+    if (template@Options$sampling.weights.normalization == "none") {
+      stop("sampling.weights.normalization = \"none\" is not currently supported.", call. = FALSE)
+    }
+    weights <- template@Data@weights[[1]]
+  }
+  cluster <- if (isTRUE(template@Options$.clustered)) template@Data@Lp[[1]]$cluster.idx[[2]] else NULL
+  data_spec <- set_plfa_data(data, valdata, MISSING = missing, WEIGHTS = weights,
+                             WEIGHTS_TYPE = template@Options$sampling.weights.type, CLUSTER = cluster)
+
+  list(DATA = data_spec, MODEL = model, THETA = init)
 }
 
 #' Convert a lavaan.pl fit into a lavaan object
@@ -354,7 +401,8 @@ as_lavaan <- function(fit, vars = NULL, template) {
   # Change vcov slot -----------------------------------------------------------
   vcov <- NULL
   if (!is.null(vars)) {
-    delta <- numDeriv::jacobian(par_lav, fit$theta)
+    delta <- numDeriv::jacobian(function(x) par_lav(as.vector(fit$lincon$K %*% x + fit$lincon$c)),
+                                fit$theta[fit$lincon$free_idx])
     hinv <- solve(vars$H)
     vcov <- delta %*% hinv %*% vars$J %*% hinv %*% t(delta) / fit$dims$n
     attr(vcov, "E.inv") <- delta %*% hinv %*% t(delta)

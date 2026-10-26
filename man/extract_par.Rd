@@ -9,11 +9,11 @@ extract_par(
   OPTION = c("list", "raw", "transformed"),
   CONSTRMAT,
   CONSTRLOGSD,
-  LLC,
   NTHR,
   NLOAD,
   NCORR,
-  NVAR
+  NVAR,
+  CORRFLAG = 1
 )
 }
 \arguments{
@@ -31,8 +31,6 @@ extract_par(
 
 \item{CONSTRLOGSD}{\eqn{q}-dimensional vector. Elements set to \code{NA} refers to free latent log standard deviations parameters. Elements set to numerical values denote fixed values constraints.}
 
-\item{LLC}{Linear loadings constraints. Expects a list of constraints. See \link{fit_plFA} documentation.}
-
 \item{NTHR}{Number of thresholds parameters.}
 
 \item{NLOAD}{Number of free loadings parameters}
@@ -40,6 +38,8 @@ extract_par(
 \item{NCORR}{Number of free latent correlations parameters.}
 
 \item{NVAR}{Number of free latent variance parameters.}
+
+\item{CORRFLAG}{Parametrisation of the latent correlations: 1 for LKJ, 2 for direct covariances.}
 }
 \description{
 Extract parameters

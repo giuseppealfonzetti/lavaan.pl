@@ -10,7 +10,6 @@
 Rcpp::List cpp_compute_pair_ext(
      Eigen::Map<Eigen::MatrixXd> CONSTRMAT,
      Eigen::Map<Eigen::VectorXd> CONSTRLOGSD,
-     const std::vector<std::vector<std::vector<double>>> LLC,
      Eigen::Map<Eigen::VectorXd> C_VEC,
      Eigen::VectorXd THETA,
      const int NTHR,
@@ -20,7 +19,8 @@ Rcpp::List cpp_compute_pair_ext(
      const unsigned int K,
      const unsigned int L,
      Eigen::MatrixXd PAIRS_TABLE,
-     const unsigned int GRADFLAG
+     const unsigned int GRADFLAG,
+     const int CORRFLAG = 1
  );
 
 // [[Rcpp::export]]
@@ -34,7 +34,6 @@ Eigen::VectorXd cpp_loadings_theta2vec(
 Eigen::MatrixXd cpp_loadings_theta2mat(
     Eigen::Map<Eigen::VectorXd> THETA,
     Eigen::Map<Eigen::MatrixXd> CONSTRMAT,
-    const std::vector<std::vector<std::vector<double>>> LLC,
     const int NTHR,
     const int NLOAD
 );
@@ -78,20 +77,21 @@ Eigen::MatrixXd cpp_latvar_theta2mat(
     const int NLOAD,
     const int NCORR,
     const int NVAR,
-    const int Q);
+    const int Q,
+    const int CORRFLAG = 1);
 
 // [[Rcpp::export]]
 Eigen::VectorXd cpp_latvar_mat2vec(Eigen::Map<Eigen::MatrixXd> S,
                                    Eigen::Map<Eigen::VectorXd> CONSTRLOGSD,
                                    const int NCORR,
-                                   const int NVAR);
+                                   const int NVAR,
+                                   const int CORRFLAG = 1);
 
 // [[Rcpp::export]]
 Eigen::VectorXd cpp_sa_proj(
     Eigen::Map<Eigen::VectorXd> THETA,
     Eigen::Map<Eigen::MatrixXd> CONSTRMAT,
     Eigen::Map<Eigen::VectorXd> CONSTRLOGSD,
-    const std::vector<std::vector<std::vector<double>>> LLC,
     Eigen::Map<Eigen::VectorXd> C_VEC,
     const int CORRFLAG,
     const int NTHR,
@@ -108,7 +108,6 @@ Rcpp::List cpp_sample_estimators_HJ(
     Eigen::Map<Eigen::VectorXd> C_VEC,
     Eigen::Map<Eigen::MatrixXd> CONSTRMAT,
     Eigen::Map<Eigen::VectorXd> CONSTRLOGSD,
-    const std::vector<std::vector<std::vector<double>>> LLC,
     int N,
     int CORRFLAG,
     const int NTHR,
@@ -116,7 +115,10 @@ Rcpp::List cpp_sample_estimators_HJ(
     const int NCORR,
     const int NVAR,
     Rcpp::NumericVector UFREQ = Rcpp::NumericVector::create(),
-    Rcpp::NumericVector UW = Rcpp::NumericVector::create()
+    Rcpp::NumericVector UW = Rcpp::NumericVector::create(),
+    Rcpp::NumericVector GW = Rcpp::NumericVector::create(),
+    Rcpp::NumericVector JW = Rcpp::NumericVector::create(),
+    Rcpp::NumericVector CL = Rcpp::NumericVector::create()
 );
 
 // [[Rcpp::export]]
@@ -140,7 +142,8 @@ Eigen::VectorXd cpp_saturated_traces(
     Eigen::Map<Eigen::MatrixXd> ST,
     Eigen::Map<Eigen::MatrixXd> SR,
     Eigen::Map<Eigen::VectorXd> W,
-    const double N
+    const double N,
+    const bool FULL = false
 );
 
 

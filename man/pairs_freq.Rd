@@ -4,7 +4,7 @@
 \alias{pairs_freq}
 \title{Compute pairwise frequencies}
 \usage{
-pairs_freq(Y, C_VEC)
+pairs_freq(Y, C_VEC, WEIGHTS = as.numeric(c()))
 }
 \arguments{
 \item{Y}{Integer matrix of dimension \eqn{n*p}, where \eqn{n} is the sample size
@@ -14,6 +14,8 @@ For example, an item with three categories can only accept values contained in
 
 \item{C_VEC}{Integer vector indicating how many possible categories are associated to
 each item in 'Y'.}
+
+\item{WEIGHTS}{Optional vector of unit weights. Empty for unit weights.}
 }
 \value{
 It returns a 5-rows matrix with each combination of items and categories as columns.

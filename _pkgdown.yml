@@ -39,6 +39,7 @@ reference:
   - title: Inputs and controls
     contents:
       - starts_with("set_")
+      - theta_names
 
   - title: Generating data
     contents:

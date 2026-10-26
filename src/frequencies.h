@@ -10,6 +10,7 @@
 //' \eqn{\{0, 1, 2\}}.
 //' @param C_VEC Integer vector indicating how many possible categories are associated to
 //' each item in 'Y'.
+//' @param WEIGHTS Optional vector of unit weights. Empty for unit weights.
 //'
 //' @return
 //' It returns a 5-rows matrix with each combination of items and categories as columns.
@@ -20,7 +21,8 @@
 // [[Rcpp::export]]
  Eigen::MatrixXd pairs_freq(
      Eigen::Map<Eigen::MatrixXd> Y,
-     Eigen::Map<Eigen::VectorXd> C_VEC
+     Eigen::Map<Eigen::VectorXd> C_VEC,
+     Rcpp::NumericVector WEIGHTS = Rcpp::NumericVector::create()
  );
 
 #endif

@@ -3,7 +3,6 @@
 Rcpp::List cpp_compute_pair_ext(
      Eigen::Map<Eigen::MatrixXd> CONSTRMAT,
      Eigen::Map<Eigen::VectorXd> CONSTRLOGSD,
-     const std::vector<std::vector<std::vector<double>>> LLC,
      Eigen::Map<Eigen::VectorXd> C_VEC,
      Eigen::VectorXd THETA,
      const int NTHR,
@@ -13,7 +12,8 @@ Rcpp::List cpp_compute_pair_ext(
      const unsigned int K,
      const unsigned int L,
      Eigen::MatrixXd PAIRS_TABLE,
-     const unsigned int GRADFLAG
+     const unsigned int GRADFLAG,
+     const int CORRFLAG
  ){
    const int d = NTHR+NLOAD+NCORR+NVAR;
 
@@ -21,7 +21,7 @@ Rcpp::List cpp_compute_pair_ext(
 
    double ll = 0;
    Eigen::VectorXd gradient = Eigen::VectorXd::Zero(d);
-   const pairs::Setup S(THETA, CONSTRMAT, CONSTRLOGSD, LLC, NTHR, NLOAD, NCORR, NVAR);
+   const pairs::Setup S(THETA, CONSTRMAT, CONSTRLOGSD, NTHR, NLOAD, NCORR, NVAR, CORRFLAG);
    pairs::pair_contribution(S, C_VEC, PAIRS_TABLE, K, L, GRADFLAG, ll, gradient);
 
    Rcpp::List output =
@@ -44,11 +44,10 @@ Eigen::VectorXd cpp_loadings_theta2vec(
 Eigen::MatrixXd cpp_loadings_theta2mat(
     Eigen::Map<Eigen::VectorXd> THETA,
     Eigen::Map<Eigen::MatrixXd> CONSTRMAT,
-    const std::vector<std::vector<std::vector<double>>> LLC,
     const int NTHR,
     const int NLOAD
 ){
-  return params::loadings::theta2mat(THETA, CONSTRMAT, LLC, NTHR, NLOAD);
+  return params::loadings::theta2mat(THETA, CONSTRMAT, NTHR, NLOAD);
 }
 
 
@@ -97,14 +96,36 @@ Eigen::MatrixXd cpp_latvar_theta2mat(
     const int NLOAD,
     const int NCORR,
     const int NVAR,
-    const int Q){
+    const int Q,
+    const int CORRFLAG){
+  if(CORRFLAG == 2){
+    const Eigen::VectorXd sd = params::latvar::theta2dmat(THETA, CONSTRLOGSD, NTHR, NLOAD, NCORR, NVAR, Q).diagonal();
+    Eigen::MatrixXd out = sd.array().square().matrix().asDiagonal();
+    for(int c = 1, a = 0; c < Q; c++){
+      for(int r = 0; r < c; r++, a++){
+        out(r, c) = THETA(NTHR + NLOAD + a);
+        out(c, r) = THETA(NTHR + NLOAD + a);
+      }
+    }
+    return out;
+  }
   return params::latvar::theta2mat(THETA, CONSTRLOGSD, NTHR, NLOAD, NCORR, NVAR, Q);
 }
 
 Eigen::VectorXd cpp_latvar_mat2vec(Eigen::Map<Eigen::MatrixXd> S,
                                    Eigen::Map<Eigen::VectorXd> CONSTRLOGSD,
                                    const int NCORR,
-                                   const int NVAR){
+                                   const int NVAR,
+                                   const int CORRFLAG){
+  if(CORRFLAG == 2){
+    const int q = S.cols();
+    Eigen::VectorXd out(NCORR + NVAR);
+    for(int c = 1, a = 0; c < q; c++){
+      for(int r = 0; r < c; r++, a++) out(a) = S(r, c);
+    }
+    if(NVAR > 0) out.tail(NVAR) = params::latvar::edvec2dvec(params::latvar::mat2edvec(S), CONSTRLOGSD, q, NVAR);
+    return out;
+  }
   return params::latvar::mat2vec(S, CONSTRLOGSD, NCORR, NVAR);
 }
 
@@ -112,7 +133,6 @@ Eigen::VectorXd cpp_sa_proj(
     Eigen::Map<Eigen::VectorXd> THETA,
     Eigen::Map<Eigen::MatrixXd> CONSTRMAT,
     Eigen::Map<Eigen::VectorXd> CONSTRLOGSD,
-    const std::vector<std::vector<std::vector<double>>> LLC,
     Eigen::Map<Eigen::VectorXd> C_VEC,
     const int CORRFLAG,
     const int NTHR,
@@ -124,7 +144,6 @@ Eigen::VectorXd cpp_sa_proj(
   Eigen::VectorXd theta = THETA;
   sa::proj2(CONSTRMAT,
            CONSTRLOGSD,
-           LLC,
            C_VEC,
            CORRFLAG,
            NTHR,
@@ -143,7 +162,6 @@ Rcpp::List cpp_sample_estimators_HJ(
     Eigen::Map<Eigen::VectorXd> C_VEC,
     Eigen::Map<Eigen::MatrixXd> CONSTRMAT,
     Eigen::Map<Eigen::VectorXd> CONSTRLOGSD,
-    const std::vector<std::vector<std::vector<double>>> LLC,
     int N,
     int CORRFLAG,
     const int NTHR,
@@ -151,7 +169,10 @@ Rcpp::List cpp_sample_estimators_HJ(
     const int NCORR,
     const int NVAR,
     Rcpp::NumericVector UFREQ,
-    Rcpp::NumericVector UW
+    Rcpp::NumericVector UW,
+    Rcpp::NumericVector GW,
+    Rcpp::NumericVector JW,
+    Rcpp::NumericVector CL
 ){
   // Rcpp::Rcout << "ef|theta:\n";
   // Rcpp::Rcout << THETA.transpose()<<"\n";
@@ -162,7 +183,6 @@ Rcpp::List cpp_sample_estimators_HJ(
     C_VEC,
     CONSTRMAT,
     CONSTRLOGSD,
-    LLC,
     N,
     CORRFLAG,
     NTHR,
@@ -170,7 +190,10 @@ Rcpp::List cpp_sample_estimators_HJ(
     NCORR,
     NVAR,
     Eigen::Map<Eigen::VectorXd>(UFREQ.begin(), UFREQ.size()),
-    Eigen::Map<Eigen::VectorXd>(UW.begin(), UW.size())
+    Eigen::Map<Eigen::VectorXd>(UW.begin(), UW.size()),
+    Eigen::Map<Eigen::VectorXd>(GW.begin(), GW.size()),
+    Eigen::Map<Eigen::VectorXd>(JW.begin(), JW.size()),
+    Eigen::Map<Eigen::VectorXd>(CL.begin(), CL.size())
   );
 
   return output;
@@ -201,15 +224,26 @@ Eigen::VectorXd cpp_saturated_traces(
     Eigen::Map<Eigen::MatrixXd> ST,
     Eigen::Map<Eigen::MatrixXd> SR,
     Eigen::Map<Eigen::VectorXd> W,
-    const double N
+    const double N,
+    const bool FULL
 ){
-  Eigen::MatrixXd U = SR - HTR.transpose() * HTT.ldlt().solve(ST);
-  U *= W.cwiseSqrt().asDiagonal();
   const Eigen::VectorXd dinv = D.cwiseInverse();
-  const Eigen::MatrixXd Ud = dinv.asDiagonal() * U;
   const Eigen::MatrixXd B = HTT - HTR * dinv.asDiagonal() * HTR.transpose();
-  const Eigen::MatrixXd AinvU = Ud + dinv.asDiagonal() * (HTR.transpose() * B.ldlt().solve(HTR * Ud));
-  const Eigen::MatrixXd M = (U.cols() <= U.rows()) ? Eigen::MatrixXd(U.transpose() * AinvU / N) : Eigen::MatrixXd(AinvU * U.transpose() / N);
+  Eigen::MatrixXd M;
+  if(FULL){
+    const Eigen::MatrixXd st = ST * W.cwiseSqrt().asDiagonal(), sr = SR * W.cwiseSqrt().asDiagonal();
+    Eigen::MatrixXd S(st.rows() + sr.rows(), st.cols()), X(st.rows() + sr.rows(), st.cols());
+    S << st, sr;
+    const Eigen::MatrixXd xt = B.ldlt().solve(st - HTR * (dinv.asDiagonal() * sr));
+    X << xt, dinv.asDiagonal() * (sr - HTR.transpose() * xt);
+    M = (S.cols() <= S.rows()) ? Eigen::MatrixXd(S.transpose() * X / N) : Eigen::MatrixXd(X * S.transpose() / N);
+  }else{
+    Eigen::MatrixXd U = SR - HTR.transpose() * HTT.ldlt().solve(ST);
+    U *= W.cwiseSqrt().asDiagonal();
+    const Eigen::MatrixXd Ud = dinv.asDiagonal() * U;
+    const Eigen::MatrixXd AinvU = Ud + dinv.asDiagonal() * (HTR.transpose() * B.ldlt().solve(HTR * Ud));
+    M = (U.cols() <= U.rows()) ? Eigen::MatrixXd(U.transpose() * AinvU / N) : Eigen::MatrixXd(AinvU * U.transpose() / N);
+  }
 
   Eigen::VectorXd out(2);
   out(0) = M.trace();

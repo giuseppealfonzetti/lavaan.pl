@@ -13,16 +13,19 @@ namespace pairs{
     Eigen::VectorXd sd, tau;
     std::vector<int> ra, ca, sfree;
     std::vector<Eigen::MatrixXd> JL;
+    // Direct parametrisation of the latent covariances (CORRFLAG = 2)
+    bool direct;
+    Eigen::MatrixXd Sig;
 
     Setup(
       const Eigen::Ref<const Eigen::VectorXd> THETA,
       const Eigen::Ref<const Eigen::MatrixXd> CONSTRMAT,
       const Eigen::Ref<const Eigen::VectorXd> CONSTRLOGSD,
-      const std::vector<std::vector<std::vector<double>>> &LLC,
       const int NTHR,
       const int NLOAD,
       const int NCORR,
-      const int NVAR);
+      const int NVAR,
+      const int CORRFLAG = 1);
   };
 
   struct Pair{

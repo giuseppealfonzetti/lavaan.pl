@@ -12,7 +12,8 @@ set_plfa_model(
   CONSTRVAR = NULL,
   CORRFLAG = TRUE,
   STDLV = TRUE,
-  LLC = NULL
+  CONSTRAINTS = NULL,
+  LATCOV = c("lkj", "direct")
 )
 }
 \arguments{
@@ -35,20 +36,19 @@ otherwise.}
 \item{STDLV}{Logical indicator. Set it to
 \code{TRUE} to fix latent variables scale. Set it \code{FALSE} to fix loadings scale.}
 
-\item{LLC}{Linear loadings constraints. Expects a list
-of constraints. The argument \code{LLC} is expected to be a list of constraints,
-e.g. \code{LLC <- list(constraint_1, constraint2, ...)}, where each
-constraint is defined by a list itself. For example, to impose the
-constraint "L_(2,1)=0.5L_(5,2)+0.25L_(9,3)" you have to write \code{constraint_1 <- list(c(2,1), c(0.5,5,2), c(0.25, 9,3))}. That is: the first vector of the
-list is 2-dimensional and stores the coordinates of the constrained loading.
-Each of the successive triplets represent a linear coefficient followed by
-the coordinates of the loading of reference. You can set up an arbitrary
-number of triplets in each constraint.}
+\item{CONSTRAINTS}{Linear equality constraints \code{A \%*\% theta = b} on the parameter vector, as
+\code{list(A = , b = )}, with one column of \code{A} per parameter in the order of \code{\link[=theta_names]{theta_names()}}. Each
+constraint involves either thresholds, loadings, latent covariances (with \code{LATCOV = "direct"}) or
+latent log standard deviations.}
+
+\item{LATCOV}{Parametrisation of the latent correlations: \code{"lkj"} (Cholesky factor with Fisher-z
+angles, always positive definite) or \code{"direct"} (the latent covariances themselves, which allows
+linear constraints on them).}
 }
 \value{
 An object of class \code{plfa_model} with the identified loading constraints \code{CONSTRMAT},
 the log standard deviations of the latent variables \code{CONSTRLOGSD} (\code{NA} when free),
-\code{CORRFLAG}, \code{STDLV}, \code{LLC}, and the numbers of items \code{p} and latent variables \code{q}.
+\code{CORRFLAG}, \code{STDLV}, \code{CONSTRAINTS}, \code{LATCOV}, and the numbers of items \code{p} and latent variables \code{q}.
 }
 \description{
 Print method for \code{plfa_model} objects

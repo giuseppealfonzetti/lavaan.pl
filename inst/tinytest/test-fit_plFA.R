@@ -20,10 +20,9 @@ if(1){
 
   # Simple loading matrix constraints
   A <- build_constrMat(P = p, Q = q, STRUCT = 'simple')
-  llc <- NULL
-  A <- lavaan.pl:::check_cnstr_loadings(A, stdlv, LLC=llc)
+  A <- lavaan.pl:::check_cnstr_loadings(A, stdlv)
   # Draw some random loadings according to constraints
-  Load <- gen_loadings(CONSTRMAT = A, STDLV = stdlv, LLC=llc)
+  Load <- gen_loadings(CONSTRMAT = A, STDLV = stdlv)
   nload <- sum(is.na(A))
 
   # Generate random latent correlation matrix
@@ -66,7 +65,7 @@ if(1){
     LOADINGS = Load,
     THRESHOLDS = thr,
     LATENT_COV = S)
-  constr_list <- list(CONSTRMAT=A, CORRFLAG=corrflag, CONSTRVAR=exp(constr_lsd)^2, STDLV=stdlv, LLC=llc)
+  constr_list <- list(CONSTRMAT=A, CORRFLAG=corrflag, CONSTRVAR=exp(constr_lsd)^2, STDLV=stdlv)
 
   plFit <- suppressWarnings(fit_plFA(
     DATA = set_plfa_data(dat),
@@ -85,7 +84,6 @@ if(1){
     C_VEC = plFit$dims$cat,
     CONSTRMAT=plFit$model$CONSTRMAT,
     CONSTRLOGSD=plFit$model$CONSTRLOGSD,
-    LLC = plFit$model$LLC,
     THETA_INIT = plFit$init,
     NTHR = plFit$dims$nthr,
     NLOAD= plFit$dims$nload,
@@ -128,10 +126,9 @@ if(1){
 
   # Simple loading matrix constraints
   A <- build_constrMat(P = p, Q = q, STRUCT = 'simple')
-  llc <- NULL
-  A <- lavaan.pl:::check_cnstr_loadings(A, stdlv, LLC=llc)
+  A <- lavaan.pl:::check_cnstr_loadings(A, stdlv)
   # Draw some random loadings according to constraints
-  Load <- gen_loadings(CONSTRMAT = A, STDLV = stdlv, LLC=llc)
+  Load <- gen_loadings(CONSTRMAT = A, STDLV = stdlv)
   nload <- sum(is.na(A))
 
   # Generate random latent correlation matrix
@@ -174,7 +171,7 @@ if(1){
     LOADINGS = Load,
     THRESHOLDS = thr,
     LATENT_COV = S)
-  constr_list <- list(CONSTRMAT=A, CORRFLAG=corrflag, CONSTRVAR=exp(constr_lsd)^2, STDLV=stdlv, LLC=llc)
+  constr_list <- list(CONSTRMAT=A, CORRFLAG=corrflag, CONSTRVAR=exp(constr_lsd)^2, STDLV=stdlv)
 
   plFit <- suppressWarnings(fit_plFA(
     DATA = set_plfa_data(dat),
@@ -193,7 +190,6 @@ if(1){
     C_VEC = plFit$dims$cat,
     CONSTRMAT=plFit$model$CONSTRMAT,
     CONSTRLOGSD=plFit$model$CONSTRLOGSD,
-    LLC = plFit$model$LLC,
     THETA_INIT = plFit$init,
     NTHR = plFit$dims$nthr,
     NLOAD= plFit$dims$nload,
@@ -233,10 +229,9 @@ if(1){
 
   # Simple loading matrix constraints
   A <- build_constrMat(P = p, Q = q, STRUCT = 'simple')
-  llc <- NULL
-  A <- lavaan.pl:::check_cnstr_loadings(A, stdlv, LLC=llc)
+  A <- lavaan.pl:::check_cnstr_loadings(A, stdlv)
   # Draw some random loadings according to constraints
-  Load <- gen_loadings(CONSTRMAT = A, STDLV = stdlv, LLC=llc)
+  Load <- gen_loadings(CONSTRMAT = A, STDLV = stdlv)
   nload <- sum(is.na(A))
 
   # Generate random latent correlation matrix
@@ -279,7 +274,7 @@ if(1){
     LOADINGS = Load,
     THRESHOLDS = thr,
     LATENT_COV = S)
-  constr_list <- list(CONSTRMAT=A, CORRFLAG=corrflag, CONSTRVAR=exp(constr_lsd)^2, STDLV=stdlv, LLC=llc)
+  constr_list <- list(CONSTRMAT=A, CORRFLAG=corrflag, CONSTRVAR=exp(constr_lsd)^2, STDLV=stdlv)
 
   plFit <- suppressWarnings(fit_plFA(
     DATA = set_plfa_data(dat),
@@ -306,10 +301,9 @@ if(1){
 
   # Simple loading matrix constraints
   A <- build_constrMat(P = p, Q = q, STRUCT = 'simple')
-  llc <- NULL
-  A <- lavaan.pl:::check_cnstr_loadings(A, stdlv, LLC=llc)
+  A <- lavaan.pl:::check_cnstr_loadings(A, stdlv)
   # Draw some random loadings according to constraints
-  Load <- gen_loadings(CONSTRMAT = A, STDLV = stdlv, LLC=llc)
+  Load <- gen_loadings(CONSTRMAT = A, STDLV = stdlv)
   nload <- sum(is.na(A))
 
   # Generate random latent correlation matrix
@@ -352,7 +346,7 @@ if(1){
     LOADINGS = Load,
     THRESHOLDS = thr,
     LATENT_COV = S)
-  constr_list <- list(CONSTRMAT=A, CORRFLAG=corrflag, CONSTRVAR=exp(constr_lsd)^2, STDLV=stdlv, LLC=llc)
+  constr_list <- list(CONSTRMAT=A, CORRFLAG=corrflag, CONSTRVAR=exp(constr_lsd)^2, STDLV=stdlv)
 
   plFit <- suppressWarnings(fit_plFA(
     DATA = set_plfa_data(dat),

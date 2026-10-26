@@ -39,34 +39,41 @@ computePLRT.PlFaFit <- function(OBJ, VARS = computeVar(OBJ), H1 = NULL){
   # given by the Jacobian of the embedding of OBJ into H1
   if(!is.null(H1)){
     stopifnot(inherits(H1, "PlFaFit"))
-    if(!identical(OBJ$data$freq, H1$data$freq) || !identical(OBJ$data$ufreq, H1$data$ufreq) || H1$dims$npar <= dims$npar) {
+    if(!identical(OBJ$data$freq, H1$data$freq) || !identical(OBJ$data$ufreq, H1$data$ufreq) ||
+       !identical(OBJ$data$weights, H1$data$weights) || !identical(OBJ$data$cluster, H1$data$cluster) ||
+       H1$dims$npar <= dims$npar) {
       stop('OBJ is not nested in H1.')
     }
     nll <- function(FIT, THETA){
       cpp_multiThread_completePairwise(
         N = n, C_VEC = dims$cat, CONSTRMAT = FIT$model$CONSTRMAT, CONSTRLOGSD = FIT$model$CONSTRLOGSD,
-        LLC = FIT$model$LLC, THETA = THETA, FREQ = FIT$data$freq, CORRFLAG = FIT$model$CORRFLAG,
+        THETA = THETA, FREQ = FIT$data$freq, CORRFLAG = corrflag_code(FIT$model),
         NTHR = FIT$dims$nthr, NLOAD = FIT$dims$nload, NCORR = FIT$dims$ncorr, NVAR = FIT$dims$nvar,
         UFREQ = FIT$data$ufreq
       )$iter_nll
     }
-    emb <- function(theta){
-      gp <- getPar(replace(OBJ, "theta", list(theta)), OPTION = "list")
+    lc0 <- OBJ$lincon
+    lc1 <- H1$lincon
+    emb <- function(x){
+      gp <- getPar(replace(OBJ, "theta", list(as.vector(lc0$K %*% x + lc0$c))), OPTION = "list")
       c(gp$thresholds,
         cpp_loadings_mat2vec(gp$loadings, H1$model$CONSTRMAT, H1$dims$nload),
-        cpp_latvar_mat2vec(gp$latent_correlations, H1$model$CONSTRLOGSD, H1$dims$ncorr, H1$dims$nvar))
+        cpp_latvar_mat2vec(gp$latent_correlations, H1$model$CONSTRLOGSD, H1$dims$ncorr, H1$dims$nvar, corrflag_code(H1$model)))[lc1$free_idx]
     }
-    theta1 <- emb(OBJ$theta)
+    theta0f <- OBJ$theta[lc0$free_idx]
+    theta1 <- as.vector(lc1$K %*% emb(theta0f) + lc1$c)
     nll0 <- nll(OBJ, OBJ$theta)
     if(abs(nll(H1, theta1) - nll0) > 1e-8 * abs(nll0)) stop('OBJ is not nested in H1.')
-    K <- numDeriv::jacobian(emb, OBJ$theta)
+    K <- numDeriv::jacobian(emb, theta0f)
     HJ <- cpp_sample_estimators_HJ(
       THETA = theta1, FREQ = H1$data$freq, DATA = H1$data$Y, C_VEC = H1$dims$cat,
-      CONSTRMAT = H1$model$CONSTRMAT, CONSTRLOGSD = H1$model$CONSTRLOGSD, LLC = H1$model$LLC, N = n,
-      CORRFLAG = H1$model$CORRFLAG, NTHR = H1$dims$nthr, NLOAD = H1$dims$nload, NCORR = H1$dims$ncorr,
-      NVAR = H1$dims$nvar, UFREQ = H1$data$ufreq, UW = H1$data$uweights
+      CONSTRMAT = H1$model$CONSTRMAT, CONSTRLOGSD = H1$model$CONSTRLOGSD, N = n,
+      CORRFLAG = corrflag_code(H1$model), NTHR = H1$dims$nthr, NLOAD = H1$dims$nload, NCORR = H1$dims$ncorr,
+      NVAR = H1$dims$nvar, UFREQ = H1$data$ufreq, UW = H1$data$uweights,
+      GW = H1$data$weights, JW = H1$data$jweights, CL = H1$data$cluster
     )
-    M <- HJ$J %*% (solve(HJ$H) - K %*% solve(crossprod(K, HJ$H %*% K), t(K)))
+    Hf <- crossprod(lc1$K, HJ$H %*% lc1$K)
+    M <- crossprod(lc1$K, HJ$J %*% lc1$K) %*% (solve(Hf) - K %*% solve(crossprod(K, Hf %*% K), t(K)))
     model <- adjust(STAT = 2 * (nll0 - nll(H1, H1$theta)),
                     DF   = H1$dims$npar - dims$npar,
                     E    = sum(diag(M)),
@@ -75,12 +82,19 @@ computePLRT.PlFaFit <- function(OBJ, VARS = computeVar(OBJ), H1 = NULL){
     return(list(model = model, RTime = as.numeric(difftime(end_time, start_time, units = 'secs')[1])))
   }
 
-  # Unique response patterns and their counts
+  # Unique response patterns, with their weights in J or, with clusters, their
+  # weighted counts within each cluster
   Y <- OBJ$data$Y
   Yu <- unique(Y)
   key <- match(do.call(paste, as.data.frame(Y)), do.call(paste, as.data.frame(Yu)))
-  w <- as.numeric(tabulate(key))
   uw <- OBJ$data$uweights[match(seq_len(nrow(Yu)), key)]
+  gw <- if(length(OBJ$data$weights)) OBJ$data$weights else rep(1, n)
+  jw <- if(length(OBJ$data$jweights)) OBJ$data$jweights else rep(1, n)
+  w <- as.numeric(rowsum(jw^2, key))
+  if(length(OBJ$data$cluster)){
+    ncl <- length(unique(OBJ$data$cluster))
+    A <- tapply(gw, list(factor(key, seq_len(nrow(Yu))), factor(OBJ$data$cluster, seq_len(ncl) - 1)), sum, default = 0)
+  }
 
   sat <- function(tau, rho, order, scores = FALSE){
     cpp_saturated(tau, rho, OBJ$data$freq, Yu, dims$cat, order, scores, OBJ$data$ufreq, uw)
@@ -88,7 +102,7 @@ computePLRT.PlFaFit <- function(OBJ, VARS = computeVar(OBJ), H1 = NULL){
 
   # Independence model: thresholds from the univariate margins, with unit weights
   # given by the number of pairs and univariate terms each observed item enters
-  v <- rowSums(!is.na(Y)) - 1 + OBJ$data$uweights
+  v <- (rowSums(!is.na(Y)) - 1 + OBJ$data$uweights) * gw
   tau_ind <- unlist(lapply(seq_len(dims$p), function(j){
     pj <- vapply(seq_len(dims$cat[j]) - 1, function(a) sum(v[Y[, j] %in% a]), numeric(1))
     stats::qnorm(cumsum(pj)[-dims$cat[j]] / sum(pj))
@@ -123,36 +137,57 @@ computePLRT.PlFaFit <- function(OBJ, VARS = computeVar(OBJ), H1 = NULL){
 
   # Traces of the saturated model at (TAU, RHO), from per unit information blocks
   # and scores of the unique response patterns
-  sat_terms <- function(TAU, RHO, DELTA = NULL){
+  sat_terms <- function(TAU, RHO, DELTA = NULL, FULL = FALSE){
     s <- sat(TAU, RHO, 2, TRUE)
     htt <- s$htt / n
     htr <- s$htr / n
     d <- s$hrr / n
-    tr <- cpp_saturated_traces(htt, htr, d, s$st, s$sr, w, n)
+    tr <- if(length(OBJ$data$cluster)){
+      st <- s$st %*% A
+      sr <- s$sr %*% A
+      cpp_saturated_traces(htt, htr, d, (st - rowMeans(st)) * sqrt(ncl / (ncl - 1)), (sr - rowMeans(sr)) * sqrt(ncl / (ncl - 1)), rep(1, ncl), n, FULL)
+    }else{
+      cpp_saturated_traces(htt, htr, d, s$st, s$sr, w, n, FULL)
+    }
     out <- list(ll = s$ll, e = tr[1], v = 2 * tr[2])
-    if(!is.null(DELTA)){
+    if(!is.null(DELTA) && FULL){
+      ht <- crossprod(DELTA$tau, htr %*% DELTA$rho)
+      out$dad <- crossprod(DELTA$tau, htt %*% DELTA$tau) + ht + t(ht) + crossprod(DELTA$rho, DELTA$rho * d)
+    }else if(!is.null(DELTA)){
       hd <- htr %*% DELTA
       out$dad <- crossprod(DELTA, DELTA * d) - crossprod(hd, solve(htt, hd))
     }
     out
   }
 
-  # Model against saturated
-  psi <- seq_len(dims$npar)[-(1:nthr)]
+  # Model against saturated, on the free parameters. With constrained thresholds,
+  # the traces run over the full parameter vectors (lavaan's lav_pml_plrt2)
+  lc <- OBJ$lincon
+  thetaf <- OBJ$theta[lc$free_idx]
   rho_theta <- function(theta){
     gp <- getPar(replace(OBJ, "theta", list(theta)), OPTION = "list")
     S <- gp$loadings %*% gp$latent_correlations %*% t(gp$loadings)
     S[upper.tri(S)]
   }
-  delta <- numDeriv::jacobian(rho_theta, OBJ$theta)[, psi, drop = FALSE]
+  rho_free <- function(x) rho_theta(as.vector(lc$K %*% x + lc$c))
   invH <- solve(VARS$H)
-  G <- (invH %*% VARS$J %*% invH)[psi, psi, drop = FALSE]
-  P0 <- solve(invH[psi, psi, drop = FALSE], G)
-  tz <- sat_terms(OBJ$theta[1:nthr], rho_theta(OBJ$theta), delta)
+  if(all(seq_len(nthr) %in% lc$free_idx)){
+    psi <- which(lc$free_idx > nthr)
+    delta <- numDeriv::jacobian(rho_free, thetaf)[, psi, drop = FALSE]
+    G <- (invH %*% VARS$J %*% invH)[psi, psi, drop = FALSE]
+    P0 <- solve(invH[psi, psi, drop = FALSE], G)
+    tz <- sat_terms(OBJ$theta[1:nthr], rho_theta(OBJ$theta), delta)
+    cv <- sum(diag(tz$dad %*% G %*% P0))
+  }else{
+    delta <- list(tau = lc$K[seq_len(nthr), , drop = FALSE], rho = numDeriv::jacobian(rho_free, thetaf))
+    P0 <- invH %*% VARS$J
+    tz <- sat_terms(OBJ$theta[1:nthr], rho_theta(OBJ$theta), delta, FULL = TRUE)
+    cv <- sum(diag(tz$dad %*% P0 %*% P0 %*% invH))
+  }
   model <- adjust(STAT = 2 * (o$ll - tz$ll),
                   DF   = nthr + dims$pairs - dims$npar,
                   E    = tz$e - sum(diag(P0)),
-                  V    = tz$v + 2 * sum(P0 * t(P0)) - 4 * sum(diag(tz$dad %*% G %*% P0)))
+                  V    = tz$v + 2 * sum(P0 * t(P0)) - 4 * cv)
 
   # Independence model against saturated
   tb <- sat_terms(tau_ind, rep(0, dims$pairs))

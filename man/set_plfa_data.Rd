@@ -10,7 +10,10 @@
 set_plfa_data(
   DATA,
   VALDATA = NULL,
-  MISSING = c("listwise", "pairwise", "available.cases")
+  MISSING = c("listwise", "pairwise", "available.cases"),
+  WEIGHTS = NULL,
+  WEIGHTS_TYPE = c("design", "frequency"),
+  CLUSTER = NULL
 )
 }
 \arguments{
@@ -28,13 +31,22 @@ purposes.}
 \item{MISSING}{Treatment of missing values (\code{NA}): \code{"listwise"} drops incomplete observations,
 \code{"pairwise"} uses the complete pairs and \code{"available.cases"} the available cases of
 Katsikatsou et al. (2022).}
+
+\item{WEIGHTS}{Sampling weights, one per observation, normalised to sum to the number of
+observations. If \code{NULL}, unit weights.}
+
+\item{WEIGHTS_TYPE}{Type of sampling weights, as in lavaan: \code{"design"} or \code{"frequency"}.}
+
+\item{CLUSTER}{Cluster membership, one per observation, for cluster-robust standard errors. If
+\code{NULL}, observations are independent.}
 }
 \value{
 An object of class \code{plfa_data} with the data matrix \code{Y}, its dimensions \code{n} and \code{p},
 the number of categories of each item \code{cat}, the pairwise frequency tables \code{freq} and
 \code{valfreq}, the treatment of missing values \code{missing}, the unit weights \code{uweights} and
-univariate frequencies \code{ufreq} of the available-cases term, and the time spent computing
-them \code{freqTime}.
+univariate frequencies \code{ufreq} of the available-cases term, the normalised sampling weights
+\code{weights} and their factors on the scores \code{jweights}, the cluster indices \code{cluster}, and the
+time spent computing the frequencies \code{freqTime}.
 }
 \description{
 Print method for \code{plfa_data} objects

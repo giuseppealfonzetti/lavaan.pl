@@ -34,7 +34,6 @@ namespace params{
 
     Eigen::MatrixXd theta2mat(const Eigen::Ref<const Eigen::VectorXd> THETA,
                               const Eigen::Ref<const Eigen::MatrixXd> CONSTRMAT,
-                              const std::vector<std::vector<std::vector<double>>> LLC,
                               const int NTHR,
                               const int NLOAD);
 

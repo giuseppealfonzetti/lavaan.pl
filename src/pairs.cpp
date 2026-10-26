@@ -4,14 +4,15 @@ pairs::Setup::Setup(
     const Eigen::Ref<const Eigen::VectorXd> THETA,
     const Eigen::Ref<const Eigen::MatrixXd> CONSTRMAT,
     const Eigen::Ref<const Eigen::VectorXd> CONSTRLOGSD,
-    const std::vector<std::vector<std::vector<double>>> &LLC,
     const int NTHR,
     const int NLOAD,
     const int NCORR,
-    const int NVAR
-): p(CONSTRMAT.rows()), q(CONSTRMAT.cols()), nthr(NTHR), nload(NLOAD), ncorr(NCORR), nvar(NVAR), m(NLOAD + NCORR + NVAR){
+    const int NVAR,
+    const int CORRFLAG
+): p(CONSTRMAT.rows()), q(CONSTRMAT.cols()), nthr(NTHR), nload(NLOAD), ncorr(NCORR), nvar(NVAR), m(NLOAD + NCORR + NVAR),
+   direct(CORRFLAG == 2){
 
-  Lam = params::loadings::theta2mat(THETA, CONSTRMAT, LLC, NTHR, NLOAD);
+  Lam = params::loadings::theta2mat(THETA, CONSTRMAT, NTHR, NLOAD);
   sd  = params::latvar::theta2dmat(THETA, CONSTRLOGSD, NTHR, NLOAD, NCORR, NVAR, q).diagonal();
   tau = params::thresholds::theta2vec(THETA, NTHR);
 
@@ -24,6 +25,14 @@ pairs::Setup::Setup(
       ra[a] = r;
       ca[a] = c;
     }
+  }
+  if(direct){
+    Sig = sd.array().square().matrix().asDiagonal();
+    for(int a = 0; a < ncorr; a++){
+      Sig(ra[a], ca[a]) = THETA(NTHR + NLOAD + a);
+      Sig(ca[a], ra[a]) = THETA(NTHR + NLOAD + a);
+    }
+    Z.setZero();
   }
   C = (1 - Z.array().square()).sqrt().matrix();
   P = Eigen::MatrixXd::Ones(q, q);
@@ -51,11 +60,6 @@ pairs::Setup::Setup(
         idx++;
       }
     }
-  }
-  for(const auto &lc : LLC){
-    Eigen::RowVectorXd row = Eigen::RowVectorXd::Zero(nload);
-    for(std::size_t v = 1; v < lc.size(); v++) row += lc.at(v).at(0) * JL[lc.at(v).at(1) - 1].row(lc.at(v).at(2) - 1);
-    JL[lc.at(0).at(0) - 1].row(lc.at(0).at(1) - 1) = row;
   }
 }
 
@@ -86,6 +90,23 @@ pairs::Pair::Pair(
     const int L,
     const bool GRADFLAG
 ): Pair(C_VEC, K, L, 0){
+
+  if(S.direct){
+    x = S.Lam.row(K).transpose();
+    y = S.Lam.row(L).transpose();
+    const Eigen::VectorXd Sx = S.Sig * x, Sy = S.Sig * y;
+    rho = x.dot(Sy);
+    if(GRADFLAG){
+      grho.resize(S.m);
+      grho.head(S.nload) = S.JL[K].transpose() * Sy + S.JL[L].transpose() * Sx;
+      for(int a = 0; a < S.ncorr; a++) grho(S.nload + a) = x(S.ra[a]) * y(S.ca[a]) + x(S.ca[a]) * y(S.ra[a]);
+      for(int s = 0; s < S.nvar; s++){
+        const int h = S.sfree[s];
+        grho(S.nload + S.ncorr + s) = 2 * S.sd(h) * S.sd(h) * x(h) * y(h);
+      }
+    }
+    return;
+  }
 
   x = S.sd.cwiseProduct(S.Lam.row(K).transpose());
   y = S.sd.cwiseProduct(S.Lam.row(L).transpose());
@@ -170,6 +191,30 @@ double pairs::pattern_derivatives(
 Eigen::MatrixXd pairs::rho_hessian(const Setup &S, const Pair &PR){
   const int q = S.q, nload = S.nload, ncorr = S.ncorr, nvar = S.nvar;
   const Eigen::VectorXd &x = PR.x, &y = PR.y, &X = PR.X, &Y = PR.Y, &grho = PR.grho;
+
+  if(S.direct){
+    const Eigen::MatrixXd &Jk = S.JL[PR.k], &Jl = S.JL[PR.l];
+    Eigen::MatrixXd hrho = Eigen::MatrixXd::Zero(S.m, S.m);
+    const Eigen::MatrixXd ll = Jk.transpose() * S.Sig * Jl;
+    hrho.topLeftCorner(nload, nload) = ll + ll.transpose();
+    for(int a = 0; a < ncorr; a++){
+      Eigen::VectorXd ek = Eigen::VectorXd::Zero(q), el = Eigen::VectorXd::Zero(q);
+      ek(S.ra[a]) += y(S.ca[a]); ek(S.ca[a]) += y(S.ra[a]);
+      el(S.ra[a]) += x(S.ca[a]); el(S.ca[a]) += x(S.ra[a]);
+      const Eigen::VectorXd col = Jk.transpose() * ek + Jl.transpose() * el;
+      hrho.block(0, nload + a, nload, 1) = col;
+      hrho.block(nload + a, 0, 1, nload) = col.transpose();
+    }
+    for(int s = 0; s < nvar; s++){
+      const int h = S.sfree[s], js = nload + ncorr + s;
+      const double v = 2 * S.sd(h) * S.sd(h);
+      const Eigen::VectorXd col = v * (Jk.row(h).transpose() * y(h) + Jl.row(h).transpose() * x(h));
+      hrho.block(0, js, nload, 1) = col;
+      hrho.block(js, 0, 1, nload) = col.transpose();
+      hrho(js, js) = 2 * v * x(h) * y(h);
+    }
+    return hrho;
+  }
   const Eigen::MatrixXd DJk = S.sd.asDiagonal() * S.JL[PR.k], DJl = S.sd.asDiagonal() * S.JL[PR.l];
 
   Eigen::MatrixXd dX(q, S.m), dY(q, S.m);

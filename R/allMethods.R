@@ -54,6 +54,8 @@ print.plfa_data <- function(x, ...) {
     "<plfa_data>", x$n, "observations,", x$p, "items (", x$p * (x$p - 1) / 2, "pairs )\n",
     " Categories per item:", paste(range(x$cat), collapse = " to "), "\n",
     " Missing values:", sum(is.na(x$Y)), "(", x$missing, ")\n",
+    " Sampling weights:", if (length(x$weights)) "yes" else "none", "\n",
+    " Clusters:", if (length(x$cluster)) length(unique(x$cluster)) else "none", "\n",
     " Validation data:", if (is.null(x$valfreq)) "none" else "yes", "\n"
   )
   invisible(x)
@@ -70,9 +72,9 @@ print.plfa_model <- function(x, ...) {
   cat(
     "<plfa_model>", x$p, "items,", x$q, "latent variables\n",
     " Free loadings:", sum(is.na(x$CONSTRMAT)), "\n",
-    " Latent correlations:", if (x$q == 1) "none" else if (x$CORRFLAG) "free" else "fixed to zero", "\n",
+    " Latent correlations:", if (x$q == 1) "none" else if (!x$CORRFLAG) "fixed to zero" else if (identical(x$LATCOV, "direct")) "direct" else "LKJ", "\n",
     " Latent variances:", if (anyNA(x$CONSTRLOGSD)) "free" else "fixed", "\n",
-    " Linear loading constraints:", length(x$LLC), "\n",
+    " Linear constraints:", NROW(x$CONSTRAINTS$A), "\n",
     " Identification:", if (x$STDLV) "standardised latent variables" else "marker loadings", "\n"
   )
   invisible(x)
@@ -90,9 +92,9 @@ getPar <- function(OBJ, ...) UseMethod('getPar')
 #' @param ... Additional arguments
 #' @export
 getPar.PlFaFit <- function(OBJ, ...) extract_par(THETA       = OBJ$theta,
+                                                              CORRFLAG    = corrflag_code(OBJ$model),
                                                               CONSTRMAT   = OBJ$model$CONSTRMAT,
                                                               CONSTRLOGSD = OBJ$model$CONSTRLOGSD,
-                                                              LLC         = OBJ$model$LLC,
                                                               NTHR        = OBJ$dims$nthr,
                                                               NLOAD       = OBJ$dims$nload,
                                                               NCORR       = OBJ$dims$ncorr,
@@ -117,13 +119,13 @@ getPar.default <- function(OBJ, ...) extract_par(THETA = OBJ, ...)
 #' }
 #' @param CONSTRMAT \eqn{p*q}-dimensional matrix. Elements set to `NA` refers to free loading parameters. Elements set to numerical values denote fixed values constraints.
 #' @param CONSTRLOGSD \eqn{q}-dimensional vector. Elements set to `NA` refers to free latent log standard deviations parameters. Elements set to numerical values denote fixed values constraints.
-#' @param LLC Linear loadings constraints. Expects a list of constraints. See [fit_plFA] documentation.
 #' @param NTHR Number of thresholds parameters.
 #' @param NLOAD Number of free loadings parameters
 #' @param NCORR Number of free latent correlations parameters.
 #' @param NVAR Number of free latent variance parameters.
+#' @param CORRFLAG Parametrisation of the latent correlations: 1 for LKJ, 2 for direct covariances.
 extract_par <- function(THETA, OPTION = c('list', 'raw', 'transformed'),
-                        CONSTRMAT, CONSTRLOGSD, LLC, NTHR, NLOAD, NCORR, NVAR){
+                        CONSTRMAT, CONSTRLOGSD, NTHR, NLOAD, NCORR, NVAR, CORRFLAG = 1){
   OPTION <- match.arg(OPTION)
 
   q <- ncol(CONSTRMAT)
@@ -132,7 +134,10 @@ extract_par <- function(THETA, OPTION = c('list', 'raw', 'transformed'),
     }else if(OPTION == 'transformed'){
 
       vec <- THETA[1:(NTHR+NLOAD)]
-      if(NCORR>0){
+      if(NCORR>0 && CORRFLAG == 2){
+        R <- stats::cov2cor(cpp_latvar_theta2mat(THETA, CONSTRLOGSD, NTHR, NLOAD, NCORR, NVAR, q, 2L))
+        vec <- c(vec, R[upper.tri(R)])
+      }else if(NCORR>0){
         vec <- c(vec, get_corr(THETA = THETA,
                                NTHR  = NTHR,
                                NLOAD = NLOAD,
@@ -153,7 +158,6 @@ extract_par <- function(THETA, OPTION = c('list', 'raw', 'transformed'),
     ld <- cpp_loadings_theta2mat(
       THETA     = THETA,
       CONSTRMAT = CONSTRMAT,
-      LLC       = LLC,
       NTHR      = NTHR,
       NLOAD     = NLOAD)
 
@@ -164,7 +168,8 @@ extract_par <- function(THETA, OPTION = c('list', 'raw', 'transformed'),
       NLOAD       = NLOAD,
       NCORR       = NCORR,
       NVAR        = NVAR,
-      Q           = q
+      Q           = q,
+      CORRFLAG    = CORRFLAG
     )
 
     out <- list(thresholds = thr, loadings = ld, latent_correlations = S)
@@ -202,7 +207,6 @@ computeVar.PlFaFit <- function(OBJ, NUMDERIV = F, VERBOSE = FALSE){ if(OBJ$metho
                        PPI         = NULL,
                        CONSTRMAT   = OBJ$model$CONSTRMAT,
                        CONSTRLOGSD = OBJ$model$CONSTRLOGSD,
-                       LLC         = OBJ$model$LLC,
                        NTHR        = OBJ$dims$nthr,
                        NLOAD       = OBJ$dims$nload,
                        NCORR       = OBJ$dims$ncorr,
@@ -211,6 +215,11 @@ computeVar.PlFaFit <- function(OBJ, NUMDERIV = F, VERBOSE = FALSE){ if(OBJ$metho
                        DATA        = OBJ$data$Y,
                        UFREQ       = OBJ$data$ufreq,
                        UW          = OBJ$data$uweights,
+                       GW          = OBJ$data$weights,
+                       JW          = OBJ$data$jweights,
+                       CL          = OBJ$data$cluster,
+                       LINCON      = OBJ$lincon,
+                       CORRFLAG    = corrflag_code(OBJ$model),
                        METHOD      = OBJ$method,
                        NUMDERIV    = NUMDERIV,
                        NCORES      = OBJ$cores,
@@ -224,7 +233,6 @@ computeVar.PlFaFit <- function(OBJ, NUMDERIV = F, VERBOSE = FALSE){ if(OBJ$metho
                        PPI         = OBJ$control$PAIRS_PER_ITERATION,
                        CONSTRMAT   = OBJ$model$CONSTRMAT,
                        CONSTRLOGSD = OBJ$model$CONSTRLOGSD,
-                       LLC         = OBJ$model$LLC,
                        NTHR        = OBJ$dims$nthr,
                        NLOAD       = OBJ$dims$nload,
                        NCORR       = OBJ$dims$ncorr,
@@ -233,6 +241,11 @@ computeVar.PlFaFit <- function(OBJ, NUMDERIV = F, VERBOSE = FALSE){ if(OBJ$metho
                        DATA        = OBJ$data$Y,
                        UFREQ       = OBJ$data$ufreq,
                        UW          = OBJ$data$uweights,
+                       GW          = OBJ$data$weights,
+                       JW          = OBJ$data$jweights,
+                       CL          = OBJ$data$cluster,
+                       LINCON      = OBJ$lincon,
+                       CORRFLAG    = corrflag_code(OBJ$model),
                        METHOD      = OBJ$method,
                        NUMDERIV    = NUMDERIV,
                        NCORES      = OBJ$cores,
@@ -240,28 +253,33 @@ computeVar.PlFaFit <- function(OBJ, NUMDERIV = F, VERBOSE = FALSE){ if(OBJ$metho
           }}
 
 compute_var <- function(THETA, C_VEC, N, IT = NULL, PAIRS = NULL, PPI = NULL,
-                        CONSTRMAT, CONSTRLOGSD, LLC, NTHR, NLOAD, NCORR, NVAR,
+                        CONSTRMAT, CONSTRLOGSD, NTHR, NLOAD, NCORR, NVAR,
                         FREQ, DATA, METHOD, NUMDERIV = F, NCORES=1,
-                        VERBOSE = FALSE, UFREQ = numeric(0), UW = numeric(0)){
+                        VERBOSE = FALSE, UFREQ = numeric(0), UW = numeric(0),
+                        GW = numeric(0), JW = numeric(0), CL = numeric(0), LINCON = NULL,
+                        CORRFLAG = as.integer(NCORR > 0)){
 
   start_time <- Sys.time()
+  if (is.null(LINCON)) LINCON <- list(K = diag(length(THETA)), c = rep(0, length(THETA)), free_idx = seq_along(THETA))
+  K <- LINCON$K
+  full <- function(x) as.vector(K %*% x + LINCON$c)
 
 
 
   # Get jacobian of reparameterisation
   if (isTRUE(VERBOSE)) message('- Computing Delta...')
   Rwr_getPar <- function(x){
-    getPar(OBJ         = x,
+    getPar(OBJ         = full(x),
            OPTION      = "transformed",
+           CORRFLAG    = CORRFLAG,
            CONSTRMAT   = CONSTRMAT,
            CONSTRLOGSD = CONSTRLOGSD,
-           LLC         = LLC,
            NTHR        = NTHR,
            NLOAD       = NLOAD,
            NCORR       = NCORR,
            NVAR        = NVAR)
   }
-  trJacob <- numDeriv::jacobian(Rwr_getPar, x=THETA)
+  trJacob <- numDeriv::jacobian(Rwr_getPar, x=THETA[LINCON$free_idx])
   end_time <- Sys.time()
   totaltime <- as.numeric(difftime(end_time, start_time, units = 'secs')[1])
   if (isTRUE(VERBOSE)) message('Done! (', round(totaltime, 2),' secs)')
@@ -276,17 +294,19 @@ compute_var <- function(THETA, C_VEC, N, IT = NULL, PAIRS = NULL, PPI = NULL,
     C_VEC = C_VEC,
     CONSTRMAT = CONSTRMAT,
     CONSTRLOGSD = CONSTRLOGSD,
-    LLC = LLC,
     N = nrow(DATA),
-    CORRFLAG = NCORR>0,
+    CORRFLAG = CORRFLAG,
     NTHR = NTHR,
     NLOAD = NLOAD,
     NCORR= NCORR,
     NVAR = NVAR,
     UFREQ = UFREQ,
-    UW = UW
+    UW = UW,
+    GW = GW,
+    JW = JW,
+    CL = CL
   )
-  Jhat <- HJ$J
+  Jhat <- crossprod(K, HJ$J %*% K)
 
   end_time <- Sys.time()
   totaltime <- as.numeric(difftime(end_time, start_time, units = 'secs')[1])
@@ -295,7 +315,7 @@ compute_var <- function(THETA, C_VEC, N, IT = NULL, PAIRS = NULL, PPI = NULL,
   # Compute H if needed
   opt_noise <- NA
   noise <- NULL
-  Hhat <- HJ$H
+  Hhat <- crossprod(K, HJ$H %*% K)
   if(NUMDERIV){
     if (isTRUE(VERBOSE)) message('- Computing H numerically...')
     # function for gradient
@@ -305,10 +325,9 @@ compute_var <- function(THETA, C_VEC, N, IT = NULL, PAIRS = NULL, PPI = NULL,
         C_VEC      = C_VEC,
         CONSTRMAT  = CONSTRMAT,
         CONSTRLOGSD= CONSTRLOGSD,
-        LLC        = LLC,
         FREQ       = FREQ,
         THETA      = par_vec,
-        CORRFLAG   = (NCORR>0),
+        CORRFLAG   = CORRFLAG,
         NTHR       = NTHR,
         NLOAD      = NLOAD,
         NCORR      = NCORR,
@@ -320,7 +339,7 @@ compute_var <- function(THETA, C_VEC, N, IT = NULL, PAIRS = NULL, PPI = NULL,
       mod$iter_ngradient/N
     }
 
-    Hhat <- numDeriv::jacobian(Rwr_ngr, THETA)
+    Hhat <- numDeriv::jacobian(function(x) as.vector(crossprod(K, Rwr_ngr(full(x)))), THETA[LINCON$free_idx])
     end_time <- Sys.time()
     totaltime <- as.numeric(difftime(end_time, start_time, units = 'secs')[1])
     if (isTRUE(VERBOSE)) message('Done! (', round(totaltime, 2),' secs)')

@@ -5,8 +5,10 @@ Ym <- Y
 set.seed(4)
 for (j in c(2:3, 5:6)) Ym[runif(300) < c(.1, .3, .3, .6)[Y[, if (j < 4) 1 else 4] + 1], j] <- NA
 
-# Available cases with missing values first, then complete data
-for (D in list(set_plfa_data(Ym, MISSING = "available.cases"), set_plfa_data(Y))) {
+# Available cases with missing values, design weights with clusters, then complete data
+set.seed(5)
+Dwc <- set_plfa_data(Y, WEIGHTS = runif(300, .2, 3), CLUSTER = rep(1:40, length.out = 300))
+for (D in list(set_plfa_data(Ym, MISSING = "available.cases"), Dwc, set_plfa_data(Y))) {
   f <- fit_plFA(D, set_plfa_model(cm))
   v <- computeVar(f)
   r <- computePLRT(f, v)
@@ -28,7 +30,14 @@ for (D in list(set_plfa_data(Ym, MISSING = "available.cases"), set_plfa_data(Y))
   }
   s <- sat(f$theta[1:nt], rho_theta(f$theta), 2, TRUE)
   Hs <- rbind(cbind(s$htt, s$htr), cbind(t(s$htr), diag(s$hrr))) / n
-  Js <- tcrossprod(rbind(s$st, s$sr)) / n
+  Sc <- rbind(s$st, s$sr)
+  if (length(f$data$cluster)) {
+    Z <- t(rowsum(t(Sc) * f$data$weights, f$data$cluster))
+    Z <- Z - rowMeans(Z)
+    Js <- ncol(Z) / (ncol(Z) - 1) * tcrossprod(Z) / n
+  } else {
+    Js <- tcrossprod(Sc) / n
+  }
   iHs <- solve(Hs)
   A <- solve(iHs[-(1:nt), -(1:nt)])
   P1 <- A %*% (iHs %*% Js %*% iHs)[-(1:nt), -(1:nt)]
@@ -52,7 +61,7 @@ f0 <- fit_plFA(set_plfa_data(Y), set_plfa_model(cm, CORRFLAG = FALSE))
 rn <- computePLRT(f0, H1 = f)$model
 hj <- lavaan.pl:::cpp_sample_estimators_HJ(
   THETA = c(f0$theta, 0), FREQ = f$data$freq, DATA = f$data$Y, C_VEC = f$dims$cat, CONSTRMAT = f$model$CONSTRMAT,
-  CONSTRLOGSD = f$model$CONSTRLOGSD, LLC = f$model$LLC, N = n, CORRFLAG = TRUE, NTHR = nt, NLOAD = f$dims$nload,
+  CONSTRLOGSD = f$model$CONSTRLOGSD, N = n, CORRFLAG = TRUE, NTHR = nt, NLOAD = f$dims$nload,
   NCORR = 1, NVAR = 0
 )
 iH1 <- solve(hj$H)
@@ -67,3 +76,29 @@ expect_error(computePLRT(f, H1 = f0), "not nested")
 l1 <- lm(mpg ~ wt, mtcars)
 l2 <- lm(mpg ~ wt + hp, mtcars)
 expect_equal(lavaan.pl::anova(l1, l2), stats::anova(l1, l2))
+
+# Constrained thresholds: full-vector adjustment (lavaan's plrt2) matches the dense computation
+D <- set_plfa_data(Y)
+M0 <- set_plfa_model(cm)
+nm <- theta_names(D, M0)
+A <- matrix(replace(numeric(length(nm)), match("tau[2,1]", nm), 1), 1)
+f <- fit_plFA(D, set_plfa_model(cm, CONSTRAINTS = list(A = A, b = -1)))
+v <- computeVar(f)
+r <- computePLRT(f, v)
+n <- f$dims$n; nt <- f$dims$nthr; lc <- f$lincon
+rho_free <- function(x) {
+  gp <- getPar(replace(f, "theta", list(as.vector(lc$K %*% x + lc$c))), OPTION = "list")
+  S <- gp$loadings %*% gp$latent_correlations %*% t(gp$loadings)
+  S[upper.tri(S)]
+}
+xf <- f$theta[lc$free_idx]
+s <- lavaan.pl:::cpp_saturated(f$theta[1:nt], rho_free(xf), f$data$freq, f$data$Y, f$dims$cat, 2, TRUE)
+Hs <- rbind(cbind(s$htt, s$htr), cbind(t(s$htr), diag(s$hrr))) / n
+P1 <- solve(Hs, tcrossprod(rbind(s$st, s$sr)) / n)
+P0 <- solve(v$H, v$J)
+delta <- rbind(lc$K[1:nt, ], numDeriv::jacobian(rho_free, xf))
+E <- sum(diag(P1)) - sum(diag(P0))
+V <- 2 * sum(diag(P1 %*% P1)) + 2 * sum(diag(P0 %*% P0)) - 4 * sum(diag(t(delta) %*% Hs %*% delta %*% P0 %*% P0 %*% solve(v$H)))
+expect_equal(r$model$df, nt + f$dims$pairs - f$dims$npar)
+expect_equal(r$model$scaling.factor, (V / 2) / E)
+expect_equal(r$model$df.scaled, E^2 / (V / 2))

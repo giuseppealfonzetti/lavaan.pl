@@ -4,15 +4,7 @@
 \alias{gen_loadings}
 \title{Construct loading matrix}
 \usage{
-gen_loadings(
-  CONSTRMAT,
-  FIXED = NULL,
-  SEED = 123,
-  LB = 0,
-  UB = 1,
-  STDLV = TRUE,
-  LLC = NULL
-)
+gen_loadings(CONSTRMAT, FIXED = NULL, SEED = 123, LB = 0, UB = 1, STDLV = TRUE)
 }
 \arguments{
 \item{CONSTRMAT}{Binary matrix of dimension \eqn{p*q}. A cell equal to \eqn{1} indicates
@@ -30,8 +22,6 @@ them randomly from Unif(0,1)}
 \item{UB}{Upper bound for uniform random generator. Default set to 1.}
 
 \item{STDLV}{Logical indicator. Set it to \code{TRUE} to fix latent variables scale. Set it \code{FALSE} to fix loadings scale.}
-
-\item{LLC}{Linear loadings constraints. Expects a list of constraints. See \link{fit_plFA} documentation.}
 }
 \description{
 Construct loading matrix

@@ -9,7 +9,6 @@ namespace fullPairwise{
       const Eigen::Ref<const Eigen::VectorXd> C_VEC,
       const Eigen::Ref<const Eigen::MatrixXd> CONSTRMAT,
       const Eigen::Ref<const Eigen::VectorXd> CONSTRLOGSD,
-      const std::vector<std::vector<std::vector<double>>> LLC,
       const Eigen::Ref<const Eigen::VectorXd> THETA,
       const Eigen::Ref<const Eigen::MatrixXd> FREQ,
       const int CORRFLAG,
@@ -32,7 +31,6 @@ namespace fullPairwise{
       const Eigen::Ref<const Eigen::VectorXd> C_VEC,
       const Eigen::Ref<const Eigen::MatrixXd> CONSTRMAT,
       const Eigen::Ref<const Eigen::VectorXd> CONSTRLOGSD,
-      const std::vector<std::vector<std::vector<double>>> LLC,
       int N,
       int CORRFLAG,
       const int NTHR,
@@ -40,7 +38,10 @@ namespace fullPairwise{
       const int NCORR,
       const int NVAR,
       const Eigen::Ref<const Eigen::VectorXd> UFREQ,
-      const Eigen::Ref<const Eigen::VectorXd> UW
+      const Eigen::Ref<const Eigen::VectorXd> UW,
+      const Eigen::Ref<const Eigen::VectorXd> GW,
+      const Eigen::Ref<const Eigen::VectorXd> JW,
+      const Eigen::Ref<const Eigen::VectorXd> CL
   );
 
   Rcpp::List multiThreadSaturated(

@@ -2,7 +2,8 @@
 
 Eigen::MatrixXd pairs_freq(
     Eigen::Map<Eigen::MatrixXd> Y,
-    Eigen::Map<Eigen::VectorXd> C_VEC
+    Eigen::Map<Eigen::VectorXd> C_VEC,
+    Rcpp::NumericVector WEIGHTS
 ){
 
   const unsigned int n = Y.rows(); // number of units
@@ -29,7 +30,8 @@ Eigen::MatrixXd pairs_freq(
     }
   }
 
-  auto task = [&freq, &n, &Y](unsigned int r){
+  const bool weighted = WEIGHTS.size() > 0;
+  auto task = [&freq, &n, &Y, &WEIGHTS, weighted](unsigned int r){
 
     // read data
     const unsigned int k  = freq(0,r);
@@ -40,10 +42,10 @@ Eigen::MatrixXd pairs_freq(
     obs_resp.col(0) = Y.col(k); obs_resp.col(1) = Y.col(l);
 
     // compute frequency
-    unsigned int n_sksl = 0;
+    double n_sksl = 0;
     for(unsigned int i = 0; i < n; i++){
       if(sk == obs_resp(i,0) && sl == obs_resp(i,1)) {
-        n_sksl++;
+        n_sksl += weighted ? WEIGHTS[i] : 1;
       }
     }
 

@@ -74,7 +74,6 @@ if(1){
     C_VEC = cat,
     CONSTRMAT=constr_list$CONSTRMAT,
     CONSTRLOGSD=constr_list$CONSTRLOGSD,
-    LLC = constr_list$LLC,
     THETA_INIT = init,
     NTHR = nthr,
     NLOAD=nload,

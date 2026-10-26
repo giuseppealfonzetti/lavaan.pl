@@ -26,7 +26,6 @@
 //' @param C_VEC Vector containing the number of categories for each item
 //' @param CONSTRMAT \eqn{p*q}-dimensional matrix. Elements set to `NA` refers to free loading parameters. Elements set to numerical values denote fixed values constraints.
 //' @param CONSTRLOGSD \eqn{q}-dimensional vector. Elements set to `NA` refers to free latent log standard deviations parameters. Elements set to numerical values denote fixed values constraints.
-//' @param LLC Linear loadings constraints. Expects a list of constraints. See [fit_plFA] documentation.
 //' @param THETA Parameter vector
 //' @param FREQ Frequency table
 //' @param CORRFLAG TRUE to estimate latent correlations. 0 for orthogonal latent factors.
@@ -44,7 +43,6 @@ Rcpp::List cpp_multiThread_completePairwise(
     Eigen::Map<Eigen::VectorXd> C_VEC,
     Eigen::Map<Eigen::MatrixXd> CONSTRMAT,
     Eigen::Map<Eigen::VectorXd> CONSTRLOGSD,
-    const std::vector<std::vector<std::vector<double>>> LLC,
     Eigen::Map<Eigen::VectorXd> THETA,
     Eigen::Map<Eigen::MatrixXd> FREQ,
     const int CORRFLAG,
@@ -65,7 +63,6 @@ Rcpp::List cpp_multiThread_completePairwise(
     C_VEC,
     CONSTRMAT,
     CONSTRLOGSD,
-    LLC,
     THETA,
     FREQ,
     CORRFLAG,
@@ -90,7 +87,6 @@ Rcpp::List cpp_plSA2(
     Eigen::Map<Eigen::VectorXd> C_VEC,
     Eigen::Map<Eigen::MatrixXd> CONSTRMAT,
     Eigen::Map<Eigen::VectorXd> CONSTRLOGSD,
-    const std::vector<std::vector<std::vector<double>>> LLC,
     Eigen::Map<Eigen::VectorXd> THETA_INIT,
     const int NTHR,
     const int NLOAD,
@@ -177,7 +173,6 @@ Rcpp::List cpp_plSA2(
     C_VEC,
     CONSTRMAT,
     CONSTRLOGSD,
-    LLC,
     theta,
     VALFREQ,
     corrflag,
@@ -264,7 +259,7 @@ Rcpp::List cpp_plSA2(
       }
       idx_1pair += PAIRS_PER_ITERATION;
 
-      parallelWorkers::pairsGradient iteration_subset(CONSTRMAT, CONSTRLOGSD, LLC, C_VEC, FREQ, items_pairs, corrflag,
+      parallelWorkers::pairsGradient iteration_subset(CONSTRMAT, CONSTRLOGSD, C_VEC, FREQ, items_pairs, corrflag,
                                                       NTHR, NLOAD, NCORR, NVAR,
                                                       1, 1, theta, iter_chosen_pairs);
       RcppParallel::parallelReduce(0, iter_chosen_pairs.size(), iteration_subset);
@@ -317,7 +312,7 @@ Rcpp::List cpp_plSA2(
       ///////////////////////////////////////////////
 
       bool checkevent = false;
-      sa::proj2(CONSTRMAT, CONSTRLOGSD, LLC, C_VEC, corrflag, NTHR, NLOAD, NCORR, NVAR, theta, checkevent);
+      sa::proj2(CONSTRMAT, CONSTRLOGSD, C_VEC, corrflag, NTHR, NLOAD, NCORR, NVAR, theta, checkevent);
       if(checkevent) post_index.push_back(t);
       if(checkevent && epoch>burne) proj_after_burn=true;
 
@@ -358,7 +353,7 @@ Rcpp::List cpp_plSA2(
     ///////////////////////
     double prev_nll = nll;
     if(epoch%EPOCHS_PER_CHECK==0){
-      parallelWorkers::pairsGradient fullpool_worker(CONSTRMAT, CONSTRLOGSD, LLC, C_VEC, VALFREQ, items_pairs, corrflag, NTHR, NLOAD, NCORR, NVAR,
+      parallelWorkers::pairsGradient fullpool_worker(CONSTRMAT, CONSTRLOGSD, C_VEC, VALFREQ, items_pairs, corrflag, NTHR, NLOAD, NCORR, NVAR,
                                                     1, 0, theta, full_pool);
       RcppParallel::parallelReduce(0, pairs, fullpool_worker);
       nll = -fullpool_worker.subset_ll/n;

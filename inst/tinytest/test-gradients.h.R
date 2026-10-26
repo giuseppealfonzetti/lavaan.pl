@@ -15,7 +15,6 @@ pair_nll <- function(PAR, K, L){
   pair <- lavaan.pl:::cpp_compute_pair_ext(
     CONSTRMAT   = constr_list$CONSTRMAT,
     CONSTRLOGSD = constr_list$CONSTRLOGSD,
-    LLC         = constr_list$LLC,
     C_VEC       = cat,
     THETA       = PAR,
     NTHR        = nthr,
@@ -34,7 +33,6 @@ pair_ngr <- function(PAR, K, L){
   pair <- lavaan.pl:::cpp_compute_pair_ext(
     CONSTRMAT   = constr_list$CONSTRMAT,
     CONSTRLOGSD = constr_list$CONSTRLOGSD,
-    LLC         = constr_list$LLC,
     C_VEC       = cat,
     THETA       = PAR,
     NTHR        = nthr,
@@ -57,7 +55,6 @@ full_ngr <- function(par_vec){
     C_VEC      = dims$cat,
     CONSTRMAT  = constr_list$CONSTRMAT,
     CONSTRLOGSD= constr_list$CONSTRLOGSD,
-    LLC        = constr_list$LLC,
     FREQ       = f,
     THETA      = par_vec,
     CORRFLAG   = constr_list$CORRFLAG,
@@ -81,12 +78,11 @@ if(1){
 
   # Simple loading matrix constraints
   A <- build_constrMat(P = p, Q = q, STRUCT = 'simple')
-  llc <- NULL
-  A <- lavaan.pl:::check_cnstr_loadings(A, STDLV=stdlv, LLC = llc)
+  A <- lavaan.pl:::check_cnstr_loadings(A, STDLV=stdlv)
 
 
   # Draw some random loadings according to constraints
-  Load <- gen_loadings(CONSTRMAT = A, STDLV = stdlv, LLC=llc)
+  Load <- gen_loadings(CONSTRMAT = A, STDLV = stdlv)
   nload <- sum(is.na(A))
 
   # Generate random latent correlation matrix
@@ -132,7 +128,7 @@ if(1){
   f <- compute_frequencies(Y = dat, C_VEC = cat)
 
   dat <- lavaan.pl:::check_data(dat)
-  constr_list <- lavaan.pl:::check_cnstr(list(CONSTRMAT=A, CORRFLAG=corrflag, CONSTRVAR=exp(constr_lsd)^2, STDLV=stdlv, LLC=llc))
+  constr_list <- lavaan.pl:::check_cnstr(list(CONSTRMAT=A, CORRFLAG=corrflag, CONSTRVAR=exp(constr_lsd)^2, STDLV=stdlv))
   dims <- lavaan.pl:::check_dims(dat, constr_list)
 
   tot_gr <- rep(0, dims$d)
@@ -164,14 +160,11 @@ if(1){
 
   # Simple loading matrix constraints
   A <- build_constrMat(P = p, Q = q, STRUCT = 'simple')
-  llc <- list(list(c(2,1), c(.5,6,2)),
-              list(c(7,2), c(1,11,3))
-  )
-  A <- lavaan.pl:::check_cnstr_loadings(A, STDLV=stdlv, LLC = llc)
+  A <- lavaan.pl:::check_cnstr_loadings(A, STDLV=stdlv)
 
 
   # Draw some random loadings according to constraints
-  Load <- gen_loadings(CONSTRMAT = A, STDLV = stdlv, LLC=llc)
+  Load <- gen_loadings(CONSTRMAT = A, STDLV = stdlv)
   nload <- sum(is.na(A))
 
   # Generate random latent correlation matrix
@@ -217,7 +210,7 @@ if(1){
   f <- compute_frequencies(Y = dat, C_VEC = cat)
 
   dat <- lavaan.pl:::check_data(dat)
-  constr_list <- lavaan.pl:::check_cnstr(list(CONSTRMAT=A, CORRFLAG=corrflag, CONSTRVAR=exp(constr_lsd)^2, STDLV=stdlv, LLC=llc))
+  constr_list <- lavaan.pl:::check_cnstr(list(CONSTRMAT=A, CORRFLAG=corrflag, CONSTRVAR=exp(constr_lsd)^2, STDLV=stdlv))
   dims <- lavaan.pl:::check_dims(dat, constr_list)
 
   tot_gr <- rep(0, dims$d)
@@ -249,13 +242,10 @@ if(1){
 
   # Simple loading matrix constraints
   A <- build_constrMat(P = p, Q = q, STRUCT = 'simple')
-  llc <- list(list(c(2,1), c(.5,6,2), c(.2,11,3)),
-              list(c(7,2), c(1,11,3))
-  )
-  A <- lavaan.pl:::check_cnstr_loadings(A, STDLV=stdlv, LLC = llc)
+  A <- lavaan.pl:::check_cnstr_loadings(A, STDLV=stdlv)
 
   # Draw some random loadings according to constraints
-  Load <- gen_loadings(CONSTRMAT = A, STDLV = stdlv, LLC=llc)
+  Load <- gen_loadings(CONSTRMAT = A, STDLV = stdlv)
   nload <- sum(is.na(A))
 
   # Generate random latent correlation matrix
@@ -299,7 +289,7 @@ if(1){
   f <- compute_frequencies(Y = dat, C_VEC = cat)
 
   dat <- lavaan.pl:::check_data(dat)
-  constr_list <- lavaan.pl:::check_cnstr(list(CONSTRMAT=A, CORRFLAG=corrflag, CONSTRVAR=exp(constr_lsd)^2, STDLV=stdlv, LLC=llc))
+  constr_list <- lavaan.pl:::check_cnstr(list(CONSTRMAT=A, CORRFLAG=corrflag, CONSTRVAR=exp(constr_lsd)^2, STDLV=stdlv))
   dims <- lavaan.pl:::check_dims(dat, constr_list)
 
   tot_gr <- rep(0, dims$d)
@@ -332,13 +322,10 @@ if(1){
 
   # Simple loading matrix constraints
   A <- build_constrMat(P = p, Q = q, STRUCT = 'simple')
-  llc <- list(list(c(2,1), c(.5,6,2), c(.2,11,3)),
-              list(c(7,2), c(1,11,3))
-  )
-  A <- lavaan.pl:::check_cnstr_loadings(A, STDLV=stdlv, LLC = llc)
+  A <- lavaan.pl:::check_cnstr_loadings(A, STDLV=stdlv)
 
   # Draw some random loadings according to constraints
-  Load <- gen_loadings(CONSTRMAT = A, STDLV = stdlv, LLC=llc)
+  Load <- gen_loadings(CONSTRMAT = A, STDLV = stdlv)
   nload <- sum(is.na(A))
 
   # Generate random latent correlation matrix
@@ -382,7 +369,7 @@ if(1){
   f <- compute_frequencies(Y = dat, C_VEC = cat)
 
   dat <- lavaan.pl:::check_data(dat)
-  constr_list <- lavaan.pl:::check_cnstr(list(CONSTRMAT=A, CORRFLAG=corrflag, CONSTRVAR=exp(constr_lsd)^2, STDLV=stdlv, LLC=llc))
+  constr_list <- lavaan.pl:::check_cnstr(list(CONSTRMAT=A, CORRFLAG=corrflag, CONSTRVAR=exp(constr_lsd)^2, STDLV=stdlv))
   dims <- lavaan.pl:::check_dims(dat, constr_list)
 
   tot_gr <- rep(0, dims$d)
@@ -414,13 +401,10 @@ if(1){
 
   # Simple loading matrix constraints
   A <- build_constrMat(P = p, Q = q, STRUCT = 'simple')
-  llc <- list(list(c(2,1), c(.5,6,2), c(.2,11,3)),
-              list(c(7,2), c(1,11,3))
-  )
-  A <- lavaan.pl:::check_cnstr_loadings(A, STDLV=stdlv, LLC = llc)
+  A <- lavaan.pl:::check_cnstr_loadings(A, STDLV=stdlv)
 
   # Draw some random loadings according to constraints
-  Load <- gen_loadings(CONSTRMAT = A, STDLV = stdlv, LLC=llc)
+  Load <- gen_loadings(CONSTRMAT = A, STDLV = stdlv)
   nload <- sum(is.na(A))
 
   # Generate random latent correlation matrix
@@ -464,7 +448,7 @@ if(1){
   f <- compute_frequencies(Y = dat, C_VEC = cat)
 
   dat <- lavaan.pl:::check_data(dat)
-  constr_list <- lavaan.pl:::check_cnstr(list(CONSTRMAT=A, CORRFLAG=corrflag, CONSTRVAR=exp(constr_lsd)^2, STDLV=stdlv, LLC=llc))
+  constr_list <- lavaan.pl:::check_cnstr(list(CONSTRMAT=A, CORRFLAG=corrflag, CONSTRVAR=exp(constr_lsd)^2, STDLV=stdlv))
   dims <- lavaan.pl:::check_dims(dat, constr_list)
 
   tot_gr <- rep(0, dims$d)
@@ -496,13 +480,10 @@ if(1){
 
   # Simple loading matrix constraints
   A <- build_constrMat(P = p, Q = q, STRUCT = 'simple')
-  llc <- list(list(c(2,1), c(.5,6,2), c(.2,11,3)),
-              list(c(7,2), c(1,11,3))
-  )
-  A <- lavaan.pl:::check_cnstr_loadings(A, STDLV=stdlv, LLC = llc)
+  A <- lavaan.pl:::check_cnstr_loadings(A, STDLV=stdlv)
 
   # Draw some random loadings according to constraints
-  Load <- gen_loadings(CONSTRMAT = A, STDLV = stdlv, LLC=llc)
+  Load <- gen_loadings(CONSTRMAT = A, STDLV = stdlv)
   nload <- sum(is.na(A))
 
   # Generate random latent correlation matrix
@@ -547,7 +528,7 @@ if(1){
   f <- compute_frequencies(Y = dat, C_VEC = cat)
 
   dat <- lavaan.pl:::check_data(dat)
-  constr_list <- lavaan.pl:::check_cnstr(list(CONSTRMAT=A, CORRFLAG=corrflag, CONSTRVAR=exp(constr_lsd)^2, STDLV=stdlv, LLC=llc))
+  constr_list <- lavaan.pl:::check_cnstr(list(CONSTRMAT=A, CORRFLAG=corrflag, CONSTRVAR=exp(constr_lsd)^2, STDLV=stdlv))
   dims <- lavaan.pl:::check_dims(dat, constr_list)
 
   tot_gr <- rep(0, dims$d)
