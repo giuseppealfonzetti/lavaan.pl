@@ -13,6 +13,8 @@ print.PlFaFit <- function(x, ...){
        "  - Loadings:", x$dims$nload, "\n",
        "  - Latent correlations:", x$dims$ncorr, "\n",
        "  - Latent variances:", x$dims$nvar, "\n",
+       "  - Regressions:", x$dims$nreg, "\n",
+       "  - Residual covariances:", x$dims$nres, "\n",
        "  - Total:", x$dims$npar, "\n\n")
 
   if(x$method == 'ucminf'){
@@ -74,6 +76,8 @@ print.plfa_model <- function(x, ...) {
     " Free loadings:", sum(is.na(x$CONSTRMAT)), "\n",
     " Latent correlations:", if (x$q == 1) "none" else if (!x$CORRFLAG) "fixed to zero" else if (identical(x$LATCOV, "direct")) "direct" else "LKJ", "\n",
     " Latent variances:", if (anyNA(x$CONSTRLOGSD)) "free" else "fixed", "\n",
+    " Free regressions:", sum(is.na(x$REGMAT)), "\n",
+    " Free residual covariances:", sum(is.na(x$RESCOV[upper.tri(x$RESCOV)])), "\n",
     " Linear constraints:", NROW(x$CONSTRAINTS$A), "\n",
     " Identification:", if (x$STDLV) "standardised latent variables" else "marker loadings", "\n"
   )
@@ -99,6 +103,8 @@ getPar.PlFaFit <- function(OBJ, ...) extract_par(THETA       = OBJ$theta,
                                                               NLOAD       = OBJ$dims$nload,
                                                               NCORR       = OBJ$dims$ncorr,
                                                               NVAR        = OBJ$dims$nvar,
+                                                              REGMAT      = OBJ$model$REGMAT,
+                                                              RESCOV      = OBJ$model$RESCOV,
                                                               ...)
 #' Extract parameters
 #'
@@ -115,7 +121,7 @@ getPar.default <- function(OBJ, ...) extract_par(THETA = OBJ, ...)
 #'    \tab \cr
 #'    \code{'transformed'} \tab Transformed vector of parameters, with interpretable latent correlations. \cr
 #'     \tab \cr
-#'    \code{'list'} \tab List containing the ordered thresholds vector, the loading matrix and the latent correlation matrix. \cr
+#'    \code{'list'} \tab List containing the ordered thresholds vector, the loading matrix, the latent correlation matrix (of the disturbances, with regressions), the regression matrix and the residual covariance matrix. \cr
 #' }
 #' @param CONSTRMAT \eqn{p*q}-dimensional matrix. Elements set to `NA` refers to free loading parameters. Elements set to numerical values denote fixed values constraints.
 #' @param CONSTRLOGSD \eqn{q}-dimensional vector. Elements set to `NA` refers to free latent log standard deviations parameters. Elements set to numerical values denote fixed values constraints.
@@ -124,8 +130,11 @@ getPar.default <- function(OBJ, ...) extract_par(THETA = OBJ, ...)
 #' @param NCORR Number of free latent correlations parameters.
 #' @param NVAR Number of free latent variance parameters.
 #' @param CORRFLAG Parametrisation of the latent correlations: 1 for LKJ, 2 for direct covariances.
+#' @param REGMAT Structural regressions, as in [set_plfa_model()]. Empty for none.
+#' @param RESCOV Residual covariances, as in [set_plfa_model()]. Empty for none.
 extract_par <- function(THETA, OPTION = c('list', 'raw', 'transformed'),
-                        CONSTRMAT, CONSTRLOGSD, NTHR, NLOAD, NCORR, NVAR, CORRFLAG = 1){
+                        CONSTRMAT, CONSTRLOGSD, NTHR, NLOAD, NCORR, NVAR, CORRFLAG = 1,
+                        REGMAT = matrix(0, 0, 0), RESCOV = matrix(0, 0, 0)){
   OPTION <- match.arg(OPTION)
 
   q <- ncol(CONSTRMAT)
@@ -148,6 +157,7 @@ extract_par <- function(THETA, OPTION = c('list', 'raw', 'transformed'),
       if(NVAR>0){
         vec <- c(vec, exp(THETA[(NTHR+NLOAD+NCORR+1):(NTHR+NLOAD+NCORR+NVAR)]))
       }
+      vec <- c(vec, THETA[-seq_len(NTHR+NLOAD+NCORR+NVAR)])
 
       return(vec)
 
@@ -172,7 +182,22 @@ extract_par <- function(THETA, OPTION = c('list', 'raw', 'transformed'),
       CORRFLAG    = CORRFLAG
     )
 
-    out <- list(thresholds = thr, loadings = ld, latent_correlations = S)
+    ob <- NTHR + NLOAD + NCORR + NVAR
+    B <- matrix(0, q, q)
+    if (length(REGMAT)) {
+      B <- REGMAT
+      B[is.na(REGMAT)] <- THETA[ob + seq_len(sum(is.na(REGMAT)))]
+    }
+    p <- nrow(CONSTRMAT)
+    R <- matrix(0, p, p)
+    if (length(RESCOV)) {
+      R <- RESCOV
+      up <- is.na(RESCOV) & upper.tri(RESCOV)
+      R[up] <- THETA[ob + sum(is.na(REGMAT)) + seq_len(sum(up))]
+      R[lower.tri(R)] <- t(R)[lower.tri(R)]
+    }
+
+    out <- list(thresholds = thr, loadings = ld, latent_correlations = S, regressions = B, residual_covariances = R)
     return(out)
   }
 }
@@ -220,6 +245,8 @@ computeVar.PlFaFit <- function(OBJ, NUMDERIV = F, VERBOSE = FALSE){ if(OBJ$metho
                        CL          = OBJ$data$cluster,
                        LINCON      = OBJ$lincon,
                        CORRFLAG    = corrflag_code(OBJ$model),
+                       REGMAT      = OBJ$model$REGMAT,
+                       RESCOV      = OBJ$model$RESCOV,
                        METHOD      = OBJ$method,
                        NUMDERIV    = NUMDERIV,
                        NCORES      = OBJ$cores,
@@ -246,6 +273,8 @@ computeVar.PlFaFit <- function(OBJ, NUMDERIV = F, VERBOSE = FALSE){ if(OBJ$metho
                        CL          = OBJ$data$cluster,
                        LINCON      = OBJ$lincon,
                        CORRFLAG    = corrflag_code(OBJ$model),
+                       REGMAT      = OBJ$model$REGMAT,
+                       RESCOV      = OBJ$model$RESCOV,
                        METHOD      = OBJ$method,
                        NUMDERIV    = NUMDERIV,
                        NCORES      = OBJ$cores,
@@ -257,7 +286,7 @@ compute_var <- function(THETA, C_VEC, N, IT = NULL, PAIRS = NULL, PPI = NULL,
                         FREQ, DATA, METHOD, NUMDERIV = F, NCORES=1,
                         VERBOSE = FALSE, UFREQ = numeric(0), UW = numeric(0),
                         GW = numeric(0), JW = numeric(0), CL = numeric(0), LINCON = NULL,
-                        CORRFLAG = as.integer(NCORR > 0)){
+                        CORRFLAG = as.integer(NCORR > 0), REGMAT = matrix(0, 0, 0), RESCOV = matrix(0, 0, 0)){
 
   start_time <- Sys.time()
   if (is.null(LINCON)) LINCON <- list(K = diag(length(THETA)), c = rep(0, length(THETA)), free_idx = seq_along(THETA))
@@ -304,7 +333,9 @@ compute_var <- function(THETA, C_VEC, N, IT = NULL, PAIRS = NULL, PPI = NULL,
     UW = UW,
     GW = GW,
     JW = JW,
-    CL = CL
+    CL = CL,
+    REGMAT = REGMAT,
+    RESCOV = RESCOV
   )
   Jhat <- crossprod(K, HJ$J %*% K)
 
@@ -334,7 +365,9 @@ compute_var <- function(THETA, C_VEC, N, IT = NULL, PAIRS = NULL, PPI = NULL,
         NVAR       = NVAR,
         GRFLAG     = 1,
         SILENTFLAG = 1,
-        UFREQ      = UFREQ
+        UFREQ      = UFREQ,
+        REGMAT     = REGMAT,
+        RESCOV     = RESCOV
       )
       mod$iter_ngradient/N
     }

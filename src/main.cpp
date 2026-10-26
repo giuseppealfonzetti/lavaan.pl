@@ -36,6 +36,8 @@
 //' @param GRFLAG 0 to only compute the likelihood. 1 to also compute the gradient.
 //' @param SILENTFLAG optional for verbose output
 //' @param UFREQ Univariate frequencies of the available-cases term. Empty for none.
+//' @param REGMAT \eqn{q*q}-dimensional matrix of structural regressions. Elements set to `NA` refer to free coefficients. Empty for none.
+//' @param RESCOV \eqn{p*p}-dimensional matrix of residual covariances. Off-diagonal elements set to `NA` refer to free covariances. Empty for none.
 //'
 // [[Rcpp::export]]
 Rcpp::List cpp_multiThread_completePairwise(
@@ -52,7 +54,9 @@ Rcpp::List cpp_multiThread_completePairwise(
     const int NVAR,
     const int GRFLAG = 0,
     const int SILENTFLAG = 1,
-    Rcpp::NumericVector UFREQ = Rcpp::NumericVector::create()
+    Rcpp::NumericVector UFREQ = Rcpp::NumericVector::create(),
+    Rcpp::Nullable<Rcpp::NumericMatrix> REGMAT = R_NilValue,
+    Rcpp::Nullable<Rcpp::NumericMatrix> RESCOV = R_NilValue
 ){
   const Eigen::Map<Eigen::VectorXd> ufreq(UFREQ.begin(), UFREQ.size());
 
@@ -72,7 +76,9 @@ Rcpp::List cpp_multiThread_completePairwise(
     NVAR,
     GRFLAG,
     SILENTFLAG,
-    ufreq
+    ufreq,
+    params::nullable_mat(REGMAT),
+    params::nullable_mat(RESCOV)
   );
 
   return(output);
@@ -135,6 +141,7 @@ Rcpp::List cpp_plSA2(
   // Read frequencies, and initialise items_pairs
   // Eigen::MatrixXd pairs_table = FREQ;
   Eigen::MatrixXd items_pairs(2,pairs);
+  const Eigen::MatrixXd nostruct;
   int idx = 0;
   for(int k = 1; k < p; k++){
     for(int l = 0; l < k; l++){
@@ -182,7 +189,9 @@ Rcpp::List cpp_plSA2(
     NVAR,
     0,
     1,
-    valufreq
+    valufreq,
+    nostruct,
+    nostruct
   )["iter_nll"];
   nll/=N;
   if(VERBOSE) Rcpp::Rcout << "Initial full npll: "<< nll << " | iterations per epoch:"<<maxtpe << "\n";
@@ -259,7 +268,7 @@ Rcpp::List cpp_plSA2(
       }
       idx_1pair += PAIRS_PER_ITERATION;
 
-      parallelWorkers::pairsGradient iteration_subset(CONSTRMAT, CONSTRLOGSD, C_VEC, FREQ, items_pairs, corrflag,
+      parallelWorkers::pairsGradient iteration_subset(CONSTRMAT, CONSTRLOGSD, C_VEC, FREQ, items_pairs, nostruct, nostruct, corrflag,
                                                       NTHR, NLOAD, NCORR, NVAR,
                                                       1, 1, theta, iter_chosen_pairs);
       RcppParallel::parallelReduce(0, iter_chosen_pairs.size(), iteration_subset);
@@ -353,7 +362,7 @@ Rcpp::List cpp_plSA2(
     ///////////////////////
     double prev_nll = nll;
     if(epoch%EPOCHS_PER_CHECK==0){
-      parallelWorkers::pairsGradient fullpool_worker(CONSTRMAT, CONSTRLOGSD, C_VEC, VALFREQ, items_pairs, corrflag, NTHR, NLOAD, NCORR, NVAR,
+      parallelWorkers::pairsGradient fullpool_worker(CONSTRMAT, CONSTRLOGSD, C_VEC, VALFREQ, items_pairs, nostruct, nostruct, corrflag, NTHR, NLOAD, NCORR, NVAR,
                                                     1, 0, theta, full_pool);
       RcppParallel::parallelReduce(0, pairs, fullpool_worker);
       nll = -fullpool_worker.subset_ll/n;

@@ -43,9 +43,10 @@ fit_plFA <- function(
   # Identify model dimensions
   dims <- check_dims(DATA$Y, MODEL)
   if(METHOD=="SA" && dims$p<40) warning("SA defaults are tuned for models with at least 40 items: check the estimates against set_ucminf_control().", call. = FALSE)
-  INIT_METHOD <- check_init_method(dims, INIT$METHOD, INIT$THETA)
+  INIT_METHOD <- check_init_method(dims, INIT$METHOD, INIT$THETA, MODEL)
   lc <- lincon(MODEL$CONSTRAINTS, dims, corrflag_code(MODEL) == 2)
   if(METHOD == "SA" && corrflag_code(MODEL) == 2) stop("LATCOV = \"direct\" is not currently supported with SA; use set_ucminf_control().", call. = FALSE)
+  if(METHOD == "SA" && !sa_model(MODEL)) stop("REGMAT and RESCOV are not currently supported with SA; use set_ucminf_control().", call. = FALSE)
   if(METHOD == "SA" && length(lc$free_idx) < dims$d) stop("CONSTRAINTS are not currently supported with SA; use set_ucminf_control().", call. = FALSE)
 
   tmp <- structure(
@@ -61,6 +62,8 @@ fit_plFA <- function(
                      nload = dims$nload,
                      ncorr = dims$ncorr,
                      nvar  = dims$nvar,
+                     nreg  = dims$nreg,
+                     nres  = dims$nres,
                      npar  = length(lc$free_idx)),
          method = METHOD,
          lincon = lc),
@@ -113,7 +116,7 @@ fit_plFA <- function(
     }
     nll <- function(theta) cpp_multiThread_completePairwise(N = dims$n, C_VEC = dims$cat, CONSTRMAT = MODEL$CONSTRMAT,
       CONSTRLOGSD = MODEL$CONSTRLOGSD, THETA = theta, FREQ = DATA$freq, CORRFLAG = 2L, NTHR = dims$nthr, NLOAD = dims$nload,
-      NCORR = dims$ncorr, NVAR = dims$nvar, UFREQ = DATA$ufreq)$iter_nll
+      NCORR = dims$ncorr, NVAR = dims$nvar, UFREQ = DATA$ufreq, REGMAT = MODEL$REGMAT, RESCOV = MODEL$RESCOV)$iter_nll
     start <- as.vector(lc$K %*% tmp$init[lc$free_idx] + lc$c)
     if(all(is.finite(theta)) && pd(theta) && isTRUE(nll(theta) < if(pd(start)) nll(start) else Inf)) tmp$init <- theta
   }
@@ -141,7 +144,9 @@ fit_plFA <- function(
         NCORR      = dims$ncorr,
         NVAR       = dims$nvar,
         SILENTFLAG = 1,
-        UFREQ      = DATA$ufreq
+        UFREQ      = DATA$ufreq,
+        REGMAT     = MODEL$REGMAT,
+        RESCOV     = MODEL$RESCOV
       )
       out <- mod$iter_nll/dims$n
       return(out)
@@ -163,7 +168,9 @@ fit_plFA <- function(
         NVAR       = dims$nvar,
         GRFLAG     = 1,
         SILENTFLAG = 1,
-        UFREQ      = DATA$ufreq
+        UFREQ      = DATA$ufreq,
+        REGMAT     = MODEL$REGMAT,
+        RESCOV     = MODEL$RESCOV
       )
 
       out <- mod$iter_ngradient/dims$n
@@ -175,11 +182,13 @@ fit_plFA <- function(
       'par' = tmp$init[lc$free_idx],
       'fn' = function(x){
         theta <- as.vector(lc$K %*% x + lc$c)
-        if(pd(theta)) Rwr_ncl(theta) else Inf
+        val <- if(pd(theta)) Rwr_ncl(theta) else Inf
+        if(is.finite(val)) val else Inf
       },
       'gr' = function(x){
         theta <- as.vector(lc$K %*% x + lc$c)
-        if(pd(theta)) as.vector(crossprod(lc$K, Rwr_ngr(theta))) else rep(0, length(x))
+        g <- if(pd(theta)) as.vector(crossprod(lc$K, Rwr_ngr(theta))) else rep(0, length(x))
+        if(all(is.finite(g))) g else rep(0, length(x))
       },
       'control' = list(grtol = CONTROL$GRTOL, xtol = CONTROL$XTOL, stepmax = CONTROL$STEPMAX, maxeval = CONTROL$MAXEVAL),
       'hessian' = 0)

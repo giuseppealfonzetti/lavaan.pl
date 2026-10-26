@@ -13,8 +13,9 @@ theta_names(DATA, MODEL)
 }
 \value{
 The names of the parameters in the order used by \code{\link[=fit_plFA]{fit_plFA()}}: thresholds \code{tau[i,k]},
-free loadings \code{lambda[j,h]}, latent correlation parameters \code{eta[r,c]} and free latent log
-standard deviations \code{logsd[h]}.
+free loadings \code{lambda[j,h]}, latent correlation parameters \code{eta[r,c]} (or covariances \code{psi[r,c]}),
+free latent log standard deviations \code{logsd[h]}, free regression coefficients \code{beta[i,j]} and free
+residual covariances \code{theta[k,l]}.
 }
 \description{
 Names of the model parameters

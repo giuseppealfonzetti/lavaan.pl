@@ -119,7 +119,9 @@ check_dims <- function(DATA, CONSTR_LIST){
   nload <- sum(is.na(CONSTR_LIST$CONSTRMAT))
   ncorr <- 0; if(CONSTR_LIST$CORRFLAG==1) ncorr <- q*(q-1)/2
   nvar  <- sum(is.na(CONSTR_LIST$CONSTRLOGSD))
-  d <- nthr + nload + ncorr + nvar
+  nreg  <- sum(is.na(CONSTR_LIST$REGMAT))
+  nres  <- if (length(CONSTR_LIST$RESCOV)) sum(is.na(CONSTR_LIST$RESCOV[upper.tri(CONSTR_LIST$RESCOV)])) else 0
+  d <- nthr + nload + ncorr + nvar + nreg + nres
   stopifnot(q<p)
   stopifnot(categories>1)
 
@@ -134,6 +136,8 @@ check_dims <- function(DATA, CONSTR_LIST){
     nload=nload,
     ncorr=ncorr,
     nvar=nvar,
+    nreg=nreg,
+    nres=nres,
     d=d,
     cat=categories,
     pairs=p*(p-1)/2
@@ -153,23 +157,14 @@ check_init_par <- function(PAR, DIMS, CONSTR_LIST){
   stopifnot(is.finite(PAR))
   stopifnot(length(PAR)==DIMS$d)
 
-  L <- cpp_loadings_theta2mat(THETA     = PAR,
-                              CONSTRMAT = CONSTR_LIST$CONSTRMAT,
-                              NTHR      = DIMS$nthr,
-                              NLOAD     = DIMS$nload)
-  check_loadings(L)
-  S <- cpp_latvar_theta2mat(THETA       = PAR,
-                            CONSTRLOGSD = CONSTR_LIST$CONSTRLOGSD,
-                            NTHR        = DIMS$nthr,
-                            NLOAD       = DIMS$nload,
-                            NCORR       = DIMS$ncorr,
-                            NVAR        = DIMS$nvar,
-                            Q           = DIMS$q,
-                            CORRFLAG    = corrflag_code(CONSTR_LIST))
-  check_latcov(S)
-  Sy <- L%*%S%*%t(L)
+  gp <- extract_par(PAR, "list", CONSTR_LIST$CONSTRMAT, CONSTR_LIST$CONSTRLOGSD, DIMS$nthr, DIMS$nload, DIMS$ncorr,
+                    DIMS$nvar, corrflag_code(CONSTR_LIST), CONSTR_LIST$REGMAT, CONSTR_LIST$RESCOV)
+  check_loadings(gp$loadings)
+  check_latcov(gp$latent_correlations)
+  L <- gp$loadings %*% solve(diag(DIMS$q) - gp$regressions)
+  Sy <- L%*%gp$latent_correlations%*%t(L)
   if(!all(diag(Sy)<=1)) warning("Negative error variances implied by init parameters")
-  if (corrflag_code(CONSTR_LIST) == 2) return(PAR)
+  if (!sa_model(CONSTR_LIST)) return(PAR)
   PAR <- cpp_sa_proj( THETA=PAR,
                       CONSTRMAT=CONSTR_LIST$CONSTRMAT,
                       CONSTRLOGSD=CONSTR_LIST$CONSTRLOGSD,
@@ -184,7 +179,7 @@ check_init_par <- function(PAR, DIMS, CONSTR_LIST){
 }
 check_init <- function(INIT, FREQ, DIMS, CONSTR_LIST, INIT_METHOD=c("SA", "custom", "standard"), VERBOSE=FALSE, INIT_CONTROL=set_sa_init_control(), UFREQ=numeric(0)){
 
-  INIT_METHOD <- check_init_method(DIMS=DIMS, INIT_METHOD = INIT_METHOD, INIT = INIT)
+  INIT_METHOD <- check_init_method(DIMS=DIMS, INIT_METHOD = INIT_METHOD, INIT = INIT, CONSTR_LIST = CONSTR_LIST)
 
   # Setup fixed values initialisation
   if(!is.null(INIT)) {
@@ -194,8 +189,8 @@ check_init <- function(INIT, FREQ, DIMS, CONSTR_LIST, INIT_METHOD=c("SA", "custo
     lambda_init  <- init_loadings(DIMS, CONSTR_LIST)
     transformed_rhos_init  <- init_transformed_latcorr(DIMS, CONSTR_LIST)
     transformed_latsd_init <- init_transformed_latsd(DIMS, CONSTR_LIST)
-    INIT <- c(lambda0_init, lambda_init, transformed_rhos_init, transformed_latsd_init)
-    if (corrflag_code(CONSTR_LIST) != 2) INIT <- cpp_sa_proj(THETA=INIT,
+    INIT <- c(lambda0_init, lambda_init, transformed_rhos_init, transformed_latsd_init, rep(0, DIMS$nreg + DIMS$nres))
+    if (sa_model(CONSTR_LIST)) INIT <- cpp_sa_proj(THETA=INIT,
                         CONSTRMAT=CONSTR_LIST$CONSTRMAT,
                         CONSTRLOGSD=CONSTR_LIST$CONSTRLOGSD,
                         C_VEC=DIMS$cat,
@@ -216,12 +211,12 @@ check_init <- function(INIT, FREQ, DIMS, CONSTR_LIST, INIT_METHOD=c("SA", "custo
   INIT <- check_init_par(INIT, DIMS, CONSTR_LIST)
   return(INIT)
 }
-check_init_method <- function(DIMS, INIT_METHOD = c("SA", "custom", "standard"), INIT =NULL){
+check_init_method <- function(DIMS, INIT_METHOD = c("SA", "custom", "standard"), INIT =NULL, CONSTR_LIST = NULL){
   INIT_METHOD <- match.arg(INIT_METHOD)
   if(INIT_METHOD == "custom") INIT_METHOD <- "standard"
 
   if(INIT_METHOD=="SA"){
-    if(DIMS$p<15)INIT_METHOD <- "standard"
+    if(DIMS$p<15 || (!is.null(CONSTR_LIST) && !sa_model(CONSTR_LIST)))INIT_METHOD <- "standard"
   }
   return(INIT_METHOD)
 }
@@ -330,19 +325,25 @@ set_plfa_data <- function(DATA, VALDATA = NULL, MISSING = c("listwise", "pairwis
 #'  `TRUE` to fix latent variables scale. Set it `FALSE` to fix loadings scale.
 #' @param CONSTRAINTS Linear equality constraints `A %*% theta = b` on the parameter vector, as
 #'  `list(A = , b = )`, with one column of `A` per parameter in the order of [theta_names()]. Each
-#'  constraint involves either thresholds, loadings, latent covariances (with `LATCOV = "direct"`) or
-#'  latent log standard deviations.
+#'  constraint involves either thresholds, loadings, latent covariances (with `LATCOV = "direct"`),
+#'  latent log standard deviations, regression coefficients or residual covariances.
+#' @param REGMAT \eqn{q*q}-dimensional matrix of structural regressions among the latent variables, with
+#'  `REGMAT[i, j]` the effect of latent variable `j` on latent variable `i`. Elements set to `NA` are
+#'  free, numerical values are fixed. The latent covariances then refer to the disturbances.
+#' @param RESCOV \eqn{p*p}-dimensional symmetric matrix of residual covariances of the items.
+#'  Off-diagonal elements set to `NA` are free, numerical values are fixed. The diagonal is ignored.
 #' @param LATCOV Parametrisation of the latent correlations: `"lkj"` (Cholesky factor with Fisher-z
 #'  angles, always positive definite) or `"direct"` (the latent covariances themselves, which allows
 #'  linear constraints on them).
 #'
 #' @return An object of class `plfa_model` with the identified loading constraints `CONSTRMAT`,
 #'   the log standard deviations of the latent variables `CONSTRLOGSD` (`NA` when free),
-#'   `CORRFLAG`, `STDLV`, `CONSTRAINTS`, `LATCOV`, and the numbers of items `p` and latent variables `q`.
+#'   `CORRFLAG`, `STDLV`, `CONSTRAINTS`, `LATCOV`, `REGMAT`, `RESCOV`, and the numbers of items `p` and
+#'   latent variables `q`.
 #'
 #' @export
 set_plfa_model <- function(CONSTRMAT, CONSTRVAR = NULL, CORRFLAG = TRUE, STDLV = TRUE, CONSTRAINTS = NULL,
-                           LATCOV = c("lkj", "direct")) {
+                           LATCOV = c("lkj", "direct"), REGMAT = NULL, RESCOV = NULL) {
   LATCOV <- match.arg(LATCOV)
   if (is.matrix(CONSTRMAT) && all(is.na(CONSTRMAT))) storage.mode(CONSTRMAT) <- "double"
   stopifnot(is.matrix(CONSTRMAT))
@@ -358,6 +359,21 @@ set_plfa_model <- function(CONSTRMAT, CONSTRVAR = NULL, CORRFLAG = TRUE, STDLV =
   out$LATCOV <- LATCOV
   out$p <- nrow(out$CONSTRMAT)
   out$q <- ncol(out$CONSTRMAT)
+  if (is.null(REGMAT)) REGMAT <- matrix(0, 0, 0)
+  if (is.null(RESCOV)) RESCOV <- matrix(0, 0, 0)
+  storage.mode(REGMAT) <- storage.mode(RESCOV) <- "double"
+  if (length(REGMAT)) {
+    stopifnot(is.matrix(REGMAT), dim(REGMAT) == out$q, !is.infinite(REGMAT))
+    if (any(is.na(diag(REGMAT)) | diag(REGMAT) != 0)) stop("The diagonal of REGMAT must be zero.")
+    if (!anyNA(REGMAT) && abs(det(diag(out$q) - REGMAT)) < 1e-8) stop("diag(q) - REGMAT must be invertible.")
+  }
+  if (length(RESCOV)) {
+    stopifnot(is.matrix(RESCOV), dim(RESCOV) == out$p, !is.infinite(RESCOV))
+    diag(RESCOV) <- 0
+    if (!identical(is.na(RESCOV), t(is.na(RESCOV))) || !isSymmetric(unname(RESCOV))) stop("RESCOV must be symmetric.")
+  }
+  out$REGMAT <- REGMAT
+  out$RESCOV <- RESCOV
   class(out) <- "plfa_model"
   out
 }
@@ -367,8 +383,9 @@ set_plfa_model <- function(CONSTRMAT, CONSTRVAR = NULL, CORRFLAG = TRUE, STDLV =
 #' @param DATA Data object from [set_plfa_data()].
 #' @param MODEL Model object from [set_plfa_model()].
 #' @return The names of the parameters in the order used by [fit_plFA()]: thresholds `tau[i,k]`,
-#'   free loadings `lambda[j,h]`, latent correlation parameters `eta[r,c]` and free latent log
-#'   standard deviations `logsd[h]`.
+#'   free loadings `lambda[j,h]`, latent correlation parameters `eta[r,c]` (or covariances `psi[r,c]`),
+#'   free latent log standard deviations `logsd[h]`, free regression coefficients `beta[i,j]` and free
+#'   residual covariances `theta[k,l]`.
 #' @export
 theta_names <- function(DATA, MODEL) {
   stopifnot(inherits(DATA, "plfa_data"), inherits(MODEL, "plfa_model"))
@@ -380,12 +397,19 @@ theta_names <- function(DATA, MODEL) {
     if (MODEL$CORRFLAG && q > 1) unlist(lapply(2:q, function(h) {
       sprintf(if (corrflag_code(MODEL) == 2) "psi[%d,%d]" else "eta[%d,%d]", seq_len(h - 1), h)
     })),
-    sprintf("logsd[%d]", which(is.na(MODEL$CONSTRLOGSD)))
+    sprintf("logsd[%d]", which(is.na(MODEL$CONSTRLOGSD))),
+    sprintf("beta[%d,%d]", row(MODEL$REGMAT)[is.na(MODEL$REGMAT)], col(MODEL$REGMAT)[is.na(MODEL$REGMAT)]),
+    sprintf("theta[%d,%d]", row(MODEL$RESCOV)[is.na(MODEL$RESCOV) & upper.tri(MODEL$RESCOV)],
+            col(MODEL$RESCOV)[is.na(MODEL$RESCOV) & upper.tri(MODEL$RESCOV)])
   )
 }
 
 corrflag_code <- function(MODEL) {
   if (!MODEL$CORRFLAG) 0L else if (identical(MODEL$LATCOV, "direct")) 2L else 1L
+}
+
+sa_model <- function(MODEL) {
+  corrflag_code(MODEL) != 2 && !length(MODEL$REGMAT) && !length(MODEL$RESCOV)
 }
 
 lincon <- function(CONSTRAINTS, DIMS, DIRECT = FALSE) {
@@ -394,11 +418,11 @@ lincon <- function(CONSTRAINTS, DIMS, DIRECT = FALSE) {
   A <- CONSTRAINTS$A
   b <- CONSTRAINTS$b
   if (ncol(A) != d) stop("CONSTRAINTS$A must have one column per parameter (", d, "), in the order of theta_names().")
-  block <- rep(1:4, c(DIMS$nthr, DIMS$nload, DIMS$ncorr, DIMS$nvar))
+  block <- rep(1:6, c(DIMS$nthr, DIMS$nload, DIMS$ncorr, DIMS$nvar, DIMS$nreg, DIMS$nres))
   for (r in seq_len(nrow(A))) {
     blk <- unique(block[A[r, ] != 0])
     if (any(blk == 3) && !DIRECT) stop("Constraints on the latent correlations require LATCOV = \"direct\".")
-    if (length(blk) > 1) stop("Each constraint must involve either thresholds, loadings, latent covariances or latent log standard deviations.")
+    if (length(blk) > 1) stop("Each constraint must involve either thresholds, loadings, latent covariances, latent log standard deviations, regressions or residual covariances.")
   }
   piv <- integer(0)
   for (j in seq_len(d)) {

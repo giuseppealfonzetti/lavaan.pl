@@ -4,6 +4,11 @@
 
 namespace params{
 
+  // Structural matrices passed from R, empty when NULL
+  inline Eigen::MatrixXd nullable_mat(Rcpp::Nullable<Rcpp::NumericMatrix> X){
+    if(X.isNull()) return Eigen::MatrixXd();
+    return Rcpp::as<Eigen::MatrixXd>(Rcpp::NumericMatrix(X));
+  }
 
   /* EXTRACT PI THRESHOLDS */
   // Extract from tau the thresholds related to pi_sksl

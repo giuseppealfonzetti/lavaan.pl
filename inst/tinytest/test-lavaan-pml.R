@@ -226,13 +226,58 @@ local({
                sum(diag(M)) / sum(diag(M %*% M)) * 2 * (f1@optim$logl - f0@optim$logl), tolerance = 1e-4)
 })
 
+# Residual covariances, structural regressions and higher-order factors match lavaan PML
+local({
+  d <- as.data.frame(bfi)
+  items <- c(paste0("A", 1:4), paste0("C", 1:4), paste0("E", 1:4))
+  for (v in items) d[[v]] <- ordered(d[[v]])
+  set.seed(1)
+  d <- d[complete.cases(d[, items]), ][sample(2000, 800), ]
+  three <- "A =~ A1 + A2 + A3 + A4\nC =~ C1 + C2 + C3 + C4\nE =~ E1 + E2 + E3 + E4"
+  fm <- c("chisq", "chisq.scaled", "df.scaled", "baseline.chisq.scaled", "cfi.scaled")
+  cases <- list(
+    list(m = paste(three, "\nA1 ~~ A2\nC1 ~~ E1"), lv = TRUE),
+    list(m = paste(three, "\nA1 ~~ A2\nC1 ~~ E1"), lv = FALSE),
+    list(m = paste(three, "\nC ~ A\nE ~ A + C"), lv = TRUE),
+    list(m = paste(three, "\nC ~ A\nE ~ A + C"), lv = FALSE),
+    list(m = paste(three, "\nE ~ A + C"), lv = FALSE),
+    list(m = paste(three, "\nE ~ b*A + b*C"), lv = TRUE),
+    list(m = paste(three, "\nC ~ A\nE ~ A + C\nA1 ~~ A2"), lv = TRUE),
+    list(m = paste(three, "\nG =~ A + C + E"), lv = FALSE)
+  )
+  for (cs in cases) {
+    ours <- suppressWarnings(sem(cs$m, d, std.lv = cs$lv, test = "mean.var.adjusted"))
+    ref <- suppressWarnings(lavaan::sem(cs$m, d, std.lv = cs$lv, estimator = "PML", test = "mean.var.adjusted"))
+    expect_equal(parameterEstimates(ours)$est, parameterEstimates(ref)$est, tolerance = 1e-4)
+    expect_equal(parameterEstimates(ours)$se, parameterEstimates(ref)$se, tolerance = 1e-3)
+    expect_equal(ours@optim$logl, ref@optim$logl, tolerance = 1e-6)
+    expect_equal(fitMeasures(ours, fm), fitMeasures(ref, fm), tolerance = 1e-3)
+  }
+  # A just-identified higher-order factor reproduces the correlated-factor model
+  fc <- cfa(three, d, std.lv = TRUE, test = "mean.var.adjusted")
+  expect_equal(sem(paste(three, "\nG =~ A + C + E"), d, std.lv = TRUE)@optim$logl, fc@optim$logl, tolerance = 1e-8)
+  # Nested test of equal regressions, against lavaan's exact restriction
+  f1 <- sem(paste(three, "\nE ~ A + C"), d, std.lv = TRUE, test = "mean.var.adjusted")
+  f0 <- sem(paste(three, "\nE ~ b*A + b*C"), d, std.lv = TRUE, test = "mean.var.adjusted")
+  m10 <- lavaan:::lav_test_diff_m10(m1 = f1, m0 = f0, test = FALSE)
+  iH <- solve(lavaan::lavTech(m10, "information.observed"))
+  J <- lavaan::lavTech(m10, "first.order")
+  A <- lavaan:::lav_test_diff_a(m1 = f1, m0 = f0, method = "exact")
+  M <- (A %*% iH %*% J %*% iH %*% t(A)) %*% solve(A %*% iH %*% t(A))
+  expect_equal(lavTestLRT(f1, f0)[2, "Chisq diff"],
+               sum(diag(M)) / sum(diag(M %*% M)) * 2 * (f1@optim$logl - f0@optim$logl), tolerance = 1e-4)
+  # Residual covariances against the model without them
+  fr <- cfa(paste(three, "\nA1 ~~ A2"), d, std.lv = TRUE, test = "mean.var.adjusted")
+  expect_equal(lavTestLRT(fr, fc)[2, "Df diff"] > 0, TRUE)
+  expect_equal(lavTestLRT(fr, fc)[2, "Chisq diff"] > 0, TRUE)
+})
+
 # unsupported models are rejected
 local({
   expect_error(cfa("A =~ A1 + A2 + A3\nC =~ C1 + C2 + C3\nA ~~ v*A\nA ~~ c*C\nc == v", bfi, std.lv = FALSE), "covariances and variances")
   expect_error(cfa("A =~ A1 + A2 + A3\nC =~ C1 + C2 + C3\nA ~~ v1*A\nC ~~ v2*C\nv1 == v2 + 0.5", bfi, std.lv = FALSE), "variances")
   expect_error(cfa("A =~ A1 + a*A2 + A3\nA1 | t*t1\na == t", bfi, std.lv = TRUE), "either thresholds")
-  expect_error(cfa("A =~ A1 + A2 + A3\nA1 ~~ A2", bfi, std.lv = TRUE), "residual")
-  expect_error(cfa("A =~ A1 + A2 + A3\nC =~ C1 + C2 + C3\nC ~ A", bfi, std.lv = TRUE), "regression")
+  expect_error(sem("A =~ A1 + A2 + A3\nC =~ C1 + C2 + C3\nA1 ~ C", bfi, std.lv = TRUE), "observed variables")
   expect_error(cfa("A =~ A1 + A2 + A3", bfi, std.lv = TRUE, parameterization = "theta"), "parameterization")
   expect_error(cfa("A =~ A1 + A2 + A3", bfi, std.lv = TRUE, group = "gender"), "group")
 })

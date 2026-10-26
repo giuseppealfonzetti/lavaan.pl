@@ -13,15 +13,17 @@ Rcpp::List cpp_compute_pair_ext(
      const unsigned int L,
      Eigen::MatrixXd PAIRS_TABLE,
      const unsigned int GRADFLAG,
-     const int CORRFLAG
+     const int CORRFLAG,
+     Rcpp::Nullable<Rcpp::NumericMatrix> REGMAT,
+     Rcpp::Nullable<Rcpp::NumericMatrix> RESCOV
  ){
-   const int d = NTHR+NLOAD+NCORR+NVAR;
-
-   if(THETA.size()!=(NTHR+NLOAD+NCORR+NVAR))Rcpp::stop("Check theta size");
+   const int d = THETA.size();
 
    double ll = 0;
    Eigen::VectorXd gradient = Eigen::VectorXd::Zero(d);
-   const pairs::Setup S(THETA, CONSTRMAT, CONSTRLOGSD, NTHR, NLOAD, NCORR, NVAR, CORRFLAG);
+   const pairs::Setup S(THETA, CONSTRMAT, CONSTRLOGSD, NTHR, NLOAD, NCORR, NVAR, CORRFLAG,
+                        params::nullable_mat(REGMAT), params::nullable_mat(RESCOV));
+   if(d != NTHR + S.m) Rcpp::stop("Check theta size");
    pairs::pair_contribution(S, C_VEC, PAIRS_TABLE, K, L, GRADFLAG, ll, gradient);
 
    Rcpp::List output =
@@ -172,7 +174,9 @@ Rcpp::List cpp_sample_estimators_HJ(
     Rcpp::NumericVector UW,
     Rcpp::NumericVector GW,
     Rcpp::NumericVector JW,
-    Rcpp::NumericVector CL
+    Rcpp::NumericVector CL,
+    Rcpp::Nullable<Rcpp::NumericMatrix> REGMAT,
+    Rcpp::Nullable<Rcpp::NumericMatrix> RESCOV
 ){
   // Rcpp::Rcout << "ef|theta:\n";
   // Rcpp::Rcout << THETA.transpose()<<"\n";
@@ -193,7 +197,9 @@ Rcpp::List cpp_sample_estimators_HJ(
     Eigen::Map<Eigen::VectorXd>(UW.begin(), UW.size()),
     Eigen::Map<Eigen::VectorXd>(GW.begin(), GW.size()),
     Eigen::Map<Eigen::VectorXd>(JW.begin(), JW.size()),
-    Eigen::Map<Eigen::VectorXd>(CL.begin(), CL.size())
+    Eigen::Map<Eigen::VectorXd>(CL.begin(), CL.size()),
+    params::nullable_mat(REGMAT),
+    params::nullable_mat(RESCOV)
   );
 
   return output;

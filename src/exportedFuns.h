@@ -20,7 +20,9 @@ Rcpp::List cpp_compute_pair_ext(
      const unsigned int L,
      Eigen::MatrixXd PAIRS_TABLE,
      const unsigned int GRADFLAG,
-     const int CORRFLAG = 1
+     const int CORRFLAG = 1,
+     Rcpp::Nullable<Rcpp::NumericMatrix> REGMAT = R_NilValue,
+     Rcpp::Nullable<Rcpp::NumericMatrix> RESCOV = R_NilValue
  );
 
 // [[Rcpp::export]]
@@ -118,7 +120,9 @@ Rcpp::List cpp_sample_estimators_HJ(
     Rcpp::NumericVector UW = Rcpp::NumericVector::create(),
     Rcpp::NumericVector GW = Rcpp::NumericVector::create(),
     Rcpp::NumericVector JW = Rcpp::NumericVector::create(),
-    Rcpp::NumericVector CL = Rcpp::NumericVector::create()
+    Rcpp::NumericVector CL = Rcpp::NumericVector::create(),
+    Rcpp::Nullable<Rcpp::NumericMatrix> REGMAT = R_NilValue,
+    Rcpp::Nullable<Rcpp::NumericMatrix> RESCOV = R_NilValue
 );
 
 // [[Rcpp::export]]

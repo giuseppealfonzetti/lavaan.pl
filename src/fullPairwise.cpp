@@ -14,7 +14,9 @@ Rcpp::List fullPairwise::multiThreadContribution(
     const int NVAR,
     const int GRFLAG,
     const int SILENTFLAG,
-    const Eigen::Ref<const Eigen::VectorXd> UFREQ
+    const Eigen::Ref<const Eigen::VectorXd> UFREQ,
+    const Eigen::Ref<const Eigen::MatrixXd> REGMAT,
+    const Eigen::Ref<const Eigen::MatrixXd> RESCOV
 ){
 
   Rcpp::checkUserInterrupt();
@@ -44,7 +46,7 @@ Rcpp::List fullPairwise::multiThreadContribution(
   double iter_ll = 0;
   Eigen::VectorXd iter_gradient = Eigen::VectorXd::Zero(d);
 
-  parallelWorkers::pairsGradient fullpool(CONSTRMAT, CONSTRLOGSD, C_VEC, FREQ, items_pairs, CORRFLAG, NTHR, NLOAD, NCORR, NVAR,
+  parallelWorkers::pairsGradient fullpool(CONSTRMAT, CONSTRLOGSD, C_VEC, FREQ, items_pairs, REGMAT, RESCOV, CORRFLAG, NTHR, NLOAD, NCORR, NVAR,
                                           SILENTFLAG, GRFLAG, theta, vector_pairs);
   RcppParallel::parallelReduce(0, R, fullpool);
   iter_ll = fullpool.subset_ll;
@@ -81,7 +83,9 @@ Rcpp::List fullPairwise::multiThreadSamplEstHJ(
     const Eigen::Ref<const Eigen::VectorXd> UW,
     const Eigen::Ref<const Eigen::VectorXd> GW,
     const Eigen::Ref<const Eigen::VectorXd> JW,
-    const Eigen::Ref<const Eigen::VectorXd> CL
+    const Eigen::Ref<const Eigen::VectorXd> CL,
+    const Eigen::Ref<const Eigen::MatrixXd> REGMAT,
+    const Eigen::Ref<const Eigen::MatrixXd> RESCOV
 ){
   const int d  = THETA.size();
   const int pp = FREQ.cols();
@@ -94,6 +98,8 @@ Rcpp::List fullPairwise::multiThreadSamplEstHJ(
       CONSTRLOGSD,
       C_VEC,
       FREQ,
+      REGMAT,
+      RESCOV,
       CORRFLAG,
       NTHR,
       NLOAD,

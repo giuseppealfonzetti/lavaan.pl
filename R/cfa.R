@@ -1,7 +1,8 @@
-#' Fit Confirmatory Factor Analysis Models
+#' Fit Confirmatory Factor Analysis and Structural Equation Models
 #'
-#' Fit a Confirmatory Factor Analysis (CFA) model using the `lavaan.pl()` engine
-#' using the [`lavaan`] framework. By default, a quasi-Newton BFGS optimiser
+#' Fit a Confirmatory Factor Analysis (CFA) model, or a Structural Equation Model (SEM) with
+#' regressions among the latent variables and residual covariances of the items, using the
+#' `lavaan.pl()` engine within the [`lavaan`] framework. By default, a quasi-Newton BFGS optimiser
 #' from the [`ucminf`] package is used. For large data sets, the stochastic
 #' approximation algorithm can be used.
 #'
@@ -29,7 +30,7 @@
 #'   (as returned by `coef()`). If not provided, lavaan's starting values are
 #'   used and refined according to `estimator.args$init`.
 #' @param estimator The estimator is `PML`. If any other estimator is provided,
-#'   then [`lavaan::cfa()`] is used.
+#'   then [`lavaan::cfa()`] (or [`lavaan::sem()`]) is used.
 #' @param estimator.args A list of arguments for [fit_plFA()]--see the help file
 #'   for more details. Possible options are:
 #'   \describe{
@@ -90,6 +91,31 @@ cfa <- function(
     verbose = FALSE,
     ...
 ) {
+  fit_lavaan_pml("cfa", match.call(), model, data, std.lv, estimator, estimator.args, start, control, verbose, ...)
+}
+
+#' @rdname cfa
+#' @export
+sem <- function(
+    model,
+    data,
+    std.lv = FALSE,
+    estimator = "PML",
+    estimator.args = list(
+      init = set_init(METHOD = "SA"),
+      ncores = 1,
+      valdata = NULL,
+      computevar_numderiv = FALSE
+    ),
+    start = NULL,
+    control = NULL,
+    verbose = FALSE,
+    ...
+) {
+  fit_lavaan_pml("sem", match.call(), model, data, std.lv, estimator, estimator.args, start, control, verbose, ...)
+}
+
+fit_lavaan_pml <- function(LAVFUN, CALL, model, data, std.lv, estimator, estimator.args, start, control, verbose, ...) {
 
   # Validate arguments ---------------------------------------------------------
   if (!is.null(estimator.args$method)) {
@@ -142,11 +168,11 @@ cfa <- function(
     if (!("test" %in% names(lavargs))) {
       lavargs$test <- "none"
     }
-    template <- do.call(get("cfa", envir = asNamespace("lavaan")), lavargs)
+    template <- do.call(get(LAVFUN, envir = asNamespace("lavaan")), lavargs)
   } else{
     # In case user selects "DWLS" or "WLSMV", revert to lavaan::cfa()
     lavargs$do.fit <- TRUE
-    fit <- do.call(get("cfa", envir = asNamespace("lavaan")), lavargs)
+    fit <- do.call(get(LAVFUN, envir = asNamespace("lavaan")), lavargs)
     return(fit)
   }
 
@@ -174,8 +200,8 @@ cfa <- function(
   }
 
   out <- as_lavaan(fit, vars, template)
-  out@call <- match.call()
-  out@call[[1]] <- quote(lavaan.pl::cfa)
+  out@call <- CALL
+  out@call[[1]] <- call("::", quote(lavaan.pl), as.name(LAVFUN))
   out
 }
 
@@ -196,16 +222,19 @@ spec_from_lavaan <- function(template, start = NULL, valdata = NULL) {
   if (template@Options$parameterization != "delta") {
     stop("Only the delta parameterization is currently supported.", call. = FALSE)
   }
-  if (any(pt$op %in% c("~", "<~")) || any(pt$op == "=~" & pt$rhs %in% lv)) {
-    stop("Structural regressions and higher-order factors are not currently supported.", call. = FALSE)
+  if (any(pt$op == "<~")) {
+    stop("Composites (`<~`) are not currently supported.", call. = FALSE)
+  }
+  if (any(pt$op == "~" & !(pt$lhs %in% lv & pt$rhs %in% lv))) {
+    stop("Regressions involving observed variables are not currently supported.", call. = FALSE)
   }
   if (nrow(template@Model@cin.JAC) > 0L || any(is.finite(c(pt$lower[pt$free > 0], pt$upper[pt$free > 0])))) {
     stop("Inequality constraints and parameter bounds are not currently supported.", call. = FALSE)
   }
-  if (any(pt$free > 0 & pt$op == "~~" & !(pt$lhs %in% lv & pt$rhs %in% lv))) {
-    stop("Free residual variances or covariances are not currently supported.", call. = FALSE)
+  if (any(pt$free > 0 & pt$op == "~~" & pt$lhs == pt$rhs & !(pt$lhs %in% lv))) {
+    stop("Free residual variances are not currently supported.", call. = FALSE)
   }
-  other <- pt$free > 0 & !(pt$op %in% c("=~", "~~", "|"))
+  other <- pt$free > 0 & !(pt$op %in% c("=~", "~~", "|", "~"))
   if (any(other)) {
     stop(paste0("Free `", paste(unique(pt$op[other]), collapse = "`, `"), "` parameters are not currently supported."), call. = FALSE)
   }
@@ -241,6 +270,18 @@ spec_from_lavaan <- function(template, start = NULL, valdata = NULL) {
   constrmat <- est$lambda
   constrmat[free$lambda > 0] <- NA
 
+  # Structural regressions and residual covariances: NA when free
+  regmat <- rescov <- NULL
+  if (!is.null(free$beta) && (any(free$beta > 0) || any(est$beta != 0))) {
+    regmat <- est$beta
+    regmat[free$beta > 0] <- NA
+  }
+  up <- upper.tri(free$theta)
+  if (any(free$theta[up] > 0) || any(est$theta[up] != 0)) {
+    rescov <- est$theta
+    rescov[free$theta > 0] <- NA
+  }
+
   # Linear equality constraints A theta = b, in lavaan.pl's parameter order
   if (isTRUE(template@Model@ceq.simple.only)) {
     stop("ceq.simple = TRUE is not currently supported.", call. = FALSE)
@@ -252,7 +293,10 @@ spec_from_lavaan <- function(template, start = NULL, valdata = NULL) {
   nload <- sum(is.na(constrmat))
   ncorr <- if (corrflag) q * (q - 1) / 2 else 0
   vfree <- diag(free$psi) > 0
-  d <- nthr + nload + ncorr + sum(vfree)
+  bfree <- if (is.null(regmat)) numeric(0) else free$beta[free$beta > 0]
+  tfree <- free$theta[up][free$theta[up] > 0]
+  d0 <- nthr + nload + ncorr + sum(vfree)
+  d <- d0 + length(bfree) + length(tfree)
   pos <- type <- rep(NA, template@Model@nx.free)
   pos[free$tau[free$tau > 0]] <- which(free$tau > 0)
   type[free$tau[free$tau > 0]] <- "tau"
@@ -261,6 +305,10 @@ spec_from_lavaan <- function(template, start = NULL, valdata = NULL) {
   pos[diag(free$psi)[vfree]] <- nthr + nload + ncorr + seq_len(sum(vfree))
   type[diag(free$psi)[vfree]] <- "var"
   type[cov_x] <- "cov"
+  pos[bfree] <- d0 + seq_along(bfree)
+  type[bfree] <- "beta"
+  pos[tfree] <- d0 + length(bfree) + seq_along(tfree)
+  type[tfree] <- "rescov"
   cpos <- matrix(NA, q, q)
   if (corrflag) {
     cpos[upper.tri(cpos)] <- nthr + nload + seq_len(ncorr)
@@ -314,14 +362,16 @@ spec_from_lavaan <- function(template, start = NULL, valdata = NULL) {
     CORRFLAG = corrflag,
     STDLV = !anyNA(constrvar),
     CONSTRAINTS = if (nrow(A) > 0L) list(A = unname(A), b = b),
-    LATCOV = latcov
+    LATCOV = latcov,
+    REGMAT = unname(regmat),
+    RESCOV = unname(rescov)
   )
   if (!identical(is.na(model$CONSTRMAT), is.na(constrmat))) {
     stop("This identification of the latent variables is not currently supported.", call. = FALSE)
   }
 
   # Note: the values in lavaan.pl are always in the order of thresholds, loadings, latent
-  # correlations, then latent variances.
+  # correlations, latent variances, regressions, then residual covariances.
   if (is.null(start)) {
     start_glist <- lapply(lavaan::lavInspect(template, "start"), unclass)
     start_glist$tau[] <- unlist(lapply(seq_len(ncol(data)), function(j) {
@@ -334,7 +384,9 @@ spec_from_lavaan <- function(template, start = NULL, valdata = NULL) {
     as.numeric(start_glist$tau),
     cpp_loadings_mat2vec(start_glist$lambda, constrmat, sum(is.na(constrmat))),
     cpp_latvar_mat2vec(start_glist$psi, log(sqrt(constrvar)), if (corrflag) q * (q - 1) / 2 else 0, sum(is.na(constrvar)),
-                       corrflag_code(model))
+                       corrflag_code(model)),
+    if (is.null(regmat)) NULL else start_glist$beta[free$beta > 0],
+    start_glist$theta[up][free$theta[up] > 0]
   )
 
   weights <- NULL
@@ -367,6 +419,8 @@ as_lavaan <- function(fit, vars = NULL, template) {
     x[free$tau[free$tau > 0]] <- par$thresholds[free$tau > 0]
     x[free$lambda[free$lambda > 0]] <- par$loadings[free$lambda > 0]
     x[free$psi[free$psi > 0]] <- par$latent_correlations[free$psi > 0]
+    if (!is.null(free$beta)) x[free$beta[free$beta > 0]] <- par$regressions[free$beta > 0]
+    x[free$theta[free$theta > 0]] <- par$residual_covariances[free$theta > 0]
     x
   }
 

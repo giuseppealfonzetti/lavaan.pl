@@ -13,7 +13,9 @@ set_plfa_model(
   CORRFLAG = TRUE,
   STDLV = TRUE,
   CONSTRAINTS = NULL,
-  LATCOV = c("lkj", "direct")
+  LATCOV = c("lkj", "direct"),
+  REGMAT = NULL,
+  RESCOV = NULL
 )
 }
 \arguments{
@@ -38,17 +40,25 @@ otherwise.}
 
 \item{CONSTRAINTS}{Linear equality constraints \code{A \%*\% theta = b} on the parameter vector, as
 \code{list(A = , b = )}, with one column of \code{A} per parameter in the order of \code{\link[=theta_names]{theta_names()}}. Each
-constraint involves either thresholds, loadings, latent covariances (with \code{LATCOV = "direct"}) or
-latent log standard deviations.}
+constraint involves either thresholds, loadings, latent covariances (with \code{LATCOV = "direct"}),
+latent log standard deviations, regression coefficients or residual covariances.}
 
 \item{LATCOV}{Parametrisation of the latent correlations: \code{"lkj"} (Cholesky factor with Fisher-z
 angles, always positive definite) or \code{"direct"} (the latent covariances themselves, which allows
 linear constraints on them).}
+
+\item{REGMAT}{\eqn{q*q}-dimensional matrix of structural regressions among the latent variables, with
+\code{REGMAT[i, j]} the effect of latent variable \code{j} on latent variable \code{i}. Elements set to \code{NA} are
+free, numerical values are fixed. The latent covariances then refer to the disturbances.}
+
+\item{RESCOV}{\eqn{p*p}-dimensional symmetric matrix of residual covariances of the items.
+Off-diagonal elements set to \code{NA} are free, numerical values are fixed. The diagonal is ignored.}
 }
 \value{
 An object of class \code{plfa_model} with the identified loading constraints \code{CONSTRMAT},
 the log standard deviations of the latent variables \code{CONSTRLOGSD} (\code{NA} when free),
-\code{CORRFLAG}, \code{STDLV}, \code{CONSTRAINTS}, \code{LATCOV}, and the numbers of items \code{p} and latent variables \code{q}.
+\code{CORRFLAG}, \code{STDLV}, \code{CONSTRAINTS}, \code{LATCOV}, \code{REGMAT}, \code{RESCOV}, and the numbers of items \code{p} and
+latent variables \code{q}.
 }
 \description{
 Print method for \code{plfa_model} objects

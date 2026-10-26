@@ -6,7 +6,7 @@ void parallelWorkers::pairsGradient::operator()(std::size_t BEGIN, std::size_t E
   int d = theta.size();
 
   // rearrange parameters
-  const pairs::Setup S(theta, constrmat, constrsd, nthr, nload, ncorr, nvar, corrFLAG);
+  const pairs::Setup S(theta, constrmat, constrsd, nthr, nload, ncorr, nvar, corrFLAG, regmat, rescov);
 
   for (int h = BEGIN; h < END; h++){
 
@@ -48,7 +48,7 @@ void parallelWorkers::patternwiseOuterProd::operator()(std::size_t BEGIN, std::s
   const int p = constrmat.rows();
 
   // rearrange parameters
-  const pairs::Setup S(theta, constrmat, constrsd, nthr, nload, ncorr, nvar, corrFLAG);
+  const pairs::Setup S(theta, constrmat, constrsd, nthr, nload, ncorr, nvar, corrFLAG, regmat, rescov);
   const int m = S.m;
 
   std::vector<int> pk, pl;

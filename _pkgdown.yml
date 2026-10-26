@@ -25,6 +25,7 @@ reference:
   - title: lavaan wrapper
     contents:
       - cfa
+      - sem
       - lavTestLRT
       - anova
       - as_lavaan

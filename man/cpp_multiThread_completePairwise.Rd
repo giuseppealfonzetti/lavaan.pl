@@ -18,7 +18,9 @@ cpp_multiThread_completePairwise(
   NVAR,
   GRFLAG = 0L,
   SILENTFLAG = 1L,
-  UFREQ = as.numeric(c())
+  UFREQ = as.numeric(c()),
+  REGMAT = NULL,
+  RESCOV = NULL
 )
 }
 \arguments{
@@ -49,6 +51,10 @@ cpp_multiThread_completePairwise(
 \item{SILENTFLAG}{optional for verbose output}
 
 \item{UFREQ}{Univariate frequencies of the available-cases term. Empty for none.}
+
+\item{REGMAT}{\eqn{q*q}-dimensional matrix of structural regressions. Elements set to \code{NA} refer to free coefficients. Empty for none.}
+
+\item{RESCOV}{\eqn{p*p}-dimensional matrix of residual covariances. Off-diagonal elements set to \code{NA} refer to free covariances. Empty for none.}
 }
 \description{
 Evaluate negative log pairwise likelihood or gradient of the complete pool of pairs.

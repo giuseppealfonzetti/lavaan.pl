@@ -13,7 +13,9 @@ extract_par(
   NLOAD,
   NCORR,
   NVAR,
-  CORRFLAG = 1
+  CORRFLAG = 1,
+  REGMAT = matrix(0, 0, 0),
+  RESCOV = matrix(0, 0, 0)
 )
 }
 \arguments{
@@ -24,7 +26,7 @@ extract_par(
 \tab \cr
 \code{'transformed'} \tab Transformed vector of parameters, with interpretable latent correlations. \cr
 \tab \cr
-\code{'list'} \tab List containing the ordered thresholds vector, the loading matrix and the latent correlation matrix. \cr
+\code{'list'} \tab List containing the ordered thresholds vector, the loading matrix, the latent correlation matrix (of the disturbances, with regressions), the regression matrix and the residual covariance matrix. \cr
 }}
 
 \item{CONSTRMAT}{\eqn{p*q}-dimensional matrix. Elements set to \code{NA} refers to free loading parameters. Elements set to numerical values denote fixed values constraints.}
@@ -40,6 +42,10 @@ extract_par(
 \item{NVAR}{Number of free latent variance parameters.}
 
 \item{CORRFLAG}{Parametrisation of the latent correlations: 1 for LKJ, 2 for direct covariances.}
+
+\item{REGMAT}{Structural regressions, as in \code{\link[=set_plfa_model]{set_plfa_model()}}. Empty for none.}
+
+\item{RESCOV}{Residual covariances, as in \code{\link[=set_plfa_model]{set_plfa_model()}}. Empty for none.}
 }
 \description{
 Extract parameters

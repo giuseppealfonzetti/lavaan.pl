@@ -49,16 +49,28 @@ computePLRT.PlFaFit <- function(OBJ, VARS = computeVar(OBJ), H1 = NULL){
         N = n, C_VEC = dims$cat, CONSTRMAT = FIT$model$CONSTRMAT, CONSTRLOGSD = FIT$model$CONSTRLOGSD,
         THETA = THETA, FREQ = FIT$data$freq, CORRFLAG = corrflag_code(FIT$model),
         NTHR = FIT$dims$nthr, NLOAD = FIT$dims$nload, NCORR = FIT$dims$ncorr, NVAR = FIT$dims$nvar,
-        UFREQ = FIT$data$ufreq
+        UFREQ = FIT$data$ufreq, REGMAT = FIT$model$REGMAT, RESCOV = FIT$model$RESCOV
       )$iter_nll
     }
     lc0 <- OBJ$lincon
     lc1 <- H1$lincon
     emb <- function(x){
       gp <- getPar(replace(OBJ, "theta", list(as.vector(lc0$K %*% x + lc0$c))), OPTION = "list")
+      S <- gp$latent_correlations
+      L <- gp$loadings
+      if(!length(H1$model$REGMAT)){
+        A <- solve(diag(dims$q) - gp$regressions)
+        S <- A %*% S %*% t(A)
+        sc <- ifelse(is.finite(H1$model$CONSTRLOGSD), sqrt(diag(S)) / exp(H1$model$CONSTRLOGSD), 1)
+        L <- L %*% diag(sc, dims$q)
+        S <- S / tcrossprod(sc)
+      }
+      R1 <- H1$model$RESCOV
       c(gp$thresholds,
-        cpp_loadings_mat2vec(gp$loadings, H1$model$CONSTRMAT, H1$dims$nload),
-        cpp_latvar_mat2vec(gp$latent_correlations, H1$model$CONSTRLOGSD, H1$dims$ncorr, H1$dims$nvar, corrflag_code(H1$model)))[lc1$free_idx]
+        cpp_loadings_mat2vec(L, H1$model$CONSTRMAT, H1$dims$nload),
+        cpp_latvar_mat2vec(S, H1$model$CONSTRLOGSD, H1$dims$ncorr, H1$dims$nvar, corrflag_code(H1$model)),
+        gp$regressions[is.na(H1$model$REGMAT)],
+        gp$residual_covariances[is.na(R1) & upper.tri(R1)])[lc1$free_idx]
     }
     theta0f <- OBJ$theta[lc0$free_idx]
     theta1 <- as.vector(lc1$K %*% emb(theta0f) + lc1$c)
@@ -70,7 +82,8 @@ computePLRT.PlFaFit <- function(OBJ, VARS = computeVar(OBJ), H1 = NULL){
       CONSTRMAT = H1$model$CONSTRMAT, CONSTRLOGSD = H1$model$CONSTRLOGSD, N = n,
       CORRFLAG = corrflag_code(H1$model), NTHR = H1$dims$nthr, NLOAD = H1$dims$nload, NCORR = H1$dims$ncorr,
       NVAR = H1$dims$nvar, UFREQ = H1$data$ufreq, UW = H1$data$uweights,
-      GW = H1$data$weights, JW = H1$data$jweights, CL = H1$data$cluster
+      GW = H1$data$weights, JW = H1$data$jweights, CL = H1$data$cluster,
+      REGMAT = H1$model$REGMAT, RESCOV = H1$model$RESCOV
     )
     Hf <- crossprod(lc1$K, HJ$H %*% lc1$K)
     M <- crossprod(lc1$K, HJ$J %*% lc1$K) %*% (solve(Hf) - K %*% solve(crossprod(K, Hf %*% K), t(K)))
@@ -166,7 +179,8 @@ computePLRT.PlFaFit <- function(OBJ, VARS = computeVar(OBJ), H1 = NULL){
   thetaf <- OBJ$theta[lc$free_idx]
   rho_theta <- function(theta){
     gp <- getPar(replace(OBJ, "theta", list(theta)), OPTION = "list")
-    S <- gp$loadings %*% gp$latent_correlations %*% t(gp$loadings)
+    L <- gp$loadings %*% solve(diag(dims$q) - gp$regressions)
+    S <- L %*% gp$latent_correlations %*% t(L) + gp$residual_covariances
     S[upper.tri(S)]
   }
   rho_free <- function(x) rho_theta(as.vector(lc$K %*% x + lc$c))

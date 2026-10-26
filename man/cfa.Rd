@@ -2,9 +2,23 @@
 % Please edit documentation in R/cfa.R
 \name{cfa}
 \alias{cfa}
-\title{Fit Confirmatory Factor Analysis Models}
+\alias{sem}
+\title{Fit Confirmatory Factor Analysis and Structural Equation Models}
 \usage{
 cfa(
+  model,
+  data,
+  std.lv = FALSE,
+  estimator = "PML",
+  estimator.args = list(init = set_init(METHOD = "SA"), ncores = 1, valdata = NULL,
+    computevar_numderiv = FALSE),
+  start = NULL,
+  control = NULL,
+  verbose = FALSE,
+  ...
+)
+
+sem(
   model,
   data,
   std.lv = FALSE,
@@ -32,7 +46,7 @@ latent variable is determined by fixing the factor loading of the first
 indicator to 1.0.}
 
 \item{estimator}{The estimator is \code{PML}. If any other estimator is provided,
-then \code{\link[lavaan:cfa]{lavaan::cfa()}} is used.}
+then \code{\link[lavaan:cfa]{lavaan::cfa()}} (or \code{\link[lavaan:sem]{lavaan::sem()}}) is used.}
 
 \item{estimator.args}{A list of arguments for \code{\link[=fit_plFA]{fit_plFA()}}--see the help file
 for more details. Possible options are:
@@ -63,8 +77,9 @@ variance components, from \code{\link[=computeVar]{computeVar()}}, and its test,
 \verb{@external$plrt}. Methods for \code{lavaan} objects work as usual.
 }
 \description{
-Fit a Confirmatory Factor Analysis (CFA) model using the \code{lavaan.pl()} engine
-using the \code{\link[lavaan:lavaan]{lavaan}} framework. By default, a quasi-Newton BFGS optimiser
+Fit a Confirmatory Factor Analysis (CFA) model, or a Structural Equation Model (SEM) with
+regressions among the latent variables and residual covariances of the items, using the
+\code{lavaan.pl()} engine within the \code{\link[lavaan:lavaan]{lavaan}} framework. By default, a quasi-Newton BFGS optimiser
 from the \code{\link[ucminf:ucminf]{ucminf}} package is used. For large data sets, the stochastic
 approximation algorithm can be used.
 }
