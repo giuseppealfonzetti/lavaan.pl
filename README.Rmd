@@ -24,8 +24,8 @@ The `{lavaan.pl}` package allows the estimation of confirmatory factor models fo
 You can install the development version of lavaan.pl from [GitHub](https://github.com/) with:
 
 ```r
-# install.packages("devtools")
-devtools::install_github("giuseppealfonzetti/lavaan.pl")
+# install.packages("pak")
+pak::pak("giuseppealfonzetti/lavaan.pl")
 ```
 
 When the package is installed, you can load it with:

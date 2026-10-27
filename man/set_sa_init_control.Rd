@@ -6,54 +6,36 @@
 \usage{
 set_sa_init_control(
   PAIRS_PER_ITERATION = 16,
-  STEP0 = NULL,
-  STEP1 = 1,
-  STEP2 = 1e-08,
-  STEP3 = 0.75,
-  BURNE = 3,
-  MAXE = 5,
-  EPOCHS_PER_CHECK = 1,
-  CHECK_TOL = FALSE,
-  MAX_TOL_COUNTER = 1,
-  TOL_BURN = 5e-07,
-  TOL_END = 1e-07,
+  ALPHA = 0.2,
+  ADAM_EPOCHS = 5,
+  BURN_EPOCHS = 5,
+  TOL = 0.05,
+  GAIN = c("auto", "hessian", "diagonal"),
   SEED = 123
 )
 }
 \arguments{
 \item{PAIRS_PER_ITERATION}{Number of item pairs drawn at each iteration.}
 
-\item{STEP0}{Initial step length. If \code{NULL}, it is set to \eqn{\sqrt{1/d}} at fit time, where
-\eqn{d} is the number of free parameters.}
+\item{ALPHA}{Step length of the Adam phase, divided by the square root of the number of
+iterations per epoch.}
 
-\item{STEP1}{Scaling of the step length.}
+\item{ADAM_EPOCHS}{Maximum number of epochs of the Adam phase.}
 
-\item{STEP2}{Rate of the step length decay.}
+\item{BURN_EPOCHS}{Maximum number of epochs of the stochastic Newton burn-in.}
 
-\item{STEP3}{Exponent of the step length decay.}
+\item{TOL}{Improvement of the pairwise log-likelihood at the epoch average, per free parameter,
+below which, at two consecutive epochs, a burn-in phase ends.}
 
-\item{BURNE}{Maximum number of burn-in epochs before trajectory averaging.}
-
-\item{MAXE}{Maximum number of epochs.}
-
-\item{EPOCHS_PER_CHECK}{Number of epochs between evaluations of the full negative pairwise
-log-likelihood.}
-
-\item{CHECK_TOL}{If \code{TRUE}, stop the burn-in and the optimisation when the relative change in
-the full negative pairwise log-likelihood falls below \code{TOL_BURN} and \code{TOL_END}.}
-
-\item{MAX_TOL_COUNTER}{Number of consecutive checks below tolerance required to stop.}
-
-\item{TOL_BURN}{Tolerance ending the burn-in.}
-
-\item{TOL_END}{Tolerance ending the optimisation.}
+\item{GAIN}{Gain of the burn-in and averaged phases: \code{"hessian"} (inverse observed information),
+\code{"diagonal"} (Adam's diagonal preconditioner, no Newton burn-in), or \code{"auto"} (\code{"hessian"} up
+to 2000 free parameters).}
 
 \item{SEED}{Seed of the pair sampling.}
 }
 \value{
-An object of class \code{latpl_sa_control} to be passed to \code{\link[=fit_latpl]{fit_latpl()}} via \code{INIT_CONTROL},
-or to \code{\link[=cfa]{cfa()}} via \code{estimator.args$init_control}, when the initialisation method is \code{"SA"}.
+An object of class \code{latpl_sa_control} to be passed to \code{\link[=set_init]{set_init()}} via \code{CONTROL}.
 }
 \description{
-Control options for the stochastic approximation initialisation
+Only the burn-in phases of \code{\link[=set_sa_control]{set_sa_control()}} run, and their end point is the starting value.
 }

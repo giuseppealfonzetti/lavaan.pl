@@ -442,9 +442,8 @@ as_lavaan <- function(fit, vars = NULL, template) {
     out@optim$converged <- out@Fit@converged <- fit$numFit$convergence %in% c(1L, 2L) ||
       (fit$numFit$convergence == 4L && fit$numFit$info[["maxgradient"]] < template@Options$optim.dx.tol)
   } else {
-    out@optim$iterations <- out@Fit@iterations <- as.integer(fit$stoFit$last_iter)
-    out@optim$converged <- out@Fit@converged <- fit$stoFit$convergence$convergence_full == 1 ||
-      (!fit$control$CHECK_TOL && fit$stoFit$convergence$convergence_full == 0)
+    out@optim$iterations <- out@Fit@iterations <- as.integer(fit$stoFit$iterations)
+    out@optim$converged <- out@Fit@converged <- fit$stoFit$converged
   }
 
   # Change vcov slot -----------------------------------------------------------

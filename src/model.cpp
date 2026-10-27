@@ -93,8 +93,6 @@ model::Setup::Setup(const Eigen::Ref<const Eigen::VectorXd> THETA, const Spec &S
   for(int s = 0; s < S.nvar; s++) sd(S.sfree[s]) = THETA(S.ov + s);
   sd = sd.array().exp();
 
-  // LKJ: U(r, c) = z(r, c) P(r, c) for r < c, U(c, c) = P(c, c), with P(r, c) the
-  // product of sqrt(1 - z^2) over the rows above r
   Z = Eigen::MatrixXd::Zero(q, q);
   if(!S.direct) for(int a = 0; a < S.ncorr; a++) Z(S.ra[a], S.ca[a]) = std::tanh(THETA(S.oc + a));
   C = (1 - Z.array().square()).sqrt().matrix();
@@ -105,7 +103,6 @@ model::Setup::Setup(const Eigen::Ref<const Eigen::VectorXd> THETA, const Spec &S
     for(int r = 0; r < c; r++) U(r, c) = Z(r, c) * P(r, c);
     U(c, c) = P(c, c);
   }
-  // alpha.col(a): derivative of column ca[a] of U with respect to h_a
   alpha = Eigen::MatrixXd::Zero(q, S.ncorr);
   for(int a = 0; a < S.ncorr && !S.direct; a++){
     const int r = S.ra[a], c = S.ca[a];
@@ -123,7 +120,6 @@ model::Setup::Setup(const Eigen::Ref<const Eigen::VectorXd> THETA, const Spec &S
   A = (Eigen::MatrixXd::Identity(q, q) - B).inverse();
   Lt = Lam * A;
 
-  res = Eigen::MatrixXd::Zero(p, p);
   if(S.rescov.size() > 0){
     res = S.rescov;
     res.diagonal().setZero();
@@ -132,7 +128,6 @@ model::Setup::Setup(const Eigen::Ref<const Eigen::VectorXd> THETA, const Spec &S
     }
   }
 
-  // J[j]: columns for the free loadings of item j, then for the regressions
   J.resize(p);
   for(int j = 0; j < p; j++){
     const int nl = S.lidx[j].size();

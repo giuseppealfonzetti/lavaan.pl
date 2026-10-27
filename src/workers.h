@@ -6,7 +6,6 @@
 
 namespace workers{
 
-  // Pairwise log-likelihood and, with ORDER = 1, its gradient over the pairs RS
   struct PL : public RcppParallel::Worker{
     const model::Setup &st;
     const Eigen::Ref<const Eigen::VectorXd> freq;
@@ -23,9 +22,6 @@ namespace workers{
     void join(const PL &O);
   };
 
-  // Observed information and gradient of all pairs. For each pair, it also stores
-  // the scores of its cells over the indices sidx (thresholds of k and l, then the
-  // active set of the pair)
   struct Hess : public RcppParallel::Worker{
     const model::Setup &st;
     const Eigen::Ref<const Eigen::VectorXd> freq;
@@ -45,8 +41,6 @@ namespace workers{
     void join(const Hess &O);
   };
 
-  // Casewise scores of the response patterns Y (NaN for missing): pairwise cell scores
-  // of the observed pairs, plus UW times the univariate scores of the observed items
   struct Cases : public RcppParallel::Worker{
     const model::Layout &L;
     const Eigen::Ref<const Eigen::MatrixXd> y;
@@ -63,11 +57,6 @@ namespace workers{
     void operator()(std::size_t BEGIN, std::size_t END);
   };
 
-  // Saturated model, parametrised by thresholds and one correlation per pair:
-  // log-likelihood, gradient, and the blocks of the observed information
-  // (thresholds-thresholds, thresholds-correlations, diagonal correlations block, and
-  // the Schur complement of the correlations block, which is a sum over pairs).
-  // With SCORES, the cell scores over (thresholds of k, thresholds of l, rho)
   struct Saturated : public RcppParallel::Worker{
     const model::Layout &L;
     const Eigen::Ref<const Eigen::VectorXd> tau, rho, freq;
@@ -93,8 +82,6 @@ namespace workers{
     void join(const Saturated &O);
   };
 
-  // Casewise scores of the saturated model, split into thresholds (st) and
-  // correlations (sr), from the cell scores of Saturated
   struct SaturatedCases : public RcppParallel::Worker{
     const model::Layout &L;
     const Eigen::Ref<const Eigen::MatrixXd> y, patscore, uscore;

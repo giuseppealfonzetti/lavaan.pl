@@ -15,7 +15,6 @@ for (form in c("orthogonal", "lkj", "direct")) for (stdlv in c(TRUE, FALSE)) for
   par <- theta2par(M, th)
   expect_equal(par2theta(M, par), th)
   expect_equal(par$residual_covariances[6, 5], if (sem) 0.1 else 0)
-  expect_identical(lavaan.pl:::sa_model(M), form != "direct" && !sem)
 }
 expect_equal(tail(theta_names(D, set_latpl_model(cm, LATCOV = "direct", REGMAT = B, RESCOV = RC)), 7),
              c("psi[1,2]", "psi[1,3]", "psi[2,3]", "beta[2,1]", "beta[3,1]", "beta[3,2]", "theta[1,2]"))
@@ -39,7 +38,6 @@ expect_equal(v$H, (Hnum + t(Hnum)) / 2, tolerance = 1e-4)
 expect_error(fit_latpl(D, set_latpl_model(cm, CONSTRAINTS = list(A = matrix(replace(numeric(d), match("eta[1,2]", nm), 1), 1), b = 0))), "LATCOV")
 expect_error(fit_latpl(D, set_latpl_model(cm, CONSTRAINTS = list(A = matrix(replace(numeric(d), c(1, 28), c(1, -1)), 1), b = 0))), "either thresholds")
 expect_error(fit_latpl(D, set_latpl_model(cm, CONSTRAINTS = list(A = rbind(A[1, ], A[1, ]), b = c(0, 1)))), "inconsistent")
-expect_error(suppressWarnings(fit_latpl(D, set_latpl_model(cm, CONSTRAINTS = list(A = A, b = c(0, 0.25))), CONTROL = set_sa_control())), "SA")
 
 # LKJ and direct parametrisations reach the same optimum, SEs and test
 for (stdlv in c(TRUE, FALSE)) {
@@ -58,7 +56,6 @@ nd <- theta_names(D, Md)
 f0 <- fit_latpl(D, set_latpl_model(cm, LATCOV = "direct", CONSTRAINTS = list(A = matrix(replace(numeric(d), match("psi[1,3]", nd), 1), 1), b = 0)))
 expect_equal(get_par(f0, OPTION = "list")$latent_correlations[1, 3], 0)
 expect_error(set_latpl_model(cm, CORRFLAG = FALSE, LATCOV = "direct"), "CORRFLAG")
-expect_error(suppressWarnings(fit_latpl(D, Md, CONTROL = set_sa_control())), "SA")
 
 # A saturated structural model is equivalent to the correlated-factor model, and a nested
 # structural restriction gives the same statistic against either
@@ -76,6 +73,5 @@ expect_equal(compute_plrt(fn, H1 = fc)$model[c("stat", "df")], compute_plrt(fn, 
 RF <- matrix(0, 9, 9); RF[1, 2] <- RF[2, 1] <- 0.1; RF[4, 7] <- RF[7, 4] <- NA
 fr <- fit_latpl(D, set_latpl_model(cm, REGMAT = B, RESCOV = RF))
 expect_equal(get_par(fr, OPTION = "list")$residual_covariances[2, 1], 0.1)
-expect_error(suppressWarnings(fit_latpl(D, set_latpl_model(cm, REGMAT = B), CONTROL = set_sa_control())), "SA")
 expect_error(set_latpl_model(cm, REGMAT = diag(3)), "diagonal")
 expect_error(set_latpl_model(cm, RESCOV = replace(RC, 2, 0.2)), "symmetric")

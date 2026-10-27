@@ -1,280 +1,314 @@
 #include <random>
+#include <chrono>
 #include "workers.h"
 
-// Rescale the loadings (and free log-sds) of the items whose implied variance of the
-// underlying variable exceeds one (Alfonzetti et al., 2025, Appendix B.2)
-static void proj2(const model::Spec &S, Eigen::VectorXd &THETA, bool &CHECKEVENT){
-  const model::Setup ST(THETA, S);
-  Eigen::MatrixXd Lam = ST.Lam;
-  Eigen::VectorXd sd = ST.sd;
-  const Eigen::MatrixXd Sigma = sd.asDiagonal() * ST.U.transpose() * ST.U * sd.asDiagonal();
-
-  for(int k = 0; k < S.p; k++){
-    const Eigen::VectorXd lambdak = Lam.row(k);
-    const double vk = lambdak.transpose() * Sigma * lambdak;
-    if(vk <= 1) continue;
-    CHECKEVENT = true;
-    for(int h = 0; h < S.q; h++){
-      if(!std::isfinite(S.constrmat(k, h))){
-        if(!std::isfinite(S.constrlogsd(h))){
-          Lam(k, h) /= std::sqrt(std::sqrt(vk));
-          sd(h) /= std::sqrt(std::sqrt(vk));
-        }else{
-          Lam(k, h) /= std::sqrt(vk);
-        }
-      }else if(S.constrmat(k, h) != 0.0){
-        sd(h) /= std::sqrt(vk);
-      }
-    }
-  }
-  if(!CHECKEVENT) return;
-  for(int v = 0; v < S.nvar; v++) THETA(S.ov + v) = std::log(sd(S.sfree[v]));
-  for(int j = 0; j < S.p; j++){
-    for(std::size_t a = 0; a < S.lidx[j].size(); a++) THETA(S.lidx[j][a]) = Lam(j, S.lfac[j][a]);
-  }
-}
-
 // [[Rcpp::export]]
-Eigen::VectorXd cpp_sa_proj(const Eigen::Map<Eigen::VectorXd> THETA, const Rcpp::List MODEL, const Rcpp::List DATA){
-  const model::Spec S(MODEL, Rcpp::as<Eigen::VectorXd>(DATA["C_VEC"]));
-  Eigen::VectorXd theta = THETA;
-  bool flag = false;
-  proj2(S, theta, flag);
-  return theta;
-}
-
-// [[Rcpp::export]]
-Rcpp::List cpp_plSA2(
-    const Eigen::Map<Eigen::VectorXd> THETA_INIT,
+Rcpp::List cpp_sa(
+    const Eigen::Map<Eigen::VectorXd> THETA_F,
+    const Eigen::Map<Eigen::MatrixXd> K,
+    const Eigen::Map<Eigen::VectorXd> C,
     const Rcpp::List MODEL,
     const Rcpp::List DATA,
     const Eigen::Map<Eigen::VectorXd> VALFREQ,
     const Eigen::Map<Eigen::VectorXd> VALUFREQ,
     const int PAIRS_PER_ITERATION,
-    const double STEP0,
-    const double STEP1,
-    const double STEP2,
-    const double STEP3,
-    const int BURNE,
-    const int MAXE,
-    const int EPOCHS_PER_CHECK,
-    const int MAX_TOL_COUNTER,
-    const double TOL_BURN,
-    const double TOL_END,
-    const int CHECK_TOL,
+    const double ALPHA,
+    const int ADAM_EPOCHS,
+    const int BURN_EPOCHS,
+    const int EPOCHS,
+    const double TOL,
+    const double DECAY,
+    const double AVG_FROM,
+    const int GAIN,
     const int SEED,
-    const bool VERBOSE,
-    bool VERBOSE_ITER = false
+    const bool BURN_ONLY = false,
+    const bool VERBOSE = false
 ){
+  typedef std::chrono::steady_clock clk;
+  auto secs = [](clk::time_point a){ return std::chrono::duration<double>(clk::now() - a).count(); };
+
   const model::Spec S(MODEL, Rcpp::as<Eigen::VectorXd>(DATA["C_VEC"]));
   const Eigen::VectorXd freq = Rcpp::as<Eigen::VectorXd>(DATA["FREQ"]), ufreq = Rcpp::as<Eigen::VectorXd>(DATA["UFREQ"]);
-  const int n = Rcpp::as<int>(DATA["N"]);
-  Eigen::MatrixXd hdummy, udummy;
+  const double n = Rcpp::as<double>(DATA["N"]);
+  const int P = S.L.P, nu = std::min(PAIRS_PER_ITERATION, P), E = (P + nu - 1) / nu, df = THETA_F.size();
+  const bool constrained = K.size() > 0;
+  const Eigen::SparseMatrix<double> Ks = K.sparseView();
+  const double b1 = .9, b2 = .999, alpha = ALPHA / std::sqrt(static_cast<double>(E));
 
-  if(!VERBOSE) VERBOSE_ITER = false;
+  auto full = [&](const Eigen::VectorXd &X){ return constrained ? Eigen::VectorXd(Ks * X + C) : X; };
 
-  const int d = THETA_INIT.size();
-  const int pairs = S.L.P;
-  if(d != S.d) Rcpp::stop("check theta dimensions");
-  if(PAIRS_PER_ITERATION > pairs) Rcpp::stop("too many pairs per iterations");
-  const int NTHR = S.L.nthr, NLOAD = S.nload, NCORR = S.ncorr, NVAR = S.nvar;
-
-  int burnt              = 0;
-  int burne              = BURNE;
-  const double prob      = static_cast<double>(PAIRS_PER_ITERATION) / static_cast<double>(pairs);
-  int tol_counter        = 0;
-  int tol_counter_burn   = 0;
-  double stepsize        = STEP0;
-
-  std::vector<int> full_pool(pairs);
-  std::iota(std::begin(full_pool), std::end(full_pool), 0);
-
-  Eigen::VectorXd theta      = THETA_INIT;
-  Eigen::VectorXd avtheta    = THETA_INIT;
-  Eigen::VectorXd thetapdiff = Eigen::VectorXd::Zero(d);
-
-  std::vector<Eigen::VectorXd> path_theta;
-  std::vector<Eigen::VectorXd> path_avtheta;
-  std::vector<Eigen::VectorXd> path_thetapdiff;
-  std::vector<double>          path_nll;
-  std::vector<int>             path_iters;
-  std::vector<int>             post_index;
-
-  // Full negative pairwise log-likelihood per unit on the validation frequencies
-  auto full_nll = [&](const Eigen::VectorXd &TH){
-    const model::Setup ST(TH, S);
-    workers::PL w(ST, VALFREQ, full_pool, 0);
-    RcppParallel::parallelReduce(0, pairs, w);
-    double ull = 0;
-    Eigen::VectorXd ugrad;
-    pairs::univariate_contribution(ST.tau, S.L, VALUFREQ, 0, ull, ugrad, hdummy, udummy);
-    return -(w.ll + ull) / n;
-  };
-
-  const int maxtpe = pairs / PAIRS_PER_ITERATION;
-  double nll = full_nll(theta);
-  if(VERBOSE) Rcpp::Rcout << "Initial full npll: " << nll << " | iterations per epoch:" << maxtpe << "\n";
-
-  const double scale = prob / static_cast<double>(n);
-
-  // Diagnostics
-  bool neg_pdiff        = false;
-  bool proj_after_burn  = false;
-  bool finite_gr        = true;
-  bool convergence_burn = true;
-  int  convergence_full = 0;
-  int last_iter = 0;
-  double pdiff = 0;
-
-  Eigen::VectorXd prev_theta = theta;
-  path_iters.push_back(0);
-  path_theta.push_back(theta);
-  path_avtheta.push_back(avtheta);
-  path_thetapdiff.push_back(thetapdiff);
-  path_nll.push_back(nll);
-
-  int t = 1;
-  for(int epoch = 0; epoch < MAXE; epoch++){
-    Rcpp::checkUserInterrupt();
-    Eigen::VectorXd prev_epoch_theta = theta;
-    Eigen::VectorXd prev_epoch_avtheta = avtheta;
-
-    // Sampling scheme: one random permutation of the pairs per epoch
-    std::mt19937 randomizer(SEED + epoch);
-    std::shuffle(full_pool.begin(), full_pool.end(), randomizer);
-    int idx_1pair = 0;
-
-    for(int te = 0; te < maxtpe; te++){
-      Rcpp::checkUserInterrupt();
-
-      // Stochastic gradient on the sampled pairs
-      std::vector<int> iter_chosen_pairs(full_pool.begin() + idx_1pair, full_pool.begin() + idx_1pair + PAIRS_PER_ITERATION);
-      idx_1pair += PAIRS_PER_ITERATION;
-      const model::Setup ST(theta, S);
-      workers::PL w(ST, freq, iter_chosen_pairs, 1);
-      RcppParallel::parallelReduce(0, iter_chosen_pairs.size(), w);
-      Eigen::VectorXd iter_gradient = -scale * w.gradient;
-      if(ufreq.size() > 0){
-        double ull = 0;
-        Eigen::VectorXd ugrad = Eigen::VectorXd::Zero(d);
-        pairs::univariate_contribution(ST.tau, S.L, ufreq, 1, ull, ugrad, hdummy, udummy);
-        iter_gradient -= scale * prob * ugrad;
-      }
-
-      // Parameters update
-      bool update = true;
-      int attempt_counter = 0;
-      double step_length = stepsize;
-      while(update && attempt_counter < 10){
-        step_length = stepsize * STEP1 * pow(1 + STEP2 * stepsize * t, -STEP3);
-        iter_gradient.segment(NTHR, NLOAD) *= 5;
-        if(NCORR > 0) iter_gradient.segment(NTHR + NLOAD, NCORR) *= 100;
-        if(NVAR > 0)  iter_gradient.segment(NTHR + NLOAD + NCORR, NVAR) *= 5;
-        if(std::isfinite(iter_gradient.norm())){
-          update = false;
-          prev_theta = theta;
-          theta -= step_length * iter_gradient;
-        }else{
-          stepsize *= .75;
-          theta = prev_theta;
-          finite_gr = false;
-        }
-        attempt_counter++;
-      }
-
-      // Post-update projection of the loadings, if needed
-      bool checkevent = false;
-      proj2(S, theta, checkevent);
-      if(checkevent) post_index.push_back(t);
-      if(checkevent && epoch > burne) proj_after_burn = true;
-
-      thetapdiff = (theta.array() - prev_theta.array()) / prev_theta.array();
-      if(VERBOSE_ITER) Rcpp::Rcout << " - Iter: " << t << " | step: " << step_length << " | mean abs theta pdiff: " <<
-        thetapdiff.array().abs().mean() << " | gradient norm: " << iter_gradient.norm() << "\n";
-
-      if(epoch <= burne){
-        avtheta = theta;
-      }else{
-        avtheta = ((t - burnt) * avtheta + theta) / (t - burnt + 1);
-      }
-      t++;
-    }
-
-    // Full negative pairwise log-likelihood, path storage and convergence monitoring
-    const double prev_nll = nll;
-    if(epoch % EPOCHS_PER_CHECK == 0){
-      nll = full_nll(theta);
-      path_iters.push_back(t);
-      path_theta.push_back(theta);
-      path_avtheta.push_back(avtheta);
-      path_thetapdiff.push_back(thetapdiff);
-      path_nll.push_back(nll);
-      pdiff = - (nll - prev_nll) / (prev_nll * maxtpe);
-      if(pdiff < TOL_END){tol_counter++;}else{tol_counter = 0;}
-      if(pdiff < TOL_BURN){tol_counter_burn++;}else{tol_counter_burn = 0;}
-      if((pdiff < 0) && (epoch <= burne)) neg_pdiff = true;
-    }
-
-    if(!std::isfinite(nll)){
-      if(VERBOSE) Rcpp::Rcout << "Exiting because of non-finite nll\n";
-      last_iter        = t;
-      convergence_full = -1;
-      break;
-    }
-
-    if(VERBOSE && (epoch % EPOCHS_PER_CHECK == 0)){
-      const Eigen::VectorXd epdiff = (theta.array() - prev_epoch_theta.array()) / prev_epoch_theta.array();
-      Rcpp::Rcout << "End of Epoch: " << epoch << " | full npll: " << nll << " | av nll pdiff from prev epoch: " << pdiff <<
-        " | tc:" << tol_counter << "| mean abs theta pdiff from prev epoch: " << epdiff.array().abs().mean() << "\n";
-    }
-
-    // Burn-in: ends at BURNE, or earlier when the tolerance is reached
-    if(epoch == burne){
-      if(VERBOSE) Rcpp::Rcout << "Burn-in ended\n";
-      convergence_burn = false;
-      burnt = t;
-    }else if(CHECK_TOL && (tol_counter_burn >= MAX_TOL_COUNTER) && (epoch <= burne) && (epoch % EPOCHS_PER_CHECK == 0)){
-      if(VERBOSE) Rcpp::Rcout << "Burn-in stopped\n";
-      burne = epoch;
-      tol_counter_burn = 0;
-      convergence_burn = true;
-      burnt = t;
-    }
-
-    // Exit
-    if(CHECK_TOL && (tol_counter >= MAX_TOL_COUNTER) && (epoch > burne) && (epoch % EPOCHS_PER_CHECK == 0)){
-      if(VERBOSE) Rcpp::Rcout << "Converged\n";
-      convergence_full = 1;
-      last_iter = t;
-      if(pdiff < 0){
-        if(VERBOSE) Rcpp::Rcout << "Reporting parameter values from epoch " << epoch - 1 << "\n";
-        theta = prev_epoch_theta;
-        avtheta = prev_epoch_avtheta;
-      }
-      break;
-    }else if(epoch == (MAXE - 1)){
-      if(VERBOSE) Rcpp::Rcout << "Ended\n";
-      last_iter = t;
-    }
+  std::vector<int> rpairs;
+  for(int r = 0; r < P && S.rescov.size() > 0; r++){
+    const int k = S.L.pk[r], l = S.L.pl[r];
+    if(S.resid(k, l) >= 0 || S.rescov(k, l) != 0) rpairs.push_back(r);
   }
 
+  auto feasible = [&](const model::Setup &ST){
+    if(!ST.Lt.allFinite()) return false;
+    for(int k = 0; k < S.p; k++){
+      for(int c = 1; c < S.L.cat(k) - 1; c++) if(ST.tau(S.L.tk(k) + c) <= ST.tau(S.L.tk(k) + c - 1)) return false;
+    }
+    Eigen::MatrixXd Psi;
+    if(S.direct){
+      if(ST.Sig.llt().info() != Eigen::Success) return false;
+      Psi = ST.Sig;
+    }else{
+      Psi = ST.sd.asDiagonal() * ST.U.transpose() * ST.U * ST.sd.asDiagonal();
+    }
+    const Eigen::MatrixXd LP = ST.Lt * Psi;
+    const Eigen::VectorXd v = LP.cwiseProduct(ST.Lt).rowwise().sum();
+    auto ok = [&](const int k, const int l){ return std::abs(LP.row(k).dot(ST.Lt.row(l)) + ST.rc(k, l)) < 1; };
+    for(const int r : rpairs) if(!ok(S.L.pk[r], S.L.pl[r])) return false;
+    if(v.maxCoeff() < 1) return true;
+    for(int k = 0; k < S.p; k++){
+      if(v(k) < 1) continue;
+      for(int l = 0; l < S.p; l++) if(l != k && v(k) * v(l) >= 1 && !ok(k, l)) return false;
+    }
+    return true;
+  };
+
+  std::mt19937 rng(SEED);
+  std::vector<int> pool(P), drawn(nu), all(P);
+  std::iota(pool.begin(), pool.end(), 0);
+  std::iota(all.begin(), all.end(), 0);
+  auto draw = [&](){
+    for(int i = 0; i < nu; i++){
+      std::uniform_int_distribution<int> u(i, P - 1);
+      std::swap(pool[i], pool[u(rng)]);
+      drawn[i] = pool[i];
+    }
+  };
+
+  Eigen::VectorXd itemw = Eigen::VectorXd::Zero(S.p);
+  auto stoch = [&](const model::Setup &ST, Eigen::VectorXd &G){
+    workers::PL w(ST, freq, drawn, 1);
+    RcppParallel::parallelReduce(0, nu, w, 4);
+    double ll = w.ll * P / nu;
+    Eigen::VectorXd grad = w.gradient * P / nu;
+    Eigen::MatrixXd hd, ud;
+    if(ufreq.size() > 0){
+      itemw.setZero();
+      for(const int r : drawn){
+        itemw(S.L.pk[r]) += 1;
+        itemw(S.L.pl[r]) += 1;
+      }
+      itemw *= static_cast<double>(P) / (nu * (S.p - 1));
+      pairs::univariate_contribution(ST.tau, S.L, ufreq, 1, ll, grad, hd, ud, itemw);
+    }
+    if(!std::isfinite(ll) || !grad.allFinite()) return false;
+    G = constrained ? Eigen::VectorXd(-Ks.transpose() * grad / n) : Eigen::VectorXd(-grad / n);
+    return true;
+  };
+
+  auto objective = [&](const Eigen::VectorXd &X){
+    const model::Setup ST(full(X), S);
+    if(S.direct && ST.Sig.llt().info() != Eigen::Success) return R_PosInf;
+    workers::PL w(ST, VALFREQ, all, 0);
+    RcppParallel::parallelReduce(0, P, w);
+    Eigen::VectorXd gd;
+    Eigen::MatrixXd hd, ud;
+    pairs::univariate_contribution(ST.tau, S.L, VALUFREQ, 0, w.ll, gd, hd, ud);
+    return std::isfinite(w.ll) ? -w.ll / n : R_PosInf;
+  };
+
+  auto hessian_gain = [&](const Eigen::VectorXd &X, Eigen::MatrixXd &G, const double DAMP){
+    const model::Setup ST(full(X), S);
+    std::vector<Eigen::MatrixXd> sc;
+    std::vector<std::vector<int>> si;
+    workers::Hess hw(ST, freq, sc, si);
+    RcppParallel::parallelReduce(0, P, hw);
+    double ll = 0;
+    Eigen::MatrixXd ud;
+    pairs::univariate_contribution(ST.tau, S.L, ufreq, 2, ll, hw.gradient, hw.hessian, ud);
+    Eigen::MatrixXd H = hw.hessian / n;
+    if(constrained) H = Ks.transpose() * H * Ks;
+    if(!H.allFinite()) return false;
+    const Eigen::VectorXd s = H.diagonal().cwiseAbs().cwiseMax(1e-12).cwiseSqrt().cwiseInverse();
+    Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(s.asDiagonal() * (0.5 * (H + H.transpose())) * s.asDiagonal());
+    Eigen::VectorXd ev = es.eigenvalues().cwiseAbs();
+    ev = ev.cwiseMax(DAMP * ev.maxCoeff());
+    G = s.asDiagonal() * es.eigenvectors() * ev.cwiseInverse().asDiagonal() * es.eigenvectors().transpose() * s.asDiagonal();
+    return G.allFinite();
+  };
+
+  auto gain_times = [&](const Eigen::MatrixXd &Gm, const Eigen::VectorXd &G){
+    Eigen::VectorXd out = Eigen::VectorXd::Zero(df);
+    for(int j = 0; j < df; j++) if(G(j) != 0) out += G(j) * Gm.col(j);
+    return out;
+  };
+
+  Eigen::VectorXd x = THETA_F, g;
+  std::unique_ptr<model::Setup> cur;
+  auto setx = [&](const Eigen::VectorXd &X){
+    std::unique_ptr<model::Setup> st(new model::Setup(full(X), S));
+    if(!feasible(*st)) return false;
+    x = X;
+    cur = std::move(st);
+    return true;
+  };
+  if(!setx(x)) Rcpp::stop("The starting values are outside the parameter space.");
+
+  int rejections = 0, skipped = 0, iter = 0;
+  auto update = [&](auto &&DIR){
+    iter++;
+    draw();
+    if(!stoch(*cur, g)){
+      skipped++;
+      return;
+    }
+    Eigen::VectorXd step = DIR(g);
+    for(int k = 0; k < 20; k++){
+      if(setx(x - step)) return;
+      step /= 2;
+      rejections++;
+    }
+    skipped++;
+  };
+
+  std::vector<Eigen::VectorXd> path_theta;
+  std::vector<double> path_nll;
+  std::vector<int> path_iter, path_phase;
+  auto record = [&](const Eigen::VectorXd &X, const double F, const int PHASE){
+    path_theta.push_back(full(X));
+    if(PHASE < 3) path_nll.push_back(F);
+    path_iter.push_back(iter);
+    path_phase.push_back(PHASE);
+    if(VERBOSE){
+      Rcpp::Rcout << "Phase " << PHASE << " | iteration " << iter;
+      if(PHASE < 3) Rcpp::Rcout << " | objective " << F;
+      Rcpp::Rcout << "\n";
+    }
+  };
+
+  double t_adam = 0, t_newton = 0, t_hess = 0, t_avg = 0, t_mon = 0;
+  clk::time_point t0 = clk::now();
+  double prev_f = objective(x);
+  t_mon += secs(t0);
+  if(!std::isfinite(prev_f)) Rcpp::stop("The starting values are outside the parameter space.");
+  record(x, prev_f, 0);
+  Eigen::VectorXd best = x;
+  double best_f = prev_f;
+  int calm = 0;
+  bool plateau = false;
+  auto burn_epoch = [&](auto &&DIR, const int PHASE){
+    Eigen::VectorXd ea = Eigen::VectorXd::Zero(df);
+    for(int i = 0; i < E; i++){
+      update(DIR);
+      ea += (x - ea) / (i + 1);
+      Rcpp::checkUserInterrupt();
+    }
+    clk::time_point tm = clk::now();
+    const double f = objective(ea);
+    t_mon += secs(tm);
+    record(ea, f, PHASE);
+    if(f < best_f){
+      best = ea;
+      best_f = f;
+    }
+    calm = std::isfinite(f) && std::abs(n * (prev_f - f)) < TOL * df ? calm + 1 : 0;
+    prev_f = f;
+    return calm >= 2;
+  };
+
+  Eigen::VectorXd m = Eigen::VectorXd::Zero(df), v = Eigen::VectorXd::Zero(df);
+  int ta = 0, adam_epochs = 0, newton_epochs = 0, n_hess = 0;
+  auto adam = [&](const Eigen::VectorXd &G){
+    ta++;
+    m = b1 * m + (1 - b1) * G;
+    v = b2 * v + (1 - b2) * G.cwiseAbs2();
+    return Eigen::VectorXd(alpha * (m / (1 - std::pow(b1, ta))).array() / ((v / (1 - std::pow(b2, ta))).array().sqrt() + 1e-8));
+  };
+  t0 = clk::now();
+  const int max_adam = GAIN == 1 ? ADAM_EPOCHS : ADAM_EPOCHS + BURN_EPOCHS;
+  while(adam_epochs < max_adam && !plateau){
+    plateau = burn_epoch(adam, 1);
+    adam_epochs++;
+  }
+  setx(best);
+  t_adam = secs(t0) - t_mon;
+
+  Eigen::MatrixXd Gm;
+  Eigen::VectorXd Gd;
+  bool hessian = GAIN == 1;
+  double kappa = 1.0 / E;
+  t0 = clk::now();
+  const double mon0 = t_mon;
+  double damp = 1e-3;
+  if(hessian){
+    calm = 0;
+    plateau = false;
+    while(newton_epochs < BURN_EPOCHS && !plateau){
+      clk::time_point th = clk::now();
+      if(!hessian_gain(x, Gm, damp)){
+        hessian = false;
+        break;
+      }
+      t_hess += secs(th);
+      n_hess++;
+      const double before = best_f;
+      plateau = burn_epoch([&](const Eigen::VectorXd &G){ return Eigen::VectorXd(kappa * gain_times(Gm, G)); }, 2);
+      damp = best_f < before ? std::max(damp / 10, 1e-6) : std::min(damp * 10, 1.0);
+      newton_epochs++;
+      setx(best);
+    }
+    if(hessian){
+      clk::time_point th = clk::now();
+      hessian = hessian_gain(x, Gm, damp);
+      t_hess += secs(th);
+      n_hess++;
+    }
+  }
+  if(!hessian){
+    Gd = alpha * (1 - b1) * ((v / (1 - std::pow(b2, std::max(ta, 1)))).array().sqrt() + 1e-8).inverse();
+    kappa = 1;
+  }
+  t_newton = secs(t0) - (t_mon - mon0);
+  const Eigen::VectorXd x_burn = x;
+
+  const int skipped_burn = skipped, rejections_burn = rejections;
+  Eigen::VectorXd avg = x;
+  const int T2 = BURN_ONLY ? 0 : EPOCHS * E, T0 = static_cast<int>(AVG_FROM * T2);
+  t0 = clk::now();
+  for(int s = 1; s <= T2; s++){
+    const double gam = kappa * std::pow(1.0 + static_cast<double>(s) / E, -DECAY);
+    if(hessian){
+      update([&](const Eigen::VectorXd &G){ return Eigen::VectorXd(gam * gain_times(Gm, G)); });
+    }else{
+      update([&](const Eigen::VectorXd &G){ return Eigen::VectorXd(gam * Gd.cwiseProduct(G)); });
+    }
+    if(s <= T0){
+      avg = x;
+    }else{
+      avg += (x - avg) / (s - T0 + 1);
+    }
+    if(s % E == 0){
+      record(avg, 0, 3);
+      Rcpp::checkUserInterrupt();
+    }
+  }
+  t_avg = secs(t0);
+
   return Rcpp::List::create(
-    Rcpp::Named("burnt") = burnt,
-    Rcpp::Named("scale") = scale,
-    Rcpp::Named("nll") = nll,
-    Rcpp::Named("path_theta") = path_theta,
-    Rcpp::Named("path_thetapdiff") = path_thetapdiff,
-    Rcpp::Named("path_avtheta") = path_avtheta,
-    Rcpp::Named("path_iters") = path_iters,
-    Rcpp::Named("path_nll") = path_nll,
-    Rcpp::Named("post_index") = post_index,
-    Rcpp::Named("last_iter") = last_iter,
-    Rcpp::Named("theta") = theta,
-    Rcpp::Named("avtheta") = avtheta,
-    Rcpp::Named("convergence_full") = convergence_full,
-    Rcpp::Named("convergence_burn") = convergence_burn,
-    Rcpp::Named("proj_after_burn") = proj_after_burn,
-    Rcpp::Named("finite_gr") = finite_gr,
-    Rcpp::Named("neg_pdiff") = neg_pdiff
+    Rcpp::Named("theta") = full(BURN_ONLY ? x_burn : avg),
+    Rcpp::Named("theta_last") = full(x),
+    Rcpp::Named("theta_burn") = full(x_burn),
+    Rcpp::Named("epoch_length") = E,
+    Rcpp::Named("adam_epochs") = adam_epochs,
+    Rcpp::Named("newton_epochs") = newton_epochs,
+    Rcpp::Named("plateau") = plateau,
+    Rcpp::Named("iterations") = iter,
+    Rcpp::Named("averaged") = T2 - T0,
+    Rcpp::Named("gain") = hessian ? "hessian" : "diagonal",
+    Rcpp::Named("n_hessian") = n_hess,
+    Rcpp::Named("rejections") = rejections,
+    Rcpp::Named("skipped") = skipped,
+    Rcpp::Named("rejections_averaging") = rejections - rejections_burn,
+    Rcpp::Named("skipped_averaging") = skipped - skipped_burn,
+    Rcpp::Named("path") = Rcpp::List::create(
+      Rcpp::Named("iter") = path_iter, Rcpp::Named("phase") = path_phase,
+      Rcpp::Named("theta") = path_theta, Rcpp::Named("nll") = path_nll),
+    Rcpp::Named("time") = Rcpp::NumericVector::create(
+      Rcpp::Named("adam") = t_adam, Rcpp::Named("newton") = t_newton, Rcpp::Named("hessian") = t_hess,
+      Rcpp::Named("averaging") = t_avg, Rcpp::Named("monitor") = t_mon)
   );
 }

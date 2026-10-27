@@ -97,46 +97,32 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
-// cpp_sa_proj
-Eigen::VectorXd cpp_sa_proj(const Eigen::Map<Eigen::VectorXd> THETA, const Rcpp::List MODEL, const Rcpp::List DATA);
-RcppExport SEXP _lavaan_pl_cpp_sa_proj(SEXP THETASEXP, SEXP MODELSEXP, SEXP DATASEXP) {
+// cpp_sa
+Rcpp::List cpp_sa(const Eigen::Map<Eigen::VectorXd> THETA_F, const Eigen::Map<Eigen::MatrixXd> K, const Eigen::Map<Eigen::VectorXd> C, const Rcpp::List MODEL, const Rcpp::List DATA, const Eigen::Map<Eigen::VectorXd> VALFREQ, const Eigen::Map<Eigen::VectorXd> VALUFREQ, const int PAIRS_PER_ITERATION, const double ALPHA, const int ADAM_EPOCHS, const int BURN_EPOCHS, const int EPOCHS, const double TOL, const double DECAY, const double AVG_FROM, const int GAIN, const int SEED, const bool BURN_ONLY, const bool VERBOSE);
+RcppExport SEXP _lavaan_pl_cpp_sa(SEXP THETA_FSEXP, SEXP KSEXP, SEXP CSEXP, SEXP MODELSEXP, SEXP DATASEXP, SEXP VALFREQSEXP, SEXP VALUFREQSEXP, SEXP PAIRS_PER_ITERATIONSEXP, SEXP ALPHASEXP, SEXP ADAM_EPOCHSSEXP, SEXP BURN_EPOCHSSEXP, SEXP EPOCHSSEXP, SEXP TOLSEXP, SEXP DECAYSEXP, SEXP AVG_FROMSEXP, SEXP GAINSEXP, SEXP SEEDSEXP, SEXP BURN_ONLYSEXP, SEXP VERBOSESEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< const Eigen::Map<Eigen::VectorXd> >::type THETA(THETASEXP);
-    Rcpp::traits::input_parameter< const Rcpp::List >::type MODEL(MODELSEXP);
-    Rcpp::traits::input_parameter< const Rcpp::List >::type DATA(DATASEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_sa_proj(THETA, MODEL, DATA));
-    return rcpp_result_gen;
-END_RCPP
-}
-// cpp_plSA2
-Rcpp::List cpp_plSA2(const Eigen::Map<Eigen::VectorXd> THETA_INIT, const Rcpp::List MODEL, const Rcpp::List DATA, const Eigen::Map<Eigen::VectorXd> VALFREQ, const Eigen::Map<Eigen::VectorXd> VALUFREQ, const int PAIRS_PER_ITERATION, const double STEP0, const double STEP1, const double STEP2, const double STEP3, const int BURNE, const int MAXE, const int EPOCHS_PER_CHECK, const int MAX_TOL_COUNTER, const double TOL_BURN, const double TOL_END, const int CHECK_TOL, const int SEED, const bool VERBOSE, bool VERBOSE_ITER);
-RcppExport SEXP _lavaan_pl_cpp_plSA2(SEXP THETA_INITSEXP, SEXP MODELSEXP, SEXP DATASEXP, SEXP VALFREQSEXP, SEXP VALUFREQSEXP, SEXP PAIRS_PER_ITERATIONSEXP, SEXP STEP0SEXP, SEXP STEP1SEXP, SEXP STEP2SEXP, SEXP STEP3SEXP, SEXP BURNESEXP, SEXP MAXESEXP, SEXP EPOCHS_PER_CHECKSEXP, SEXP MAX_TOL_COUNTERSEXP, SEXP TOL_BURNSEXP, SEXP TOL_ENDSEXP, SEXP CHECK_TOLSEXP, SEXP SEEDSEXP, SEXP VERBOSESEXP, SEXP VERBOSE_ITERSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< const Eigen::Map<Eigen::VectorXd> >::type THETA_INIT(THETA_INITSEXP);
+    Rcpp::traits::input_parameter< const Eigen::Map<Eigen::VectorXd> >::type THETA_F(THETA_FSEXP);
+    Rcpp::traits::input_parameter< const Eigen::Map<Eigen::MatrixXd> >::type K(KSEXP);
+    Rcpp::traits::input_parameter< const Eigen::Map<Eigen::VectorXd> >::type C(CSEXP);
     Rcpp::traits::input_parameter< const Rcpp::List >::type MODEL(MODELSEXP);
     Rcpp::traits::input_parameter< const Rcpp::List >::type DATA(DATASEXP);
     Rcpp::traits::input_parameter< const Eigen::Map<Eigen::VectorXd> >::type VALFREQ(VALFREQSEXP);
     Rcpp::traits::input_parameter< const Eigen::Map<Eigen::VectorXd> >::type VALUFREQ(VALUFREQSEXP);
     Rcpp::traits::input_parameter< const int >::type PAIRS_PER_ITERATION(PAIRS_PER_ITERATIONSEXP);
-    Rcpp::traits::input_parameter< const double >::type STEP0(STEP0SEXP);
-    Rcpp::traits::input_parameter< const double >::type STEP1(STEP1SEXP);
-    Rcpp::traits::input_parameter< const double >::type STEP2(STEP2SEXP);
-    Rcpp::traits::input_parameter< const double >::type STEP3(STEP3SEXP);
-    Rcpp::traits::input_parameter< const int >::type BURNE(BURNESEXP);
-    Rcpp::traits::input_parameter< const int >::type MAXE(MAXESEXP);
-    Rcpp::traits::input_parameter< const int >::type EPOCHS_PER_CHECK(EPOCHS_PER_CHECKSEXP);
-    Rcpp::traits::input_parameter< const int >::type MAX_TOL_COUNTER(MAX_TOL_COUNTERSEXP);
-    Rcpp::traits::input_parameter< const double >::type TOL_BURN(TOL_BURNSEXP);
-    Rcpp::traits::input_parameter< const double >::type TOL_END(TOL_ENDSEXP);
-    Rcpp::traits::input_parameter< const int >::type CHECK_TOL(CHECK_TOLSEXP);
+    Rcpp::traits::input_parameter< const double >::type ALPHA(ALPHASEXP);
+    Rcpp::traits::input_parameter< const int >::type ADAM_EPOCHS(ADAM_EPOCHSSEXP);
+    Rcpp::traits::input_parameter< const int >::type BURN_EPOCHS(BURN_EPOCHSSEXP);
+    Rcpp::traits::input_parameter< const int >::type EPOCHS(EPOCHSSEXP);
+    Rcpp::traits::input_parameter< const double >::type TOL(TOLSEXP);
+    Rcpp::traits::input_parameter< const double >::type DECAY(DECAYSEXP);
+    Rcpp::traits::input_parameter< const double >::type AVG_FROM(AVG_FROMSEXP);
+    Rcpp::traits::input_parameter< const int >::type GAIN(GAINSEXP);
     Rcpp::traits::input_parameter< const int >::type SEED(SEEDSEXP);
+    Rcpp::traits::input_parameter< const bool >::type BURN_ONLY(BURN_ONLYSEXP);
     Rcpp::traits::input_parameter< const bool >::type VERBOSE(VERBOSESEXP);
-    Rcpp::traits::input_parameter< bool >::type VERBOSE_ITER(VERBOSE_ITERSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_plSA2(THETA_INIT, MODEL, DATA, VALFREQ, VALUFREQ, PAIRS_PER_ITERATION, STEP0, STEP1, STEP2, STEP3, BURNE, MAXE, EPOCHS_PER_CHECK, MAX_TOL_COUNTER, TOL_BURN, TOL_END, CHECK_TOL, SEED, VERBOSE, VERBOSE_ITER));
+    rcpp_result_gen = Rcpp::wrap(cpp_sa(THETA_F, K, C, MODEL, DATA, VALFREQ, VALUFREQ, PAIRS_PER_ITERATION, ALPHA, ADAM_EPOCHS, BURN_EPOCHS, EPOCHS, TOL, DECAY, AVG_FROM, GAIN, SEED, BURN_ONLY, VERBOSE));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -148,8 +134,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_lavaan_pl_cpp_saturated", (DL_FUNC) &_lavaan_pl_cpp_saturated, 5},
     {"_lavaan_pl_cpp_saturated_traces", (DL_FUNC) &_lavaan_pl_cpp_saturated_traces, 8},
     {"_lavaan_pl_pairs_freq", (DL_FUNC) &_lavaan_pl_pairs_freq, 3},
-    {"_lavaan_pl_cpp_sa_proj", (DL_FUNC) &_lavaan_pl_cpp_sa_proj, 3},
-    {"_lavaan_pl_cpp_plSA2", (DL_FUNC) &_lavaan_pl_cpp_plSA2, 20},
+    {"_lavaan_pl_cpp_sa", (DL_FUNC) &_lavaan_pl_cpp_sa, 19},
     {NULL, NULL, 0}
 };
 

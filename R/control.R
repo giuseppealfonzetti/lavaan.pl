@@ -165,11 +165,11 @@ set_latpl_model <- function(CONSTRMAT, CONSTRVAR = NULL, CORRFLAG = TRUE, STDLV 
 
 #' Starting values for pairwise likelihood estimation
 #'
-#' @param METHOD \tabular{ll}{ \code{'standard'} \tab Uses cold
-#'  initialisation where loadings are initialised at `0.25` and the latent
-#'  covariance matrix as an Identity matrix. \cr \tab \cr \code{'SA'} \tab
-#'  Computes the starting point using a short chain of stochastic updates.
-#'  Updates start from the `standard` initialisation point. \cr }
+#' @param METHOD \tabular{ll}{ \code{'standard'} \tab Thresholds from the univariate margins,
+#'  loadings and regression coefficients at `0.25`, uncorrelated latent variables with unit
+#'  variances, no residual covariances. \cr \tab \cr \code{'SA'} \tab The end point of the burn-in of the
+#'  pairwise stochastic approximation ([set_sa_control()]), started from `THETA` or from the
+#'  `standard` values. \cr }
 #'  With fewer than 15 items, `'SA'` falls back to `'standard'`.
 #' @param THETA Initialising vector. If `NULL`, the `standard` initialisation point is used.
 #' @param CONTROL Control object from [set_sa_init_control()], used when `METHOD = "SA"`.
@@ -219,114 +219,73 @@ set_ucminf_control <- function(
 
 #' Control options for the pairwise stochastic approximation
 #'
+#' The algorithm draws `PAIRS_PER_ITERATION` item pairs at each iteration, uniformly and
+#' independently across iterations, and runs in three phases: Adam, a stochastic Newton burn-in
+#' and stochastic gradient updates with a frozen gain and Polyak-Ruppert averaging. An epoch is
+#' the number of iterations needed to draw as many pairs as there are in the model.
+#'
 #' @param PAIRS_PER_ITERATION Number of item pairs drawn at each iteration.
-#' @param STEP0 Initial step length.
-#' @param STEP1 Scaling of the step length.
-#' @param STEP2 Rate of the step length decay.
-#' @param STEP3 Exponent of the step length decay.
-#' @param BURNE Maximum number of burn-in epochs before trajectory averaging.
-#' @param MAXE Maximum number of epochs.
-#' @param EPOCHS_PER_CHECK Number of epochs between evaluations of the full negative pairwise
-#'   log-likelihood.
-#' @param CHECK_TOL If `TRUE`, stop the burn-in and the optimisation when the relative change in
-#'   the full negative pairwise log-likelihood falls below `TOL_BURN` and `TOL_END`.
-#' @param MAX_TOL_COUNTER Number of consecutive checks below tolerance required to stop.
-#' @param TOL_BURN Tolerance ending the burn-in.
-#' @param TOL_END Tolerance ending the optimisation.
+#' @param ALPHA Step length of the Adam phase, divided by the square root of the number of
+#'   iterations per epoch.
+#' @param ADAM_EPOCHS Maximum number of epochs of the Adam phase.
+#' @param BURN_EPOCHS Maximum number of epochs of the stochastic Newton burn-in.
+#' @param EPOCHS Number of epochs of the averaged phase.
+#' @param TOL Improvement of the pairwise log-likelihood at the epoch average, per free parameter,
+#'   below which, at two consecutive epochs, a burn-in phase ends.
+#' @param DECAY Exponent of the step length decay in the averaged phase, in \eqn{(1/2, 1)}.
+#' @param AVG_FROM Fraction of the averaged phase discarded before averaging.
+#' @param GAIN Gain of the burn-in and averaged phases: `"hessian"` (inverse observed information),
+#'   `"diagonal"` (Adam's diagonal preconditioner, no Newton burn-in), or `"auto"` (`"hessian"` up
+#'   to 2000 free parameters).
 #' @param SEED Seed of the pair sampling.
 #'
-#' @return An object of class `latpl_sa_control` to be passed to [fit_latpl()] via `CONTROL` when
-#'   `METHOD = "SA"`, or to [cfa()] via `control`.
+#' @return An object of class `latpl_sa_control` to be passed to [fit_latpl()] via `CONTROL`, or to
+#'   [cfa()] via `control`.
 #'
 #' @export
 set_sa_control <- function(
   PAIRS_PER_ITERATION = 16,
-  STEP0 = 1,
-  STEP1 = 1,
-  STEP2 = 1e-8,
-  STEP3 = 0.75,
-  BURNE = 20,
-  MAXE = 30,
-  EPOCHS_PER_CHECK = 5,
-  CHECK_TOL = TRUE,
-  MAX_TOL_COUNTER = 1,
-  TOL_BURN = 5e-7,
-  TOL_END = 1e-7,
+  ALPHA = 0.2,
+  ADAM_EPOCHS = 5,
+  BURN_EPOCHS = 30,
+  EPOCHS = 20,
+  TOL = 0.05,
+  DECAY = 0.75,
+  AVG_FROM = 0.25,
+  GAIN = c("auto", "hessian", "diagonal"),
   SEED = 123
 ) {
+  GAIN <- match.arg(GAIN)
+  num <- function(x) is.numeric(x) && length(x) == 1 && is.finite(x)
   stopifnot(
-    is.numeric(PAIRS_PER_ITERATION), length(PAIRS_PER_ITERATION) == 1, PAIRS_PER_ITERATION >= 1,
-    is.null(STEP0) || (is.numeric(STEP0) && length(STEP0) == 1 && STEP0 > 0),
-    is.numeric(STEP1), length(STEP1) == 1, STEP1 > 0,
-    is.numeric(STEP2), length(STEP2) == 1, STEP2 > 0,
-    is.numeric(STEP3), length(STEP3) == 1, STEP3 > 0,
-    is.numeric(BURNE), length(BURNE) == 1, BURNE >= 0,
-    is.numeric(MAXE), length(MAXE) == 1, MAXE >= 0,
-    BURNE < MAXE,
-    is.numeric(EPOCHS_PER_CHECK), length(EPOCHS_PER_CHECK) == 1, EPOCHS_PER_CHECK >= 1,
-    is.logical(CHECK_TOL), length(CHECK_TOL) == 1,
-    is.numeric(MAX_TOL_COUNTER), length(MAX_TOL_COUNTER) == 1, MAX_TOL_COUNTER >= 1,
-    is.numeric(TOL_BURN), length(TOL_BURN) == 1, TOL_BURN > 0,
-    is.numeric(TOL_END), length(TOL_END) == 1, TOL_END > 0,
-    is.numeric(SEED), length(SEED) == 1, SEED > 0
+    num(PAIRS_PER_ITERATION), PAIRS_PER_ITERATION >= 1,
+    num(ALPHA), ALPHA > 0,
+    num(ADAM_EPOCHS), ADAM_EPOCHS >= 1,
+    num(BURN_EPOCHS), BURN_EPOCHS >= 0,
+    num(EPOCHS), EPOCHS >= 0,
+    num(TOL), TOL > 0,
+    num(DECAY), DECAY > 0.5, DECAY < 1,
+    num(AVG_FROM), AVG_FROM >= 0, AVG_FROM < 1,
+    num(SEED), SEED > 0
   )
-  out <- list(
-    PAIRS_PER_ITERATION = as.integer(PAIRS_PER_ITERATION),
-    STEP0 = STEP0,
-    STEP1 = STEP1,
-    STEP2 = STEP2,
-    STEP3 = STEP3,
-    BURNE = as.integer(BURNE),
-    MAXE = as.integer(MAXE),
-    EPOCHS_PER_CHECK = as.integer(EPOCHS_PER_CHECK),
-    CHECK_TOL = CHECK_TOL,
-    MAX_TOL_COUNTER = as.integer(MAX_TOL_COUNTER),
-    TOL_BURN = TOL_BURN,
-    TOL_END = TOL_END,
-    SEED = as.integer(SEED)
-  )
+  out <- list(PAIRS_PER_ITERATION = as.integer(PAIRS_PER_ITERATION), ALPHA = ALPHA, ADAM_EPOCHS = as.integer(ADAM_EPOCHS),
+              BURN_EPOCHS = as.integer(BURN_EPOCHS), EPOCHS = as.integer(EPOCHS), TOL = TOL, DECAY = DECAY,
+              AVG_FROM = AVG_FROM, GAIN = GAIN, SEED = as.integer(SEED))
   class(out) <- "latpl_sa_control"
   out
 }
 
 #' Control options for the stochastic approximation initialisation
 #'
-#' @inheritParams set_sa_control
-#' @param STEP0 Initial step length. If `NULL`, it is set to \eqn{\sqrt{1/d}} at fit time, where
-#'   \eqn{d} is the number of free parameters.
+#' Only the burn-in phases of [set_sa_control()] run, and their end point is the starting value.
 #'
-#' @return An object of class `latpl_sa_control` to be passed to [fit_latpl()] via `INIT_CONTROL`,
-#'   or to [cfa()] via `estimator.args$init_control`, when the initialisation method is `"SA"`.
+#' @inheritParams set_sa_control
+#'
+#' @return An object of class `latpl_sa_control` to be passed to [set_init()] via `CONTROL`.
 #'
 #' @export
-set_sa_init_control <- function(
-  PAIRS_PER_ITERATION = 16,
-  STEP0 = NULL,
-  STEP1 = 1,
-  STEP2 = 1e-8,
-  STEP3 = 0.75,
-  BURNE = 3,
-  MAXE = 5,
-  EPOCHS_PER_CHECK = 1,
-  CHECK_TOL = FALSE,
-  MAX_TOL_COUNTER = 1,
-  TOL_BURN = 5e-7,
-  TOL_END = 1e-7,
-  SEED = 123
-) {
-  set_sa_control(
-    PAIRS_PER_ITERATION = PAIRS_PER_ITERATION,
-    STEP0 = STEP0,
-    STEP1 = STEP1,
-    STEP2 = STEP2,
-    STEP3 = STEP3,
-    BURNE = BURNE,
-    MAXE = MAXE,
-    EPOCHS_PER_CHECK = EPOCHS_PER_CHECK,
-    CHECK_TOL = CHECK_TOL,
-    MAX_TOL_COUNTER = MAX_TOL_COUNTER,
-    TOL_BURN = TOL_BURN,
-    TOL_END = TOL_END,
-    SEED = SEED
-  )
+set_sa_init_control <- function(PAIRS_PER_ITERATION = 16, ALPHA = 0.2, ADAM_EPOCHS = 5, BURN_EPOCHS = 5, TOL = 0.05,
+                                GAIN = c("auto", "hessian", "diagonal"), SEED = 123) {
+  set_sa_control(PAIRS_PER_ITERATION = PAIRS_PER_ITERATION, ALPHA = ALPHA, ADAM_EPOCHS = ADAM_EPOCHS,
+                 BURN_EPOCHS = BURN_EPOCHS, EPOCHS = 0, TOL = TOL, GAIN = GAIN, SEED = SEED)
 }

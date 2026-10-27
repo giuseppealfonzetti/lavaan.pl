@@ -39,12 +39,6 @@ fit_latpl <- function(
   METHOD <- if (inherits(CONTROL, "latpl_sa_control")) "SA" else "ucminf"
   dims <- latpl_dims(DATA, MODEL)
   lc <- lincon(MODEL, dims$nthr)
-  if (METHOD == "SA") {
-    if (dims$p < 40) warning("SA defaults are tuned for models with at least 40 items: check the estimates against set_ucminf_control().", call. = FALSE)
-    if (corrflag_code(MODEL) == 2) stop("LATCOV = \"direct\" is not currently supported with SA; use set_ucminf_control().", call. = FALSE)
-    if (!sa_model(MODEL)) stop("REGMAT and RESCOV are not currently supported with SA; use set_ucminf_control().", call. = FALSE)
-    if (length(lc$free_idx) < dims$d) stop("CONSTRAINTS are not currently supported with SA; use set_ucminf_control().", call. = FALSE)
-  }
   dims$npar <- length(lc$free_idx)
   RcppParallel::setThreadOptions(numThreads = NCORES)
   on.exit(RcppParallel::setThreadOptions(numThreads = 1))
@@ -52,7 +46,7 @@ fit_latpl <- function(
   fit <- structure(list(data = DATA, model = MODEL, control = CONTROL, dims = dims, method = METHOD, lincon = lc,
                         engine = eng, version = as.character(utils::packageVersion("lavaan.pl")), cores = NCORES),
                    class = "latpl_fit")
-  fit$init <- init_theta(INIT, dims, MODEL, eng, VERBOSE)
+  fit$init <- init_theta(INIT, DATA, dims, MODEL, eng, lc, VERBOSE)
   full <- function(x) as.vector(lc$K %*% x + lc$c)
   nll <- function(theta) -cpp_pl(theta, eng$model, eng$data)$pl / dims$n
 
@@ -106,22 +100,12 @@ fit_latpl <- function(
     fit$theta <- full(fit$numFit$par)
   } else {
     if (VERBOSE) message("- Optimising via pairwise stochastic approximation...")
-    if (is.null(CONTROL$STEP0)) CONTROL$STEP0 <- sqrt(1 / dims$d)
-    fit$control <- CONTROL
-    val <- is.null(DATA$valfreq)
-    opt <- run_sa(fit$init, eng, CONTROL, if (val) DATA$freq else DATA$valfreq, if (val) DATA$ufreq else numeric(0), VERBOSE)
-    if (VERBOSE) {
-      if (!opt$convergence_burn) message("Burn-in period did not reach tolerance level ", CONTROL$TOL_BURN, ". Stopped at ", CONTROL$BURNE, " epochs Try increasing BURNE or STEP0.")
-      if (opt$proj_after_burn) message("Projections performed after the burn-in. Trajectories might be unstable. Check trajectories visually and evaluate decreasing STEP0.")
-      if (opt$convergence_full == 0) message("Algorithm ended before reaching tolerance level ", CONTROL$TOL_END, ". Stopped at ", CONTROL$MAXE, ". epochs Try increasing MAXE or STEP0.")
-      if (opt$convergence_full == -1) message("Stopped because of divergent trajectories. Decrease STEP0.")
-      if (!opt$finite_gr) message("The algorithm automatically dealt with divergent trajectories. Check trajectories visually and evaluate decreasing STEP0.")
-      if (opt$neg_pdiff) message("Possible divergent trajectories detected monitoring the full negative pairwise likelihood. Check trajectories visually and evaluate decreasing STEP0.")
-    }
-    fit$stoFit <- list(convergence = opt[c("convergence_full", "convergence_burn", "proj_after_burn", "finite_gr", "neg_pdiff")],
-                       path = list(iters = opt$path_iters, theta = opt$path_theta, avtheta = opt$path_avtheta, nll = opt$path_nll),
-                       nll = opt$nll, last_iter = opt$last_iter, burnt = opt$burnt)
-    fit$theta <- opt$avtheta
+    opt <- run_sa(fit$init, DATA, eng, lc, CONTROL, FALSE, VERBOSE)
+    if (!opt$plateau) warning("The SA burn-in did not reach a plateau of the pairwise likelihood: increase BURN_EPOCHS, or check the estimates against set_ucminf_control().", call. = FALSE)
+    if (opt$skipped_averaging > 0) warning(opt$skipped_averaging, " SA iterations of the averaged phase were skipped because no feasible step was found.", call. = FALSE)
+    opt$converged <- opt$plateau && opt$skipped_averaging == 0 && all(is.finite(opt$theta))
+    fit$stoFit <- opt[setdiff(names(opt), "theta")]
+    fit$theta <- opt$theta
   }
   fit$RTime <- as.numeric(difftime(Sys.time(), start_time, units = "secs"))
   if (VERBOSE) message("Done! (", round(fit$RTime, 2), " secs)")
@@ -149,29 +133,45 @@ engine <- function(DATA, MODEL) {
                    UW = DATA$uweights[first], WV = sqrt(as.numeric(rowsum(jw^2, id))), WM = WM))
 }
 
-init_theta <- function(INIT, DIMS, MODEL, ENGINE, VERBOSE) {
-  proj <- function(theta) if (sa_model(MODEL)) cpp_sa_proj(theta, ENGINE$model, ENGINE$data) else theta
+init_theta <- function(INIT, DATA, DIMS, MODEL, ENGINE, LINCON, VERBOSE) {
   theta <- INIT$THETA
   if (is.null(theta)) {
-    thr <- unlist(lapply(DIMS$cat - 1, function(m) if (m == 1) 0 else seq(-1, 1, length.out = m)))
-    theta <- proj(c(thr, rep(0.25, DIMS$nload), rep(0, DIMS$d - DIMS$nthr - DIMS$nload)))
+    w <- if (length(DATA$weights)) DATA$weights else rep(1, DATA$n)
+    thr <- unlist(lapply(seq_len(DIMS$p), function(j) {
+      pj <- vapply(seq_len(DIMS$cat[j]) - 1, function(a) sum(w[DATA$Y[, j] %in% a]), numeric(1))
+      stats::qnorm(pmin(pmax(cumsum(pj) / sum(pj), 1e-4), 1 - 1e-4))[-DIMS$cat[j]]
+    }))
+    theta <- c(thr, rep(0.25, DIMS$nload), rep(0, DIMS$d - DIMS$nthr - DIMS$nload))
+    block <- theta_block(MODEL, DIMS$nthr)
+    theta[block == "beta"] <- 0.25
+    # Factors identified by a marker: the image of the standardised start (all loadings 0.25)
+    marker <- is.na(MODEL$CONSTRLOGSD)
+    theta[block == "lambda"][col(MODEL$CONSTRMAT)[is.na(MODEL$CONSTRMAT)] %in% which(marker)] <- 1
+    theta[block == "logsd"] <- log(0.25)
   } else if (VERBOSE) {
     message("- Initialised at user-supplied values.")
   }
   stopifnot(is.numeric(theta), length(theta) == DIMS$d, all(is.finite(theta)))
-  if (INIT$METHOD == "SA" && DIMS$p >= 15 && sa_model(MODEL)) {
-    if (VERBOSE) message("- Initialising with SA...")
-    CONTROL <- INIT$CONTROL
-    if (is.null(CONTROL$STEP0)) CONTROL$STEP0 <- sqrt(1 / DIMS$d)
-    theta <- run_sa(theta, ENGINE, CONTROL, ENGINE$data$FREQ, ENGINE$data$UFREQ, FALSE)$avtheta
+  if (INIT$METHOD == "SA" && DIMS$p >= 15) {
+    if (VERBOSE) message("- Initialising with the SA burn-in...")
+    theta <- run_sa(as.vector(LINCON$K %*% theta[LINCON$free_idx] + LINCON$c), DATA, ENGINE, LINCON, INIT$CONTROL, TRUE, FALSE)$theta
   }
   par <- theta2par(MODEL, theta)
   L <- par$loadings %*% solve(diag(DIMS$q) - par$regressions)
   if (any(rowSums((L %*% par$latent_correlations) * L) > 1)) warning("Negative error variances implied by init parameters")
-  proj(theta)
+  theta
 }
 
-run_sa <- function(THETA, ENGINE, CONTROL, VALFREQ, VALUFREQ, VERBOSE) {
-  do.call(cpp_plSA2, c(list(THETA_INIT = THETA, MODEL = ENGINE$model, DATA = ENGINE$data, VALFREQ = VALFREQ,
-                            VALUFREQ = VALUFREQ), unclass(CONTROL), VERBOSE = VERBOSE))
+run_sa <- function(THETA, DATA, ENGINE, LINCON, CONTROL, BURN_ONLY, VERBOSE) {
+  val <- is.null(DATA$valfreq)
+  free <- length(LINCON$free_idx) < length(THETA)
+  gain <- switch(CONTROL$GAIN, auto = as.integer(length(LINCON$free_idx) <= 2000), hessian = 1L, diagonal = 0L)
+  out <- cpp_sa(THETA_F = THETA[LINCON$free_idx], K = if (free) LINCON$K else matrix(0, 0, 0), C = LINCON$c,
+                MODEL = ENGINE$model, DATA = ENGINE$data, VALFREQ = if (val) DATA$freq else DATA$valfreq,
+                VALUFREQ = if (val) DATA$ufreq else numeric(0), PAIRS_PER_ITERATION = CONTROL$PAIRS_PER_ITERATION,
+                ALPHA = CONTROL$ALPHA, ADAM_EPOCHS = CONTROL$ADAM_EPOCHS, BURN_EPOCHS = CONTROL$BURN_EPOCHS,
+                EPOCHS = CONTROL$EPOCHS, TOL = CONTROL$TOL, DECAY = CONTROL$DECAY, AVG_FROM = CONTROL$AVG_FROM,
+                GAIN = gain, SEED = CONTROL$SEED, BURN_ONLY = BURN_ONLY, VERBOSE = VERBOSE)
+  out$path$nll <- c(out$path$nll, rep(NA, sum(out$path$phase == 3)))
+  out
 }

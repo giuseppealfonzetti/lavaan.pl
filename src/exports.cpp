@@ -1,10 +1,5 @@
 #include "workers.h"
 
-// MODEL: list(CONSTRMAT, CONSTRLOGSD, CORRFLAG, REGMAT, RESCOV).
-// DATA: list(N, C_VEC, FREQ, UFREQ) and, for the casewise quantities, the distinct
-// response patterns Y (NA for missing) with their available-cases weights UW, and
-// the weights of their scores in J: a vector WV, or a matrix WM with clusters.
-
 template <typename T>
 static T get(const Rcpp::List &X, const char *NAME){
   return Rcpp::as<T>(X[NAME]);

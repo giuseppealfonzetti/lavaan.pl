@@ -104,17 +104,16 @@ pairs::Pair::Pair(const model::Setup &ST, const int R, const bool GRAD): r(R){
   if(S.direct){
     x = ST.Lt.row(k).transpose();
     y = ST.Lt.row(l).transpose();
-    rho = x.dot(ST.Sig * y) + ST.res(k, l);
+    rho = x.dot(ST.Sig * y) + ST.rc(k, l);
   }else{
     x = ST.sd.cwiseProduct(ST.Lt.row(k).transpose());
     y = ST.sd.cwiseProduct(ST.Lt.row(l).transpose());
     X = ST.U * x;
     Y = ST.U * y;
-    rho = X.dot(Y) + ST.res(k, l);
+    rho = X.dot(Y) + ST.rc(k, l);
   }
   if(!GRAD) return;
 
-  // Active set: free loadings of k and l, latent block, regressions, residual covariance
   nk = S.lidx[k].size();
   const int nl = S.lidx[l].size(), ir = S.resid(k, l);
   lo = nk + nl;
@@ -150,8 +149,6 @@ pairs::Pair::Pair(const model::Setup &ST, const int R, const bool GRAD): r(R){
   if(ir >= 0) grho(s - 1) = 1;
 }
 
-// Second derivatives of the reduced loadings of item K with respect to the regressions
-// and its loadings, weighted by W = d rho / d Lt.row(K)
 static void regression_curvature(const model::Setup &ST, const pairs::Pair &PR, const int K,
                                  const Eigen::MatrixXd &D, const Eigen::VectorXd &W, Eigen::MatrixXd &HRHO){
   const model::Spec &S = ST.S;
@@ -281,12 +278,16 @@ void pairs::pair_contribution(const model::Setup &ST, const Eigen::Ref<const Eig
 
 void pairs::univariate_contribution(const Eigen::Ref<const Eigen::VectorXd> TAU, const model::Layout &L,
                                     const Eigen::Ref<const Eigen::VectorXd> UFREQ, const int ORDER, double &LL,
-                                    Eigen::VectorXd &GRADIENT, Eigen::MatrixXd &HESSIAN, Eigen::MatrixXd &USCORE){
+                                    Eigen::VectorXd &GRADIENT, Eigen::MatrixXd &HESSIAN, Eigen::MatrixXd &USCORE,
+                                    const Eigen::Ref<const Eigen::VectorXd> ITEMW){
   if(UFREQ.size() == 0) return;
   for(int k = 0, uk = 0; k < L.p; uk += L.cat(k), k++){
     const int ck = L.cat(k), tk = L.tk(k);
+    const double wk = ITEMW.size() > 0 ? ITEMW(k) : 1;
+    if(wk == 0) continue;
     for(int a = 0; a < ck; a++){
-      const double nc = UFREQ(uk + a);
+      const double nc = wk * UFREQ(uk + a);
+      if(nc == 0) continue;
       const bool up = a < ck - 1, dw = a > 0;
       const double hi = up ? TAU(tk + a) : 0, lo = dw ? TAU(tk + a - 1) : 0;
       const double pe = (up ? R::pnorm(hi, 0, 1, 1, 0) : 1) - (dw ? R::pnorm(lo, 0, 1, 1, 0) : 0) + 1e-8;

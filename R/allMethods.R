@@ -32,7 +32,9 @@ print.latpl_fit <- function(x, ...){
     cat(
       "- Stochastic estimate\n\n",
       "    Pairs per iteration:", x$control$PAIRS_PER_ITERATION, " out of ", x$dims$pairs, "\n",
-      "    Iterations:", x$stoFit$last_iter, "\n",
+      "    Epochs: Adam", x$stoFit$adam_epochs, "| Newton", x$stoFit$newton_epochs, "| averaged", x$control$EPOCHS,
+      "(", x$stoFit$epoch_length, "iterations each, gain:", x$stoFit$gain, ")\n",
+      "    Rejected steps:", x$stoFit$rejections, "(", x$stoFit$rejections_averaging, "in the averaged phase )\n",
       "    Estimation time:", round(x$RTime, 2), "s\n",
       "    Data reduction:", round(x$data$freqTime,2), "s (in set_latpl_data())\n",
       "    Cores used:", x$cores, "\n",
@@ -150,8 +152,9 @@ compute_var.latpl_fit <- function(OBJ, NUMDERIV = FALSE, VERBOSE = FALSE) {
   if (NUMDERIV) {
     H <- numDeriv::jacobian(function(x) -as.vector(crossprod(lc$K, cpp_pl(full(x), OBJ$engine$model, OBJ$engine$data, 1L)$gradient)) / OBJ$dims$n, xf)
   }
-  if (!(det(H) > 0)) stop("H not invertible.")
-  invH <- solve(H)
+  R <- tryCatch(chol(H), error = function(e) NULL)
+  if (is.null(R)) stop("H not positive definite.")
+  invH <- chol2inv(R)
   vcov <- trJacob %*% invH %*% J %*% invH %*% t(trJacob)
   opt_noise <- NA
   noise <- NULL
@@ -160,7 +163,7 @@ compute_var.latpl_fit <- function(OBJ, NUMDERIV = FALSE, VERBOSE = FALSE) {
     ppi <- OBJ$control$PAIRS_PER_ITERATION
     a1 <- P * (P - ppi) / (ppi * (P - 1))
     a2 <- (P - ppi) / (ppi * (P - 1))
-    noise <- invH %*% (a1 * H - a2 * J) %*% invH / (OBJ$dims$n * (OBJ$stoFit$last_iter - OBJ$stoFit$burnt))
+    noise <- invH %*% (a1 * H - a2 * J) %*% invH / (OBJ$dims$n * OBJ$stoFit$averaged)
     eig <- eigen((noise + t(noise)) / 2, symmetric = TRUE)
     noise <- eig$vectors %*% (pmax(eig$values, 0) * t(eig$vectors))
     opt_noise <- diag(trJacob %*% noise %*% t(trJacob))
@@ -181,22 +184,23 @@ plot_traj.latpl_fit <- function(OBJ){
   if (!requireNamespace("tinyplot", quietly = TRUE)) {
     warning('{tinyplot} must be installed to plot trajectories.\n
             The trajectories list will be returned.')
-    return(list(iters=OBJ$stoFit$path$iters, theta=OBJ$stoFit$path$avtheta))
+    return(OBJ$stoFit$path)
   }
 
-  type <- rep(c("thresholds", "loadings", "latent correlations", "latent variances"),
-              c(OBJ$dims$nthr, OBJ$dims$nload, OBJ$dims$ncorr, OBJ$dims$nvar))
+  path <- OBJ$stoFit$path
+  type <- theta_block(OBJ$model, OBJ$dims$nthr)
   long <- do.call(rbind, Map(function(iter, theta) {
     data.frame(iter = iter,
                par = get_par(replace(OBJ, "theta", list(theta)), OPTION = "transformed"),
                id = seq_along(theta),
                type = type)
-  }, OBJ$stoFit$path$iters, OBJ$stoFit$path$avtheta))
+  }, path$iter, path$theta))
+  ends <- tapply(path$iter, path$phase, max)[c("1", "2")]
 
   do.call(tinyplot::tinyplot, list(
     par ~ iter | factor(id), data = long, facet = ~type, type = "l",
     legend = FALSE, col = "black", xlab = "Iterations", ylab = "Estimates",
-    draw = bquote(abline(v = .(OBJ$stoFit$burnt), lty = 2, col = "lightgrey"))
+    draw = bquote(abline(v = .(ends[!is.na(ends)]), lty = 2, col = "lightgrey"))
   ))
   invisible(long)
 }

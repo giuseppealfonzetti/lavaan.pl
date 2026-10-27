@@ -6,53 +6,49 @@
 \usage{
 set_sa_control(
   PAIRS_PER_ITERATION = 16,
-  STEP0 = 1,
-  STEP1 = 1,
-  STEP2 = 1e-08,
-  STEP3 = 0.75,
-  BURNE = 20,
-  MAXE = 30,
-  EPOCHS_PER_CHECK = 5,
-  CHECK_TOL = TRUE,
-  MAX_TOL_COUNTER = 1,
-  TOL_BURN = 5e-07,
-  TOL_END = 1e-07,
+  ALPHA = 0.2,
+  ADAM_EPOCHS = 5,
+  BURN_EPOCHS = 30,
+  EPOCHS = 20,
+  TOL = 0.05,
+  DECAY = 0.75,
+  AVG_FROM = 0.25,
+  GAIN = c("auto", "hessian", "diagonal"),
   SEED = 123
 )
 }
 \arguments{
 \item{PAIRS_PER_ITERATION}{Number of item pairs drawn at each iteration.}
 
-\item{STEP0}{Initial step length.}
+\item{ALPHA}{Step length of the Adam phase, divided by the square root of the number of
+iterations per epoch.}
 
-\item{STEP1}{Scaling of the step length.}
+\item{ADAM_EPOCHS}{Maximum number of epochs of the Adam phase.}
 
-\item{STEP2}{Rate of the step length decay.}
+\item{BURN_EPOCHS}{Maximum number of epochs of the stochastic Newton burn-in.}
 
-\item{STEP3}{Exponent of the step length decay.}
+\item{EPOCHS}{Number of epochs of the averaged phase.}
 
-\item{BURNE}{Maximum number of burn-in epochs before trajectory averaging.}
+\item{TOL}{Improvement of the pairwise log-likelihood at the epoch average, per free parameter,
+below which, at two consecutive epochs, a burn-in phase ends.}
 
-\item{MAXE}{Maximum number of epochs.}
+\item{DECAY}{Exponent of the step length decay in the averaged phase, in \eqn{(1/2, 1)}.}
 
-\item{EPOCHS_PER_CHECK}{Number of epochs between evaluations of the full negative pairwise
-log-likelihood.}
+\item{AVG_FROM}{Fraction of the averaged phase discarded before averaging.}
 
-\item{CHECK_TOL}{If \code{TRUE}, stop the burn-in and the optimisation when the relative change in
-the full negative pairwise log-likelihood falls below \code{TOL_BURN} and \code{TOL_END}.}
-
-\item{MAX_TOL_COUNTER}{Number of consecutive checks below tolerance required to stop.}
-
-\item{TOL_BURN}{Tolerance ending the burn-in.}
-
-\item{TOL_END}{Tolerance ending the optimisation.}
+\item{GAIN}{Gain of the burn-in and averaged phases: \code{"hessian"} (inverse observed information),
+\code{"diagonal"} (Adam's diagonal preconditioner, no Newton burn-in), or \code{"auto"} (\code{"hessian"} up
+to 2000 free parameters).}
 
 \item{SEED}{Seed of the pair sampling.}
 }
 \value{
-An object of class \code{latpl_sa_control} to be passed to \code{\link[=fit_latpl]{fit_latpl()}} via \code{CONTROL} when
-\code{METHOD = "SA"}, or to \code{\link[=cfa]{cfa()}} via \code{control}.
+An object of class \code{latpl_sa_control} to be passed to \code{\link[=fit_latpl]{fit_latpl()}} via \code{CONTROL}, or to
+\code{\link[=cfa]{cfa()}} via \code{control}.
 }
 \description{
-Control options for the pairwise stochastic approximation
+The algorithm draws \code{PAIRS_PER_ITERATION} item pairs at each iteration, uniformly and
+independently across iterations, and runs in three phases: Adam, a stochastic Newton burn-in
+and stochastic gradient updates with a frozen gain and Polyak-Ruppert averaging. An epoch is
+the number of iterations needed to draw as many pairs as there are in the model.
 }

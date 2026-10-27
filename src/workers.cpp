@@ -18,14 +18,12 @@ void workers::Hess::operator()(std::size_t BEGIN, std::size_t END){
     const Eigen::MatrixXd hrho = pairs::rho_hessian(st, PR);
     const int mt = PR.mt, s = PR.s;
 
-    std::vector<int> &I = sidx[r];
-    I.clear();
+    std::vector<int> I;
     for(int a = 0; a < PR.ck - 1; a++) I.push_back(PR.tk + a);
     for(int a = 0; a < PR.cl - 1; a++) I.push_back(PR.tl + a);
     I.insert(I.end(), PR.idx.begin(), PR.idx.end());
 
-    Eigen::MatrixXd &sc = score[r];
-    sc.resize(mt + s, PR.ck * PR.cl);
+    Eigen::MatrixXd sc(mt + s, PR.ck * PR.cl);
     Eigen::MatrixXd M = Eigen::MatrixXd::Zero(mt + 1, mt + 1);
     Eigen::VectorXd gl(mt + s), gsum = Eigen::VectorXd::Zero(mt + s);
     double w = 0;
@@ -52,6 +50,10 @@ void workers::Hess::operator()(std::size_t BEGIN, std::size_t END){
     for(int i = 0; i < mt + s; i++){
       gradient(I[i]) += gsum(i);
       for(int j = 0; j < mt + s; j++) hessian(I[i], I[j]) += HL(i, j);
+    }
+    if(!score.empty()){
+      score[r] = sc;
+      sidx[r] = I;
     }
   }
 }

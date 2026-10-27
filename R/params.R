@@ -16,9 +16,6 @@ corrflag_code <- function(MODEL) {
   if (!MODEL$CORRFLAG) 0L else if (identical(MODEL$LATCOV, "direct")) 2L else 1L
 }
 
-sa_model <- function(MODEL) {
-  corrflag_code(MODEL) != 2 && !length(MODEL$REGMAT) && !length(MODEL$RESCOV)
-}
 
 #' Names of the model parameters
 #'

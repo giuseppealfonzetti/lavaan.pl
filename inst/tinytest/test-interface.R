@@ -10,10 +10,10 @@ local({
   expect_inherits(sa, "latpl_sa_control")
   expect_inherits(init, "latpl_sa_control")
   expect_equal(unclass(uc), list(GRTOL = 1e-6, XTOL = 1e-12, STEPMAX = 1, MAXEVAL = 500L))
-  expect_identical(sa$MAXE, 30L)
-  expect_identical(sa$STEP0, 1)
-  expect_identical(init$MAXE, 5L)
-  expect_null(init$STEP0)
+  expect_identical(sa$EPOCHS, 20L)
+  expect_identical(sa$GAIN, "auto")
+  expect_identical(init$EPOCHS, 0L)
+  expect_identical(init$BURN_EPOCHS, 5L)
   expect_identical(names(sa), names(init))
 })
 
@@ -21,16 +21,17 @@ local({
 local({
   expect_error(set_ucminf_control(MAXEVAL = 0))
   expect_error(set_ucminf_control(GRTOL = -1))
-  expect_error(set_sa_control(BURNE = -1))
-  expect_error(set_sa_control(BURNE = 30, MAXE = 30))
-  expect_error(set_sa_control(CHECK_TOL = 1))
-  expect_error(set_sa_init_control(STEP0 = 0))
+  expect_error(set_sa_control(BURN_EPOCHS = -1))
+  expect_error(set_sa_control(DECAY = 0.4))
+  expect_error(set_sa_control(AVG_FROM = 1))
+  expect_error(set_sa_control(GAIN = "full"))
+  expect_error(set_sa_init_control(ALPHA = 0))
 })
 
 # fit_latpl() checks and honours its control objects
 local({
   expect_error(fit_latpl(D, cl, CONTROL = list(MAXEVAL = 5)), "inherits")
-  expect_warning(fit <- fit_latpl(D, cl, CONTROL = set_sa_control(MAXE = 1, BURNE = 0, PAIRS_PER_ITERATION = 2)), "at least 40 items")
+  fit <- fit_latpl(D, cl, CONTROL = set_sa_control(EPOCHS = 1, PAIRS_PER_ITERATION = 2))
   expect_identical(fit$method, "SA")
   fit <- fit_latpl(D, cl, CONTROL = set_ucminf_control(MAXEVAL = 5))
   expect_true(fit$numFit$info[["neval"]] <= 5)
