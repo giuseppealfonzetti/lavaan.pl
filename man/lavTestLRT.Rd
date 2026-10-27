@@ -15,7 +15,7 @@ lavTestLRT(object, ..., model_names = NULL)
 }
 \value{
 An object of class \code{anova}, as \code{\link[lavaan:lavTestLRT]{lavaan::lavTestLRT()}}. When all models are fitted by
-\code{\link[=cfa]{cfa()}}, the difference tests come from \code{\link[=computePLRT]{computePLRT()}}.
+\code{\link[=cfa]{cfa()}}, the difference tests come from \code{\link[=compute_plrt]{compute_plrt()}}.
 }
 \description{
 Likelihood ratio test for nested models

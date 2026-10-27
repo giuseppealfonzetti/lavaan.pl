@@ -7,9 +7,9 @@
 as_lavaan(fit, vars = NULL, template)
 }
 \arguments{
-\item{fit}{Object of class \code{PlFaFit} returned by \code{\link[=fit_plFA]{fit_plFA()}}.}
+\item{fit}{Object of class \code{latpl_fit} returned by \code{\link[=fit_latpl]{fit_latpl()}}.}
 
-\item{vars}{Output of \code{\link[=computeVar]{computeVar()}} for \code{fit}, or \code{NULL} to skip standard errors.}
+\item{vars}{Output of \code{\link[=compute_var]{compute_var()}} for \code{fit}, or \code{NULL} to skip standard errors.}
 
 \item{template}{Unfitted \link[lavaan:lavaan]{lavaan::lavaan} object for the same model and data, created with \code{do.fit = FALSE}.}
 }

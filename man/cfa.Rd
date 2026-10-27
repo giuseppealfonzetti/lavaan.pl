@@ -48,7 +48,7 @@ indicator to 1.0.}
 \item{estimator}{The estimator is \code{PML}. If any other estimator is provided,
 then \code{\link[lavaan:cfa]{lavaan::cfa()}} (or \code{\link[lavaan:sem]{lavaan::sem()}}) is used.}
 
-\item{estimator.args}{A list of arguments for \code{\link[=fit_plFA]{fit_plFA()}}--see the help file
+\item{estimator.args}{A list of arguments for \code{\link[=fit_latpl]{fit_latpl()}}--see the help file
 for more details. Possible options are:
 \describe{
 \item{\code{init}}{Starting values object from \code{\link[=set_init]{set_init()}}, by default \code{set_init(METHOD = "SA")}. Its \code{THETA} is taken from \code{start} or from the lavaan starting values.}
@@ -71,9 +71,9 @@ process.}
 \item{...}{Additional arguments to be passed to \code{\link[lavaan:lavaan]{lavaan()}}.}
 }
 \value{
-A \link[lavaan:lavaan]{lavaan::lavaan} object. The lavaan.pl fit, from \code{\link[=fit_plFA]{fit_plFA()}}, its
-variance components, from \code{\link[=computeVar]{computeVar()}}, and its test, from
-\code{\link[=computePLRT]{computePLRT()}}, are stored in \verb{@external$lavaan.pl}, \verb{@external$vars} and
+A \link[lavaan:lavaan]{lavaan::lavaan} object. The lavaan.pl fit, from \code{\link[=fit_latpl]{fit_latpl()}}, its
+variance components, from \code{\link[=compute_var]{compute_var()}}, and its test, from
+\code{\link[=compute_plrt]{compute_plrt()}}, are stored in \verb{@external$lavaan.pl}, \verb{@external$vars} and
 \verb{@external$plrt}. Methods for \code{lavaan} objects work as usual.
 }
 \description{
@@ -89,7 +89,7 @@ interest are:
 \describe{
 \item{\code{information}}{The information matrix to use. Only \code{"observed"} is currently supported.}
 \item{\code{se}}{The standard error method to use. Only \code{"robust.huber.white"} is currently supported.}
-\item{\code{test}}{Default \code{"none"}. \code{"standard"} and \code{"mean.var.adjusted"} are computed by \code{\link[=computePLRT]{computePLRT()}}.}
+\item{\code{test}}{Default \code{"none"}. \code{"standard"} and \code{"mean.var.adjusted"} are computed by \code{\link[=compute_plrt]{compute_plrt()}}.}
 \item{\code{missing}}{Default \code{"listwise"}. \code{"pairwise"} and \code{"available.cases"} use the complete pairs and the available cases of Katsikatsou et al. (2022).}
 \item{\code{sampling.weights}, \code{cluster}}{Sampling weights, of type \code{"design"} or \code{"frequency"}, and cluster-robust standard errors, as in lavaan.}
 }

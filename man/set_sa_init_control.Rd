@@ -51,7 +51,7 @@ the full negative pairwise log-likelihood falls below \code{TOL_BURN} and \code{
 \item{SEED}{Seed of the pair sampling.}
 }
 \value{
-An object of class \code{plfa_sa_control} to be passed to \code{\link[=fit_plFA]{fit_plFA()}} via \code{INIT_CONTROL},
+An object of class \code{latpl_sa_control} to be passed to \code{\link[=fit_latpl]{fit_latpl()}} via \code{INIT_CONTROL},
 or to \code{\link[=cfa]{cfa()}} via \code{estimator.args$init_control}, when the initialisation method is \code{"SA"}.
 }
 \description{

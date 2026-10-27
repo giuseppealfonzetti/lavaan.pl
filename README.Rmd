@@ -107,7 +107,7 @@ semPaths(fit, whatLabels = "est", layout = "circle", residuals = FALSE,
 sessionInfo()
 ```
 
-<!-- To fit a latent factor analysis model with 5 factors, where the first 5 items load on the first factor and so on, we can use the `fit_plFA()` function. -->
+<!-- To fit a latent factor analysis model with 5 factors, where the first 5 items load on the first factor and so on, we can use the `fit_latpl()` function. -->
 <!-- In preparation, we must build the following objects to be supplied as a list to the `CONSTR_LIST` argument: -->
 
 <!-- - `CONSTRMAT`: A matrix of constraints on the factor loadings. -->
@@ -128,7 +128,7 @@ sessionInfo()
 <!-- head(D) -->
 
 <!-- # Constraint matrix: NA indicate free loadings -->
-<!-- constrmat <- build_constrMat(P = p, Q = q, STRUCT = "simple") -->
+<!-- constrmat <- build_constr_mat(P = p, Q = q, STRUCT = "simple") -->
 <!-- head(constrmat, 12) -->
 
 <!-- # Build constraint list -->
@@ -144,7 +144,7 @@ sessionInfo()
 <!-- We can now fit the factor model: -->
 
 <!-- ```{r} -->
-<!-- fit <- fit_plFA( -->
+<!-- fit <- fit_latpl( -->
 <!--   DATA = D,  -->
 <!--   CONSTR_LIST = constr_list, -->
 <!--   METHOD = "ucminf", -->
@@ -155,16 +155,16 @@ sessionInfo()
 
 <!-- The default method is using the optimiser from the `{ucminf}` package, which works well for small data sizes. -->
 <!-- Alternatively, the user may choose `METHOD = "SA"` to turn on the stochastic approximation algorithm. -->
-<!-- Use the function `getPar()` to extract the parameter estimates: -->
+<!-- Use the function `get_par()` to extract the parameter estimates: -->
 
 <!-- ```{r} -->
-<!-- getPar(fit) -->
+<!-- get_par(fit) -->
 <!-- ``` -->
 
-<!-- Computing the standard errors is done separately using the `computeVar()` function: -->
+<!-- Computing the standard errors is done separately using the `compute_var()` function: -->
 
 <!-- ```{r} -->
-<!-- var <- computeVar(OBJ = fit, DATA = D, VERBOSE = TRUE) -->
+<!-- var <- compute_var(OBJ = fit, DATA = D, VERBOSE = TRUE) -->
 <!-- str(var) -->
 
 <!-- # Standard errors -->

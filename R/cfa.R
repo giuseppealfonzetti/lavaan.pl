@@ -11,7 +11,7 @@
 #' \describe{
 #'   \item{\code{information}}{The information matrix to use. Only `"observed"` is currently supported.}
 #'   \item{\code{se}}{The standard error method to use. Only `"robust.huber.white"` is currently supported.}
-#'   \item{\code{test}}{Default `"none"`. `"standard"` and `"mean.var.adjusted"` are computed by [computePLRT()].}
+#'   \item{\code{test}}{Default `"none"`. `"standard"` and `"mean.var.adjusted"` are computed by [compute_plrt()].}
 #'   \item{\code{missing}}{Default `"listwise"`. `"pairwise"` and `"available.cases"` use the complete pairs and the available cases of Katsikatsou et al. (2022).}
 #'   \item{\code{sampling.weights}, \code{cluster}}{Sampling weights, of type `"design"` or `"frequency"`, and cluster-robust standard errors, as in lavaan.}
 #' }
@@ -31,7 +31,7 @@
 #'   used and refined according to `estimator.args$init`.
 #' @param estimator The estimator is `PML`. If any other estimator is provided,
 #'   then [`lavaan::cfa()`] (or [`lavaan::sem()`]) is used.
-#' @param estimator.args A list of arguments for [fit_plFA()]--see the help file
+#' @param estimator.args A list of arguments for [fit_latpl()]--see the help file
 #'   for more details. Possible options are:
 #'   \describe{
 #'     \item{\code{init}}{Starting values object from [set_init()], by default `set_init(METHOD = "SA")`. Its `THETA` is taken from `start` or from the lavaan starting values.}
@@ -46,9 +46,9 @@
 #'   process.
 #' @param ... Additional arguments to be passed to [lavaan()].
 #'
-#' @returns A [lavaan::lavaan] object. The lavaan.pl fit, from [fit_plFA()], its
-#'   variance components, from [computeVar()], and its test, from
-#'   [computePLRT()], are stored in `@external$lavaan.pl`, `@external$vars` and
+#' @returns A [lavaan::lavaan] object. The lavaan.pl fit, from [fit_latpl()], its
+#'   variance components, from [compute_var()], and its test, from
+#'   [compute_plrt()], are stored in `@external$lavaan.pl`, `@external$vars` and
 #'   `@external$plrt`. Methods for `lavaan` objects work as usual.
 #'
 #' @references
@@ -125,12 +125,12 @@ fit_lavaan_pml <- function(LAVFUN, CALL, model, data, std.lv, estimator, estimat
     stop("`estimator.args$init_method`, `init_control` and `cpp_control_init` are no longer supported; use `init = set_init(...)`.", call. = FALSE)
   }
   if (is.null(control)) control <- set_ucminf_control()
-  if (!inherits(control, c("plfa_ucminf_control", "plfa_sa_control"))) {
+  if (!inherits(control, c("latpl_ucminf_control", "latpl_sa_control"))) {
     stop("`control` must be created with `set_ucminf_control()` or `set_sa_control()`.", call. = FALSE)
   }
   init <- estimator.args$init
   if (is.null(init)) init <- set_init(METHOD = "SA")
-  if (!inherits(init, "plfa_init")) {
+  if (!inherits(init, "latpl_init")) {
     stop("`estimator.args$init` must be created with `set_init()`.", call. = FALSE)
   }
   if (!is.null(init$THETA)) {
@@ -180,7 +180,7 @@ fit_lavaan_pml <- function(LAVFUN, CALL, model, data, std.lv, estimator, estimat
   spec <- spec_from_lavaan(template, start, valdata)
   init$THETA <- spec$THETA
   # Send to lavaan.pl
-  fit <- fit_plFA(
+  fit <- fit_latpl(
     DATA = spec$DATA,
     MODEL = spec$MODEL,
     CONTROL = control,
@@ -192,7 +192,7 @@ fit_lavaan_pml <- function(LAVFUN, CALL, model, data, std.lv, estimator, estimat
   # Compute standard errors ----------------------------------------------------
   vars <- NULL
   if (lavargs$se != "none") {
-    vars <- computeVar(
+    vars <- compute_var(
       OBJ = fit,
       NUMDERIV = computevar_numderiv,
       VERBOSE = verbose
@@ -356,7 +356,7 @@ spec_from_lavaan <- function(template, start = NULL, valdata = NULL) {
   }
 
   # Build constraint list
-  model <- set_plfa_model(
+  model <- set_latpl_model(
     CONSTRMAT = constrmat,
     CONSTRVAR = constrvar,
     CORRFLAG = corrflag,
@@ -380,14 +380,9 @@ spec_from_lavaan <- function(template, start = NULL, valdata = NULL) {
   } else {
     start_glist <- lavaan::lav_model_set_parameters(template@Model, as.numeric(start))@GLIST
   }
-  init <- c(
-    as.numeric(start_glist$tau),
-    cpp_loadings_mat2vec(start_glist$lambda, constrmat, sum(is.na(constrmat))),
-    cpp_latvar_mat2vec(start_glist$psi, log(sqrt(constrvar)), if (corrflag) q * (q - 1) / 2 else 0, sum(is.na(constrvar)),
-                       corrflag_code(model)),
-    if (is.null(regmat)) NULL else start_glist$beta[free$beta > 0],
-    start_glist$theta[up][free$theta[up] > 0]
-  )
+  init <- par2theta(model, list(thresholds = as.numeric(start_glist$tau), loadings = start_glist$lambda,
+                                latent_correlations = start_glist$psi, regressions = start_glist$beta,
+                                residual_covariances = start_glist$theta))
 
   weights <- NULL
   if (length(template@Data@sampling.weights) > 0L) {
@@ -397,7 +392,7 @@ spec_from_lavaan <- function(template, start = NULL, valdata = NULL) {
     weights <- template@Data@weights[[1]]
   }
   cluster <- if (isTRUE(template@Options$.clustered)) template@Data@Lp[[1]]$cluster.idx[[2]] else NULL
-  data_spec <- set_plfa_data(data, valdata, MISSING = missing, WEIGHTS = weights,
+  data_spec <- set_latpl_data(data, valdata, MISSING = missing, WEIGHTS = weights,
                              WEIGHTS_TYPE = template@Options$sampling.weights.type, CLUSTER = cluster)
 
   list(DATA = data_spec, MODEL = model, THETA = init)
@@ -405,8 +400,8 @@ spec_from_lavaan <- function(template, start = NULL, valdata = NULL) {
 
 #' Convert a lavaan.pl fit into a lavaan object
 #'
-#' @param fit Object of class `PlFaFit` returned by [fit_plFA()].
-#' @param vars Output of [computeVar()] for `fit`, or `NULL` to skip standard errors.
+#' @param fit Object of class `latpl_fit` returned by [fit_latpl()].
+#' @param vars Output of [compute_var()] for `fit`, or `NULL` to skip standard errors.
 #' @param template Unfitted [lavaan::lavaan] object for the same model and data, created with `do.fit = FALSE`.
 #' @return A [lavaan::lavaan] object.
 #' @export
@@ -414,7 +409,7 @@ as_lavaan <- function(fit, vars = NULL, template) {
   free <- lapply(lavaan::lavInspect(template, "free"), unclass)
   par_lav <- function(theta) {
     fit$theta <- theta
-    par <- getPar(fit, OPTION = "list")
+    par <- get_par(fit, OPTION = "list")
     x <- numeric(template@Model@nx.free)
     x[free$tau[free$tau > 0]] <- par$thresholds[free$tau > 0]
     x[free$lambda[free$lambda > 0]] <- par$loadings[free$lambda > 0]
@@ -468,7 +463,7 @@ as_lavaan <- function(fit, vars = NULL, template) {
   # Change test slot -----------------------------------------------------------
   plrt <- NULL
   if (!identical(out@Options$test, "none")) {
-    plrt <- computePLRT(fit, if (is.null(vars)) computeVar(fit) else vars)
+    plrt <- compute_plrt(fit, if (is.null(vars)) compute_var(fit) else vars)
     tests <- setdiff(out@Options$test, "standard")
     for (t in setdiff(tests, "mean.var.adjusted")) {
       warning(sprintf("test option %s not available for estimator PML", t), call. = FALSE)
@@ -510,7 +505,7 @@ as_lavaan <- function(fit, vars = NULL, template) {
 #' @param ... Further objects of class `lavaan`, and arguments for [lavaan::lavTestLRT()].
 #' @param model_names Names of the models.
 #' @return An object of class `anova`, as [lavaan::lavTestLRT()]. When all models are fitted by
-#'   [cfa()], the difference tests come from [computePLRT()].
+#'   [cfa()], the difference tests come from [compute_plrt()].
 #' @export
 lavTestLRT <- function(object, ..., model_names = NULL) {
   dots <- list(...)
@@ -532,13 +527,13 @@ lavTestLRT <- function(object, ..., model_names = NULL) {
   mods <- mods[order(vapply(mods, function(x) x@test[[1]]$df, numeric(1)))]
   fits <- lapply(mods, function(x) x@external$lavaan.pl)
   dim_theta <- vapply(mods, function(x) {
-    vars <- if (is.null(x@external$vars)) computeVar(x@external$lavaan.pl) else x@external$vars
+    vars <- if (is.null(x@external$vars)) compute_var(x@external$lavaan.pl) else x@external$vars
     sum(diag(solve(vars$H, vars$J)))
   }, numeric(1))
   logl <- vapply(mods, function(x) x@optim$logl, numeric(1))
   stat_delta <- df_delta <- rep(NA, length(mods))
   for (m in seq_len(length(mods) - 1)) {
-    out <- computePLRT(fits[[m + 1]], H1 = fits[[m]])$model
+    out <- compute_plrt(fits[[m + 1]], H1 = fits[[m]])$model
     stat_delta[m + 1] <- out$stat.scaled
     df_delta[m + 1] <- out$df.scaled
   }

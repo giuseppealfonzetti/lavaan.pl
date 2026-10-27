@@ -1,4 +1,4 @@
-cm <- build_constrMat(6, 2, "simple")
+cm <- build_constr_mat(6, 2, "simple")
 S <- matrix(.3, 2, 2); diag(S) <- 1
 Y <- sim_data(300, gen_loadings(cm, SEED = 1, LB = .4, UB = .8), c(-1, 0.3, 1), S, SEED = 3)
 Ym <- Y
@@ -7,15 +7,14 @@ for (j in c(2:3, 5:6)) Ym[runif(300) < c(.1, .3, .3, .6)[Y[, if (j < 4) 1 else 4
 
 # Available cases with missing values, design weights with clusters, then complete data
 set.seed(5)
-Dwc <- set_plfa_data(Y, WEIGHTS = runif(300, .2, 3), CLUSTER = rep(1:40, length.out = 300))
-for (D in list(set_plfa_data(Ym, MISSING = "available.cases"), Dwc, set_plfa_data(Y))) {
-  f <- fit_plFA(D, set_plfa_model(cm))
-  v <- computeVar(f)
-  r <- computePLRT(f, v)
+Dwc <- set_latpl_data(Y, WEIGHTS = runif(300, .2, 3), CLUSTER = rep(1:40, length.out = 300))
+for (D in list(set_latpl_data(Ym, MISSING = "available.cases"), Dwc, set_latpl_data(Y))) {
+  f <- fit_latpl(D, set_latpl_model(cm))
+  v <- compute_var(f)
+  r <- compute_plrt(f, v)
   n <- f$dims$n; nt <- f$dims$nthr; psi <- (nt + 1):f$dims$npar
-  sat <- function(tau, rho, order, scores) {
-    lavaan.pl:::cpp_saturated(tau, rho, f$data$freq, f$data$Y, f$dims$cat, order, scores, f$data$ufreq, f$data$uweights)
-  }
+  dat <- list(C_VEC = f$data$cat, FREQ = f$data$freq, UFREQ = f$data$ufreq, Y = f$data$Y, UW = f$data$uweights)
+  sat <- function(tau, rho, order, scores) lavaan.pl:::cpp_saturated(tau, rho, dat, order, scores)
 
   # Saturated fit is stationary
   expect_true(max(abs(sat(r$saturated$tau, r$saturated$rho, 1, FALSE)$gradient)) / n < 1e-6)
@@ -24,7 +23,7 @@ for (D in list(set_plfa_data(Ym, MISSING = "available.cases"), Dwc, set_plfa_dat
 
   # Mean and variance adjustment matches the dense computation
   rho_theta <- function(theta) {
-    gp <- getPar(replace(f, "theta", list(theta)), OPTION = "list")
+    gp <- get_par(replace(f, "theta", list(theta)), OPTION = "list")
     S <- gp$loadings %*% gp$latent_correlations %*% t(gp$loadings)
     S[upper.tri(S)]
   }
@@ -57,20 +56,16 @@ for (D in list(set_plfa_data(Ym, MISSING = "available.cases"), Dwc, set_plfa_dat
 }
 
 # Nested test: orthogonal against correlated factors, exact restriction on the latent correlation
-f0 <- fit_plFA(set_plfa_data(Y), set_plfa_model(cm, CORRFLAG = FALSE))
-rn <- computePLRT(f0, H1 = f)$model
-hj <- lavaan.pl:::cpp_sample_estimators_HJ(
-  THETA = c(f0$theta, 0), FREQ = f$data$freq, DATA = f$data$Y, C_VEC = f$dims$cat, CONSTRMAT = f$model$CONSTRMAT,
-  CONSTRLOGSD = f$model$CONSTRLOGSD, N = n, CORRFLAG = TRUE, NTHR = nt, NLOAD = f$dims$nload,
-  NCORR = 1, NVAR = 0
-)
+f0 <- fit_latpl(set_latpl_data(Y), set_latpl_model(cm, CORRFLAG = FALSE))
+rn <- compute_plrt(f0, H1 = f)$model
+hj <- lavaan.pl:::cpp_HJ(c(f0$theta, 0), f$engine$model, f$engine$data)
 iH1 <- solve(hj$H)
 k <- f$dims$npar
 expect_equal(rn$df, 1)
 expect_equal(rn$scaling.factor, (iH1 %*% hj$J %*% iH1)[k, k] / iH1[k, k])
 expect_equal(rn$df.scaled, 1)
 expect_equal(rn$stat.scaled, rn$stat / rn$scaling.factor)
-expect_error(computePLRT(f, H1 = f0), "not nested")
+expect_error(compute_plrt(f, H1 = f0), "not nested")
 
 # anova() leaves other model classes to their own methods
 l1 <- lm(mpg ~ wt, mtcars)
@@ -78,21 +73,22 @@ l2 <- lm(mpg ~ wt + hp, mtcars)
 expect_equal(lavaan.pl::anova(l1, l2), stats::anova(l1, l2))
 
 # Constrained thresholds: full-vector adjustment (lavaan's plrt2) matches the dense computation
-D <- set_plfa_data(Y)
-M0 <- set_plfa_model(cm)
+D <- set_latpl_data(Y)
+M0 <- set_latpl_model(cm)
 nm <- theta_names(D, M0)
 A <- matrix(replace(numeric(length(nm)), match("tau[2,1]", nm), 1), 1)
-f <- fit_plFA(D, set_plfa_model(cm, CONSTRAINTS = list(A = A, b = -1)))
-v <- computeVar(f)
-r <- computePLRT(f, v)
+f <- fit_latpl(D, set_latpl_model(cm, CONSTRAINTS = list(A = A, b = -1)))
+v <- compute_var(f)
+r <- compute_plrt(f, v)
 n <- f$dims$n; nt <- f$dims$nthr; lc <- f$lincon
 rho_free <- function(x) {
-  gp <- getPar(replace(f, "theta", list(as.vector(lc$K %*% x + lc$c))), OPTION = "list")
+  gp <- get_par(replace(f, "theta", list(as.vector(lc$K %*% x + lc$c))), OPTION = "list")
   S <- gp$loadings %*% gp$latent_correlations %*% t(gp$loadings)
   S[upper.tri(S)]
 }
 xf <- f$theta[lc$free_idx]
-s <- lavaan.pl:::cpp_saturated(f$theta[1:nt], rho_free(xf), f$data$freq, f$data$Y, f$dims$cat, 2, TRUE)
+s <- lavaan.pl:::cpp_saturated(f$theta[1:nt], rho_free(xf), list(C_VEC = f$data$cat, FREQ = f$data$freq, UFREQ = numeric(0),
+                                                                 Y = f$data$Y, UW = numeric(0)), 2, TRUE)
 Hs <- rbind(cbind(s$htt, s$htr), cbind(t(s$htr), diag(s$hrr))) / n
 P1 <- solve(Hs, tcrossprod(rbind(s$st, s$sr)) / n)
 P0 <- solve(v$H, v$J)

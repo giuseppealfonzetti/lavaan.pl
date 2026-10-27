@@ -23,7 +23,7 @@ With fewer than 15 items, \code{'SA'} falls back to \code{'standard'}.}
 \item{CONTROL}{Control object from \code{\link[=set_sa_init_control]{set_sa_init_control()}}, used when \code{METHOD = "SA"}.}
 }
 \value{
-An object of class \code{plfa_init} to be passed to \code{\link[=fit_plFA]{fit_plFA()}} via \code{INIT}, or to \code{\link[=cfa]{cfa()}}
+An object of class \code{latpl_init} to be passed to \code{\link[=fit_latpl]{fit_latpl()}} via \code{INIT}, or to \code{\link[=cfa]{cfa()}}
 via \code{estimator.args$init}.
 }
 \description{

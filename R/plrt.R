@@ -1,7 +1,7 @@
 #' Pairwise likelihood ratio test
-#' @param OBJ Object of class PlFaFit
-#' @param VARS Output of [computeVar()] for `OBJ`
-#' @param H1 Object of class PlFaFit in which `OBJ` is nested, or `NULL` to test `OBJ` against the
+#' @param OBJ Object of class latpl_fit
+#' @param VARS Output of [compute_var()] for `OBJ`
+#' @param H1 Object of class latpl_fit in which `OBJ` is nested, or `NULL` to test `OBJ` against the
 #'   saturated model
 #' @return A list with the test of the model against `H1` or the saturated model `model` and, without
 #'   `H1`, of the independence model against the saturated model `baseline`. Each holds the
@@ -9,11 +9,11 @@
 #'   (`stat` divided by `scaling.factor`), `df.scaled` and `pvalue.scaled`. Also, without `H1`, the
 #'   saturated and independence fits `saturated` and `independence`, and the timing `RTime`.
 #' @export
-computePLRT <- function(OBJ, VARS = computeVar(OBJ), H1 = NULL) UseMethod('computePLRT')
+compute_plrt <- function(OBJ, VARS = compute_var(OBJ), H1 = NULL) UseMethod('compute_plrt')
 #' Pairwise likelihood ratio test
-#' @param OBJ Object of class PlFaFit
-#' @param VARS Output of [computeVar()] for `OBJ`
-#' @param H1 Object of class PlFaFit in which `OBJ` is nested, or `NULL` to test `OBJ` against the
+#' @param OBJ Object of class latpl_fit
+#' @param VARS Output of [compute_var()] for `OBJ`
+#' @param H1 Object of class latpl_fit in which `OBJ` is nested, or `NULL` to test `OBJ` against the
 #'   saturated model
 #' @return A list with the test of the model against `H1` or the saturated model `model` and, without
 #'   `H1`, of the independence model against the saturated model `baseline`. Each holds the
@@ -21,101 +21,69 @@ computePLRT <- function(OBJ, VARS = computeVar(OBJ), H1 = NULL) UseMethod('compu
 #'   (`stat` divided by `scaling.factor`), `df.scaled` and `pvalue.scaled`. Also, without `H1`, the
 #'   saturated and independence fits `saturated` and `independence`, and the timing `RTime`.
 #' @export
-computePLRT.PlFaFit <- function(OBJ, VARS = computeVar(OBJ), H1 = NULL){
-
+compute_plrt.latpl_fit <- function(OBJ, VARS = compute_var(OBJ), H1 = NULL){
   start_time <- Sys.time()
+  RcppParallel::setThreadOptions(numThreads = OBJ$cores)
+  on.exit(RcppParallel::setThreadOptions(numThreads = 1))
+  out <- if (is.null(H1)) plrt_fit(OBJ, VARS) else list(model = plrt_nested(OBJ, H1))
+  out$RTime <- as.numeric(difftime(Sys.time(), start_time, units = "secs"))
+  out
+}
+
+plrt_adjust <- function(STAT, DF, E, V){
+  c1 <- E / (V / 2)
+  list(stat = STAT, df = DF, stat.scaled = c1 * STAT, df.scaled = E^2 / (V / 2), scaling.factor = 1 / c1,
+       pvalue.scaled = if(isTRUE(c1 > 0)) stats::pchisq(c1 * STAT, E^2 / (V / 2), lower.tail = FALSE) else NA)
+}
+
+# Nested models: H1 evaluated at the H0 estimates, with the exact restriction given
+# by the Jacobian of the embedding of OBJ into H1. The embedding goes through the model
+# matrices; without regressions in H1, through the implied latent covariance, rescaled
+# to the fixed latent variances of H1
+plrt_nested <- function(OBJ, H1){
+  stopifnot(inherits(H1, "latpl_fit"))
+  if(!identical(OBJ$data$freq, H1$data$freq) || !identical(OBJ$data$ufreq, H1$data$ufreq) ||
+     !identical(OBJ$data$weights, H1$data$weights) || !identical(OBJ$data$cluster, H1$data$cluster) ||
+     H1$dims$npar <= OBJ$dims$npar) {
+    stop('OBJ is not nested in H1.')
+  }
+  pl <- function(FIT, THETA) cpp_pl(THETA, FIT$engine$model, FIT$engine$data)$pl
+  lc0 <- OBJ$lincon
+  lc1 <- H1$lincon
+  emb <- function(x){
+    par <- theta2par(OBJ$model, as.vector(lc0$K %*% x + lc0$c))
+    if(!length(H1$model$REGMAT)){
+      A <- solve(diag(OBJ$dims$q) - par$regressions)
+      S <- A %*% par$latent_correlations %*% t(A)
+      sc <- ifelse(is.finite(H1$model$CONSTRLOGSD), sqrt(diag(S)) / exp(H1$model$CONSTRLOGSD), 1)
+      par$loadings <- par$loadings %*% diag(sc, OBJ$dims$q)
+      par$latent_correlations <- S / tcrossprod(sc)
+    }
+    par2theta(H1$model, par)[lc1$free_idx]
+  }
+  theta0f <- OBJ$theta[lc0$free_idx]
+  theta1 <- as.vector(lc1$K %*% emb(theta0f) + lc1$c)
+  pl0 <- pl(OBJ, OBJ$theta)
+  if(abs(pl(H1, theta1) - pl0) > 1e-8 * abs(pl0)) stop('OBJ is not nested in H1.')
+  N <- numDeriv::jacobian(emb, theta0f)
+  HJ <- cpp_HJ(theta1, H1$engine$model, H1$engine$data)
+  Hf <- crossprod(lc1$K, HJ$H %*% lc1$K)
+  M <- crossprod(lc1$K, HJ$J %*% lc1$K) %*% (solve(Hf) - N %*% solve(crossprod(N, Hf %*% N), t(N)))
+  plrt_adjust(STAT = 2 * (pl(H1, H1$theta) - pl0), DF = H1$dims$npar - OBJ$dims$npar, E = sum(diag(M)), V = 2 * sum(M * t(M)))
+}
+
+# Model and independence model against the saturated model
+plrt_fit <- function(OBJ, VARS){
   dims <- OBJ$dims
   n <- dims$n
   nthr <- dims$nthr
-  RcppParallel::setThreadOptions(numThreads = OBJ$cores)
-
-  adjust <- function(STAT, DF, E, V){
-    c1 <- E / (V / 2)
-    list(stat = STAT, df = DF, stat.scaled = c1 * STAT, df.scaled = E^2 / (V / 2), scaling.factor = 1 / c1,
-         pvalue.scaled = if(isTRUE(c1 > 0)) stats::pchisq(c1 * STAT, E^2 / (V / 2), lower.tail = FALSE) else NA)
-  }
-
-  # Nested models: H1 evaluated at the H0 estimates, with the exact restriction
-  # given by the Jacobian of the embedding of OBJ into H1
-  if(!is.null(H1)){
-    stopifnot(inherits(H1, "PlFaFit"))
-    if(!identical(OBJ$data$freq, H1$data$freq) || !identical(OBJ$data$ufreq, H1$data$ufreq) ||
-       !identical(OBJ$data$weights, H1$data$weights) || !identical(OBJ$data$cluster, H1$data$cluster) ||
-       H1$dims$npar <= dims$npar) {
-      stop('OBJ is not nested in H1.')
-    }
-    nll <- function(FIT, THETA){
-      cpp_multiThread_completePairwise(
-        N = n, C_VEC = dims$cat, CONSTRMAT = FIT$model$CONSTRMAT, CONSTRLOGSD = FIT$model$CONSTRLOGSD,
-        THETA = THETA, FREQ = FIT$data$freq, CORRFLAG = corrflag_code(FIT$model),
-        NTHR = FIT$dims$nthr, NLOAD = FIT$dims$nload, NCORR = FIT$dims$ncorr, NVAR = FIT$dims$nvar,
-        UFREQ = FIT$data$ufreq, REGMAT = FIT$model$REGMAT, RESCOV = FIT$model$RESCOV
-      )$iter_nll
-    }
-    lc0 <- OBJ$lincon
-    lc1 <- H1$lincon
-    emb <- function(x){
-      gp <- getPar(replace(OBJ, "theta", list(as.vector(lc0$K %*% x + lc0$c))), OPTION = "list")
-      S <- gp$latent_correlations
-      L <- gp$loadings
-      if(!length(H1$model$REGMAT)){
-        A <- solve(diag(dims$q) - gp$regressions)
-        S <- A %*% S %*% t(A)
-        sc <- ifelse(is.finite(H1$model$CONSTRLOGSD), sqrt(diag(S)) / exp(H1$model$CONSTRLOGSD), 1)
-        L <- L %*% diag(sc, dims$q)
-        S <- S / tcrossprod(sc)
-      }
-      R1 <- H1$model$RESCOV
-      c(gp$thresholds,
-        cpp_loadings_mat2vec(L, H1$model$CONSTRMAT, H1$dims$nload),
-        cpp_latvar_mat2vec(S, H1$model$CONSTRLOGSD, H1$dims$ncorr, H1$dims$nvar, corrflag_code(H1$model)),
-        gp$regressions[is.na(H1$model$REGMAT)],
-        gp$residual_covariances[is.na(R1) & upper.tri(R1)])[lc1$free_idx]
-    }
-    theta0f <- OBJ$theta[lc0$free_idx]
-    theta1 <- as.vector(lc1$K %*% emb(theta0f) + lc1$c)
-    nll0 <- nll(OBJ, OBJ$theta)
-    if(abs(nll(H1, theta1) - nll0) > 1e-8 * abs(nll0)) stop('OBJ is not nested in H1.')
-    K <- numDeriv::jacobian(emb, theta0f)
-    HJ <- cpp_sample_estimators_HJ(
-      THETA = theta1, FREQ = H1$data$freq, DATA = H1$data$Y, C_VEC = H1$dims$cat,
-      CONSTRMAT = H1$model$CONSTRMAT, CONSTRLOGSD = H1$model$CONSTRLOGSD, N = n,
-      CORRFLAG = corrflag_code(H1$model), NTHR = H1$dims$nthr, NLOAD = H1$dims$nload, NCORR = H1$dims$ncorr,
-      NVAR = H1$dims$nvar, UFREQ = H1$data$ufreq, UW = H1$data$uweights,
-      GW = H1$data$weights, JW = H1$data$jweights, CL = H1$data$cluster,
-      REGMAT = H1$model$REGMAT, RESCOV = H1$model$RESCOV
-    )
-    Hf <- crossprod(lc1$K, HJ$H %*% lc1$K)
-    M <- crossprod(lc1$K, HJ$J %*% lc1$K) %*% (solve(Hf) - K %*% solve(crossprod(K, Hf %*% K), t(K)))
-    model <- adjust(STAT = 2 * (nll0 - nll(H1, H1$theta)),
-                    DF   = H1$dims$npar - dims$npar,
-                    E    = sum(diag(M)),
-                    V    = 2 * sum(M * t(M)))
-    end_time <- Sys.time()
-    return(list(model = model, RTime = as.numeric(difftime(end_time, start_time, units = 'secs')[1])))
-  }
-
-  # Unique response patterns, with their weights in J or, with clusters, their
-  # weighted counts within each cluster
-  Y <- OBJ$data$Y
-  Yu <- unique(Y)
-  key <- match(do.call(paste, as.data.frame(Y)), do.call(paste, as.data.frame(Yu)))
-  uw <- OBJ$data$uweights[match(seq_len(nrow(Yu)), key)]
-  gw <- if(length(OBJ$data$weights)) OBJ$data$weights else rep(1, n)
-  jw <- if(length(OBJ$data$jweights)) OBJ$data$jweights else rep(1, n)
-  w <- as.numeric(rowsum(jw^2, key))
-  if(length(OBJ$data$cluster)){
-    ncl <- length(unique(OBJ$data$cluster))
-    A <- tapply(gw, list(factor(key, seq_len(nrow(Yu))), factor(OBJ$data$cluster, seq_len(ncl) - 1)), sum, default = 0)
-  }
-
-  sat <- function(tau, rho, order, scores = FALSE){
-    cpp_saturated(tau, rho, OBJ$data$freq, Yu, dims$cat, order, scores, OBJ$data$ufreq, uw)
-  }
+  eng <- OBJ$engine$data
+  sat <- function(tau, rho, order, scores = FALSE) cpp_saturated(tau, rho, eng, order, scores)
 
   # Independence model: thresholds from the univariate margins, with unit weights
   # given by the number of pairs and univariate terms each observed item enters
-  v <- (rowSums(!is.na(Y)) - 1 + OBJ$data$uweights) * gw
+  Y <- OBJ$data$Y
+  v <- (rowSums(!is.na(Y)) - 1 + OBJ$data$uweights) * (if(length(OBJ$data$weights)) OBJ$data$weights else 1)
   tau_ind <- unlist(lapply(seq_len(dims$p), function(j){
     pj <- vapply(seq_len(dims$cat[j]) - 1, function(a) sum(v[Y[, j] %in% a]), numeric(1))
     stats::qnorm(cumsum(pj)[-dims$cat[j]] / sum(pj))
@@ -130,8 +98,7 @@ computePLRT.PlFaFit <- function(OBJ, VARS = computeVar(OBJ), H1 = NULL){
     if(max(abs(o$gradient)) / n < 1e-8) break
     gt <- o$gradient[1:nthr]
     gr <- o$gradient[-(1:nthr)]
-    B <- o$htt - o$htr %*% (t(o$htr) / o$hrr)
-    dt <- as.vector(solve(B, gt - o$htr %*% (gr / o$hrr)))
+    dt <- as.vector(solve(o$hschur, gt - o$htr %*% (gr / o$hrr)))
     dr <- as.vector(gr - crossprod(o$htr, dt)) / o$hrr
     step <- 1
     repeat{
@@ -149,19 +116,14 @@ computePLRT.PlFaFit <- function(OBJ, VARS = computeVar(OBJ), H1 = NULL){
   if(max(abs(o$gradient)) / n >= 1e-8) warning('Saturated model fit did not converge.')
 
   # Traces of the saturated model at (TAU, RHO), from per unit information blocks
-  # and scores of the unique response patterns
+  # and the weighted scores of the distinct response patterns
   sat_terms <- function(TAU, RHO, DELTA = NULL, FULL = FALSE){
     s <- sat(TAU, RHO, 2, TRUE)
     htt <- s$htt / n
     htr <- s$htr / n
     d <- s$hrr / n
-    tr <- if(length(OBJ$data$cluster)){
-      st <- s$st %*% A
-      sr <- s$sr %*% A
-      cpp_saturated_traces(htt, htr, d, (st - rowMeans(st)) * sqrt(ncl / (ncl - 1)), (sr - rowMeans(sr)) * sqrt(ncl / (ncl - 1)), rep(1, ncl), n, FULL)
-    }else{
-      cpp_saturated_traces(htt, htr, d, s$st, s$sr, w, n, FULL)
-    }
+    w <- function(S) if(length(eng$WM)) S %*% eng$WM else S * rep(eng$WV, each = nrow(S))
+    tr <- cpp_saturated_traces(htt, htr, d, s$hschur / n, w(s$st), w(s$sr), n, FULL)
     out <- list(ll = s$ll, e = tr[1], v = 2 * tr[2])
     if(!is.null(DELTA) && FULL){
       ht <- crossprod(DELTA$tau, htr %*% DELTA$rho)
@@ -176,43 +138,33 @@ computePLRT.PlFaFit <- function(OBJ, VARS = computeVar(OBJ), H1 = NULL){
   # Model against saturated, on the free parameters. With constrained thresholds,
   # the traces run over the full parameter vectors (lavaan's lav_pml_plrt2)
   lc <- OBJ$lincon
-  thetaf <- OBJ$theta[lc$free_idx]
-  rho_theta <- function(theta){
-    gp <- getPar(replace(OBJ, "theta", list(theta)), OPTION = "list")
-    L <- gp$loadings %*% solve(diag(dims$q) - gp$regressions)
-    S <- L %*% gp$latent_correlations %*% t(L) + gp$residual_covariances
-    S[upper.tri(S)]
-  }
-  rho_free <- function(x) rho_theta(as.vector(lc$K %*% x + lc$c))
+  r <- cpp_rho(OBJ$theta, OBJ$engine$model, eng)
+  jac <- if (ncol(lc$K) < nrow(lc$K)) r$jacobian %*% lc$K else r$jacobian
   invH <- solve(VARS$H)
   if(all(seq_len(nthr) %in% lc$free_idx)){
     psi <- which(lc$free_idx > nthr)
-    delta <- numDeriv::jacobian(rho_free, thetaf)[, psi, drop = FALSE]
     G <- (invH %*% VARS$J %*% invH)[psi, psi, drop = FALSE]
     P0 <- solve(invH[psi, psi, drop = FALSE], G)
-    tz <- sat_terms(OBJ$theta[1:nthr], rho_theta(OBJ$theta), delta)
+    tz <- sat_terms(OBJ$theta[1:nthr], r$rho, jac[, psi, drop = FALSE])
     cv <- sum(diag(tz$dad %*% G %*% P0))
   }else{
-    delta <- list(tau = lc$K[seq_len(nthr), , drop = FALSE], rho = numDeriv::jacobian(rho_free, thetaf))
     P0 <- invH %*% VARS$J
-    tz <- sat_terms(OBJ$theta[1:nthr], rho_theta(OBJ$theta), delta, FULL = TRUE)
+    tz <- sat_terms(OBJ$theta[1:nthr], r$rho, list(tau = lc$K[seq_len(nthr), , drop = FALSE], rho = jac), FULL = TRUE)
     cv <- sum(diag(tz$dad %*% P0 %*% P0 %*% invH))
   }
-  model <- adjust(STAT = 2 * (o$ll - tz$ll),
-                  DF   = nthr + dims$pairs - dims$npar,
-                  E    = tz$e - sum(diag(P0)),
-                  V    = tz$v + 2 * sum(P0 * t(P0)) - 4 * cv)
+  model <- plrt_adjust(STAT = 2 * (o$ll - tz$ll),
+                       DF   = nthr + dims$pairs - dims$npar,
+                       E    = tz$e - sum(diag(P0)),
+                       V    = tz$v + 2 * sum(P0 * t(P0)) - 4 * cv)
 
   # Independence model against saturated
   tb <- sat_terms(tau_ind, rep(0, dims$pairs))
-  baseline <- adjust(STAT = 2 * (o$ll - tb$ll), DF = dims$pairs, E = tb$e, V = tb$v)
+  baseline <- plrt_adjust(STAT = 2 * (o$ll - tb$ll), DF = dims$pairs, E = tb$e, V = tb$v)
 
-  end_time <- Sys.time()
   list(
     model = model,
     baseline = baseline,
     saturated = list(tau = tau, rho = rho, logl = o$ll, iterations = iter),
-    independence = list(tau = tau_ind, logl = tb$ll),
-    RTime = as.numeric(difftime(end_time, start_time, units = 'secs')[1])
+    independence = list(tau = tau_ind, logl = tb$ll)
   )
 }

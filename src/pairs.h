@@ -2,98 +2,49 @@
 #define pairs_H
 #include <RcppEigen.h>
 
-#include "genericUtils.h"
-#include "bivariateProbs.h"
+#include "model.h"
+#include "bivariateNormal.h"
 
 namespace pairs{
 
-  struct Setup{
-    int p, q, nthr, nload, ncorr, nvar, nreg, nres, m;
-    Eigen::MatrixXd Lam, Z, C, P, U, alpha;
-    Eigen::VectorXd sd, tau;
-    std::vector<int> ra, ca, sfree, bi, bj;
-    // Jacobians of the reduced loadings Lt = Lam (I - B)^{-1}, one per item,
-    // over the m model parameters following the thresholds
-    std::vector<Eigen::MatrixXd> JL;
-    // Direct parametrisation of the latent covariances (CORRFLAG = 2)
-    bool direct;
-    Eigen::MatrixXd Sig;
-    // Structural regressions B and residual covariances of the items,
-    // with the position of the free ones among the m model parameters
-    Eigen::MatrixXd A, Lt, res;
-    Eigen::MatrixXi resid;
-
-    Setup(
-      const Eigen::Ref<const Eigen::VectorXd> THETA,
-      const Eigen::Ref<const Eigen::MatrixXd> CONSTRMAT,
-      const Eigen::Ref<const Eigen::VectorXd> CONSTRLOGSD,
-      const int NTHR,
-      const int NLOAD,
-      const int NCORR,
-      const int NVAR,
-      const int CORRFLAG = 1,
-      const Eigen::Ref<const Eigen::MatrixXd> REGMAT = Eigen::MatrixXd(),
-      const Eigen::Ref<const Eigen::MatrixXd> RESCOV = Eigen::MatrixXd());
+  // Bivariate normal distribution function of a pair, and its derivatives with
+  // respect to (a, b, rho), on the grid of thresholds (a_0, ..., a_ck) x (b_0, ..., b_cl),
+  // with a_0 = b_0 = -Inf and a_ck = b_cl = +Inf. Each cell probability is a signed
+  // sum of four grid corners.
+  struct Grid{
+    int ck, cl, order;
+    Eigen::MatrixXd F, Fa, Fb, Fr, Faa, Fbb, Fab, Far, Fbr, Frr;
+    Grid(const Eigen::Ref<const Eigen::VectorXd> TAU, const int TK, const int TL, const int CK, const int CL,
+         const double RHO, const int ORDER);
+    // Probability of cell (SK, SL), with its gradient G1 and Hessian G2 with respect to
+    // (thresholds of k, thresholds of l, rho)
+    double cell(const int SK, const int SL, Eigen::VectorXd &G1, Eigen::MatrixXd &G2) const;
   };
 
+  // Pair r of the model at a Setup: implied correlation rho and its gradient grho
+  // over the active parameters idx (free loadings of k and l, latent correlations,
+  // log-sds, regressions, residual covariance of the pair)
   struct Pair{
-    int k, l, ck, cl, tk, tl, mt, offset;
+    int r, k, l, ck, cl, tk, tl, mt, off, nk, lo, mb, s;
     double rho;
+    std::vector<int> idx;
+    Eigen::MatrixXd Dk, Dl;
     Eigen::VectorXd x, y, X, Y, grho;
-
-    Pair(
-      const Eigen::Ref<const Eigen::VectorXd> C_VEC,
-      const int K,
-      const int L,
-      const double RHO);
-
-    Pair(
-      const Setup &S,
-      const Eigen::Ref<const Eigen::VectorXd> C_VEC,
-      const int K,
-      const int L,
-      const bool GRADFLAG);
+    Pair(const model::Setup &ST, const int R, const bool GRAD);
   };
 
-  double pattern_derivatives(
-      const Eigen::Ref<const Eigen::VectorXd> TAU,
-      const Eigen::Ref<const Eigen::VectorXd> C_VEC,
-      const Pair &PR,
-      const int SK,
-      const int SL,
-      const int ORDER,
-      Eigen::VectorXd &G1,
-      Eigen::MatrixXd &G2);
+  // Hessian of rho over the active parameters of the pair
+  Eigen::MatrixXd rho_hessian(const model::Setup &ST, const Pair &PR);
 
-  void regression_curvature(const Setup &S, const int K, const Eigen::Ref<const Eigen::VectorXd> W, Eigen::MatrixXd &HRHO);
+  // Pairwise log-likelihood of pair R and, with ORDER = 1, its gradient
+  void pair_contribution(const model::Setup &ST, const Eigen::Ref<const Eigen::VectorXd> FREQ, const int R,
+                         const int ORDER, double &LL, Eigen::VectorXd &GRADIENT);
 
-  Eigen::MatrixXd rho_hessian(const Setup &S, const Pair &PR);
-
-  // Univariate log-likelihood of the observed items, with
-  // frequencies UFREQ weighted by the number of missing items
-  // of each unit (available-cases term)
-  void univariate_contribution(
-      const Eigen::Ref<const Eigen::VectorXd> TAU,
-      const Eigen::Ref<const Eigen::VectorXd> C_VEC,
-      const Eigen::Ref<const Eigen::VectorXd> UFREQ,
-      const int ORDER,
-      double &LL,
-      Eigen::VectorXd &GRADIENT,
-      Eigen::MatrixXd &HESSIAN,
-      Eigen::MatrixXd &USCORE);
-
-  // Single pair contribution to
-  // 1. Log-likelihood
-  // 2. Gradient
-  void pair_contribution(
-      const Setup &S,
-      const Eigen::Ref<const Eigen::VectorXd> C_VEC,
-      const Eigen::Ref<const Eigen::MatrixXd> FREQ,
-      const int K,
-      const int L,
-      const int GRADFLAG,
-      double &LL,
-      Eigen::VectorXd &GRADIENT);
+  // Univariate log-likelihood of the observed items, with frequencies UFREQ
+  // weighted by the number of missing items of each unit (available-cases term)
+  void univariate_contribution(const Eigen::Ref<const Eigen::VectorXd> TAU, const model::Layout &L,
+                               const Eigen::Ref<const Eigen::VectorXd> UFREQ, const int ORDER, double &LL,
+                               Eigen::VectorXd &GRADIENT, Eigen::MatrixXd &HESSIAN, Eigen::MatrixXd &USCORE);
 
 }
 

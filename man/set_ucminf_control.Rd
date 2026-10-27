@@ -16,7 +16,7 @@ set_ucminf_control(GRTOL = 1e-06, XTOL = 1e-12, STEPMAX = 1, MAXEVAL = 500)
 \item{MAXEVAL}{Maximum number of function evaluations.}
 }
 \value{
-An object of class \code{plfa_ucminf_control} to be passed to \code{\link[=fit_plFA]{fit_plFA()}} via \code{CONTROL}
+An object of class \code{latpl_ucminf_control} to be passed to \code{\link[=fit_latpl]{fit_latpl()}} via \code{CONTROL}
 when \code{METHOD = "ucminf"}, or to \code{\link[=cfa]{cfa()}} via \code{control}.
 }
 \description{

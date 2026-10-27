@@ -1,8 +1,8 @@
-#' Show method for the output of fit_plFA()
-#' @param x Object of class PlFaFit
+#' Show method for the output of fit_latpl()
+#' @param x Object of class latpl_fit
 #' @param ... Additional arguments
 #' @export
-print.PlFaFit <- function(x, ...){
+print.latpl_fit <- function(x, ...){
 
   cat( "- Dimensions:\n",
        "  - Sample size:", x$dims$n, "\n",
@@ -22,10 +22,10 @@ print.PlFaFit <- function(x, ...){
     cat(
       "- Numerical estimate obtained via ucminf.\n\n",
       "   Estimation time:", round(x$RTime, 2), "s\n",
-      "   Data reduction:", round(x$data$freqTime,2), "s (in set_plfa_data())\n",
+      "   Data reduction:", round(x$data$freqTime,2), "s (in set_latpl_data())\n",
       "   Cores used:", x$cores, "\n",
 
-      "\n- Use getPar() to extract parameter estimates."
+      "\n- Use get_par() to extract parameter estimates."
 
     )
   }else{
@@ -34,26 +34,26 @@ print.PlFaFit <- function(x, ...){
       "    Pairs per iteration:", x$control$PAIRS_PER_ITERATION, " out of ", x$dims$pairs, "\n",
       "    Iterations:", x$stoFit$last_iter, "\n",
       "    Estimation time:", round(x$RTime, 2), "s\n",
-      "    Data reduction:", round(x$data$freqTime,2), "s (in set_plfa_data())\n",
+      "    Data reduction:", round(x$data$freqTime,2), "s (in set_latpl_data())\n",
       "    Cores used:", x$cores, "\n",
 
 
-      "\n- Use getPar() to extract parameter estimates."
+      "\n- Use get_par() to extract parameter estimates."
     )
   }
   invisible(x)
 }
 
-#' Print method for `plfa_data` objects
+#' Print method for `latpl_data` objects
 #'
-#' @param x A `plfa_data` object.
+#' @param x A `latpl_data` object.
 #' @param ... Ignored.
 #'
-#' @rdname set_plfa_data
+#' @rdname set_latpl_data
 #' @export
-print.plfa_data <- function(x, ...) {
+print.latpl_data <- function(x, ...) {
   cat(
-    "<plfa_data>", x$n, "observations,", x$p, "items (", x$p * (x$p - 1) / 2, "pairs )\n",
+    "<latpl_data>", x$n, "observations,", x$p, "items (", x$p * (x$p - 1) / 2, "pairs )\n",
     " Categories per item:", paste(range(x$cat), collapse = " to "), "\n",
     " Missing values:", sum(is.na(x$Y)), "(", x$missing, ")\n",
     " Sampling weights:", if (length(x$weights)) "yes" else "none", "\n",
@@ -63,16 +63,16 @@ print.plfa_data <- function(x, ...) {
   invisible(x)
 }
 
-#' Print method for `plfa_model` objects
+#' Print method for `latpl_model` objects
 #'
-#' @param x A `plfa_model` object.
+#' @param x A `latpl_model` object.
 #' @param ... Ignored.
 #'
-#' @rdname set_plfa_model
+#' @rdname set_latpl_model
 #' @export
-print.plfa_model <- function(x, ...) {
+print.latpl_model <- function(x, ...) {
   cat(
-    "<plfa_model>", x$p, "items,", x$q, "latent variables\n",
+    "<latpl_model>", x$p, "items,", x$q, "latent variables\n",
     " Free loadings:", sum(is.na(x$CONSTRMAT)), "\n",
     " Latent correlations:", if (x$q == 1) "none" else if (!x$CORRFLAG) "fixed to zero" else if (identical(x$LATCOV, "direct")) "direct" else "LKJ", "\n",
     " Latent variances:", if (anyNA(x$CONSTRLOGSD)) "free" else "fixed", "\n",
@@ -86,124 +86,36 @@ print.plfa_model <- function(x, ...) {
 
 #' Extract parameters
 #'
-#' @param OBJ Object of class PlFaFit. Also usable on raw theta vector to extract \code{'transformed'} and \code{'list'}.
+#' @param OBJ Object of class latpl_fit.
 #' @param ... Additional arguments
 #' @export
-getPar <- function(OBJ, ...) UseMethod('getPar')
-#' Extract parameters
-#'
-#' @param OBJ Object of class PlFaFit.
-#' @param ... Additional arguments
-#' @export
-getPar.PlFaFit <- function(OBJ, ...) extract_par(THETA       = OBJ$theta,
-                                                              CORRFLAG    = corrflag_code(OBJ$model),
-                                                              CONSTRMAT   = OBJ$model$CONSTRMAT,
-                                                              CONSTRLOGSD = OBJ$model$CONSTRLOGSD,
-                                                              NTHR        = OBJ$dims$nthr,
-                                                              NLOAD       = OBJ$dims$nload,
-                                                              NCORR       = OBJ$dims$ncorr,
-                                                              NVAR        = OBJ$dims$nvar,
-                                                              REGMAT      = OBJ$model$REGMAT,
-                                                              RESCOV      = OBJ$model$RESCOV,
-                                                              ...)
-#' Extract parameters
-#'
-#' @param OBJ Raw theta vector to extract \code{'transformed'} and \code{'list'}.
-#' @param ... Additional arguments
-#' @export
-getPar.default <- function(OBJ, ...) extract_par(THETA = OBJ, ...)
+get_par <- function(OBJ, ...) UseMethod('get_par')
 
 #' Extract parameters
 #'
-#' @param THETA Unconstrained parameter vector.
+#' @param OBJ Object of class latpl_fit.
 #' @param OPTION Can take values \tabular{ll}{
-#'    \code{'raw'} \tab Returns \code{THETA}. \cr
+#'    \code{'raw'} \tab The parameter vector. \cr
 #'    \tab \cr
-#'    \code{'transformed'} \tab Transformed vector of parameters, with interpretable latent correlations. \cr
+#'    \code{'transformed'} \tab Transformed vector of parameters, with interpretable latent correlations and standard deviations. \cr
 #'     \tab \cr
-#'    \code{'list'} \tab List containing the ordered thresholds vector, the loading matrix, the latent correlation matrix (of the disturbances, with regressions), the regression matrix and the residual covariance matrix. \cr
+#'    \code{'list'} \tab The model matrices, as returned by [theta2par()]. \cr
 #' }
-#' @param CONSTRMAT \eqn{p*q}-dimensional matrix. Elements set to `NA` refers to free loading parameters. Elements set to numerical values denote fixed values constraints.
-#' @param CONSTRLOGSD \eqn{q}-dimensional vector. Elements set to `NA` refers to free latent log standard deviations parameters. Elements set to numerical values denote fixed values constraints.
-#' @param NTHR Number of thresholds parameters.
-#' @param NLOAD Number of free loadings parameters
-#' @param NCORR Number of free latent correlations parameters.
-#' @param NVAR Number of free latent variance parameters.
-#' @param CORRFLAG Parametrisation of the latent correlations: 1 for LKJ, 2 for direct covariances.
-#' @param REGMAT Structural regressions, as in [set_plfa_model()]. Empty for none.
-#' @param RESCOV Residual covariances, as in [set_plfa_model()]. Empty for none.
-extract_par <- function(THETA, OPTION = c('list', 'raw', 'transformed'),
-                        CONSTRMAT, CONSTRLOGSD, NTHR, NLOAD, NCORR, NVAR, CORRFLAG = 1,
-                        REGMAT = matrix(0, 0, 0), RESCOV = matrix(0, 0, 0)){
+#' @param ... Additional arguments
+#' @export
+get_par.latpl_fit <- function(OBJ, OPTION = c("list", "raw", "transformed"), ...) {
   OPTION <- match.arg(OPTION)
-
-  q <- ncol(CONSTRMAT)
-  if(OPTION == 'raw'){
-    return(THETA)
-    }else if(OPTION == 'transformed'){
-
-      vec <- THETA[1:(NTHR+NLOAD)]
-      if(NCORR>0 && CORRFLAG == 2){
-        R <- stats::cov2cor(cpp_latvar_theta2mat(THETA, CONSTRLOGSD, NTHR, NLOAD, NCORR, NVAR, q, 2L))
-        vec <- c(vec, R[upper.tri(R)])
-      }else if(NCORR>0){
-        vec <- c(vec, get_corr(THETA = THETA,
-                               NTHR  = NTHR,
-                               NLOAD = NLOAD,
-                               NCORR = NCORR,
-                               NVAR  = NVAR,
-                               Q     = q))
-      }
-      if(NVAR>0){
-        vec <- c(vec, exp(THETA[(NTHR+NLOAD+NCORR+1):(NTHR+NLOAD+NCORR+NVAR)]))
-      }
-      vec <- c(vec, THETA[-seq_len(NTHR+NLOAD+NCORR+NVAR)])
-
-      return(vec)
-
-
-    }else if(OPTION == 'list') {
-    out <- list()
-    thr = THETA[1:NTHR]
-    ld <- cpp_loadings_theta2mat(
-      THETA     = THETA,
-      CONSTRMAT = CONSTRMAT,
-      NTHR      = NTHR,
-      NLOAD     = NLOAD)
-
-    S <- cpp_latvar_theta2mat(
-      THETA       = THETA,
-      CONSTRLOGSD = CONSTRLOGSD,
-      NTHR        = NTHR,
-      NLOAD       = NLOAD,
-      NCORR       = NCORR,
-      NVAR        = NVAR,
-      Q           = q,
-      CORRFLAG    = CORRFLAG
-    )
-
-    ob <- NTHR + NLOAD + NCORR + NVAR
-    B <- matrix(0, q, q)
-    if (length(REGMAT)) {
-      B <- REGMAT
-      B[is.na(REGMAT)] <- THETA[ob + seq_len(sum(is.na(REGMAT)))]
-    }
-    p <- nrow(CONSTRMAT)
-    R <- matrix(0, p, p)
-    if (length(RESCOV)) {
-      R <- RESCOV
-      up <- is.na(RESCOV) & upper.tri(RESCOV)
-      R[up] <- THETA[ob + sum(is.na(REGMAT)) + seq_len(sum(up))]
-      R[lower.tri(R)] <- t(R)[lower.tri(R)]
-    }
-
-    out <- list(thresholds = thr, loadings = ld, latent_correlations = S, regressions = B, residual_covariances = R)
-    return(out)
-  }
+  if (OPTION == "raw") return(OBJ$theta)
+  par <- theta2par(OBJ$model, OBJ$theta)
+  if (OPTION == "list") return(par)
+  block <- theta_block(OBJ$model, OBJ$dims$nthr)
+  R <- stats::cov2cor(par$latent_correlations)
+  c(OBJ$theta[block %in% c("tau", "lambda")], if (any(block == "corr")) R[upper.tri(R)],
+    exp(OBJ$theta[block == "logsd"]), OBJ$theta[block %in% c("beta", "rescov")])
 }
 
 #' Compute variance of the estimates
-#' @param OBJ Object of class PlFaFit
+#' @param OBJ Object of class latpl_fit
 #' @param NUMDERIV TRUE if the hessian must be computed using \link[numDeriv]{jacobian}
 #' @param VERBOSE TRUE if the function must print messages
 #' @return A list with the Jacobian `trJacob` of the transformation to
@@ -212,212 +124,54 @@ extract_par <- function(THETA, OPTION = c('list', 'raw', 'transformed'),
 #'   fits only), the optimisation noise matrix `noise` on the optimisation scale
 #'   (SA fits only) and the timing `RTime`.
 #' @export
-computeVar <- function(OBJ, NUMDERIV = F, VERBOSE = FALSE) UseMethod('computeVar')
-#' Compute variance of the estimates
-#' @param OBJ Object of class PlFaFit
-#' @param NUMDERIV TRUE if the hessian must be computed using \link[numDeriv]{jacobian}
-#' @param VERBOSE TRUE if the function must print messages
-#' @return A list with the Jacobian `trJacob` of the transformation to
-#'   interpretable parameters, `H`, `J`, the sandwich `vcov` and its diagonal
-#'   `asymptotic_variance` on the transformed scale, `optimisation_noise` (SA
-#'   fits only), the optimisation noise matrix `noise` on the optimisation scale
-#'   (SA fits only) and the timing `RTime`.
+compute_var <- function(OBJ, NUMDERIV = FALSE, VERBOSE = FALSE) UseMethod('compute_var')
+
+#' @rdname compute_var
 #' @export
-computeVar.PlFaFit <- function(OBJ, NUMDERIV = F, VERBOSE = FALSE){ if(OBJ$method == 'ucminf'){
-            compute_var(THETA      = OBJ$theta,
-                       C_VEC       = OBJ$dims$cat,
-                       N           = OBJ$dims$n,
-                       IT          = NULL,
-                       PAIRS       = NULL,
-                       PPI         = NULL,
-                       CONSTRMAT   = OBJ$model$CONSTRMAT,
-                       CONSTRLOGSD = OBJ$model$CONSTRLOGSD,
-                       NTHR        = OBJ$dims$nthr,
-                       NLOAD       = OBJ$dims$nload,
-                       NCORR       = OBJ$dims$ncorr,
-                       NVAR        = OBJ$dims$nvar,
-                       FREQ        = OBJ$data$freq,
-                       DATA        = OBJ$data$Y,
-                       UFREQ       = OBJ$data$ufreq,
-                       UW          = OBJ$data$uweights,
-                       GW          = OBJ$data$weights,
-                       JW          = OBJ$data$jweights,
-                       CL          = OBJ$data$cluster,
-                       LINCON      = OBJ$lincon,
-                       CORRFLAG    = corrflag_code(OBJ$model),
-                       REGMAT      = OBJ$model$REGMAT,
-                       RESCOV      = OBJ$model$RESCOV,
-                       METHOD      = OBJ$method,
-                       NUMDERIV    = NUMDERIV,
-                       NCORES      = OBJ$cores,
-                       VERBOSE     = VERBOSE)
-          }else{
-            compute_var(THETA      = OBJ$theta,
-                       C_VEC       = OBJ$dims$cat,
-                       N           = OBJ$dims$n,
-                       IT          = OBJ$stoFit$last_iter - OBJ$stoFit$burnt,
-                       PAIRS       = OBJ$dims$pairs,
-                       PPI         = OBJ$control$PAIRS_PER_ITERATION,
-                       CONSTRMAT   = OBJ$model$CONSTRMAT,
-                       CONSTRLOGSD = OBJ$model$CONSTRLOGSD,
-                       NTHR        = OBJ$dims$nthr,
-                       NLOAD       = OBJ$dims$nload,
-                       NCORR       = OBJ$dims$ncorr,
-                       NVAR        = OBJ$dims$nvar,
-                       FREQ        = OBJ$data$freq,
-                       DATA        = OBJ$data$Y,
-                       UFREQ       = OBJ$data$ufreq,
-                       UW          = OBJ$data$uweights,
-                       GW          = OBJ$data$weights,
-                       JW          = OBJ$data$jweights,
-                       CL          = OBJ$data$cluster,
-                       LINCON      = OBJ$lincon,
-                       CORRFLAG    = corrflag_code(OBJ$model),
-                       REGMAT      = OBJ$model$REGMAT,
-                       RESCOV      = OBJ$model$RESCOV,
-                       METHOD      = OBJ$method,
-                       NUMDERIV    = NUMDERIV,
-                       NCORES      = OBJ$cores,
-                       VERBOSE     = VERBOSE)
-          }}
-
-compute_var <- function(THETA, C_VEC, N, IT = NULL, PAIRS = NULL, PPI = NULL,
-                        CONSTRMAT, CONSTRLOGSD, NTHR, NLOAD, NCORR, NVAR,
-                        FREQ, DATA, METHOD, NUMDERIV = F, NCORES=1,
-                        VERBOSE = FALSE, UFREQ = numeric(0), UW = numeric(0),
-                        GW = numeric(0), JW = numeric(0), CL = numeric(0), LINCON = NULL,
-                        CORRFLAG = as.integer(NCORR > 0), REGMAT = matrix(0, 0, 0), RESCOV = matrix(0, 0, 0)){
-
+compute_var.latpl_fit <- function(OBJ, NUMDERIV = FALSE, VERBOSE = FALSE) {
   start_time <- Sys.time()
-  if (is.null(LINCON)) LINCON <- list(K = diag(length(THETA)), c = rep(0, length(THETA)), free_idx = seq_along(THETA))
-  K <- LINCON$K
-  full <- function(x) as.vector(K %*% x + LINCON$c)
-
-
-
-  # Get jacobian of reparameterisation
-  if (isTRUE(VERBOSE)) message('- Computing Delta...')
-  Rwr_getPar <- function(x){
-    getPar(OBJ         = full(x),
-           OPTION      = "transformed",
-           CORRFLAG    = CORRFLAG,
-           CONSTRMAT   = CONSTRMAT,
-           CONSTRLOGSD = CONSTRLOGSD,
-           NTHR        = NTHR,
-           NLOAD       = NLOAD,
-           NCORR       = NCORR,
-           NVAR        = NVAR)
+  lc <- OBJ$lincon
+  full <- function(x) as.vector(lc$K %*% x + lc$c)
+  xf <- OBJ$theta[lc$free_idx]
+  if (VERBOSE) message("- Computing H and J...")
+  lat <- theta_block(OBJ$model, OBJ$dims$nthr) %in% c("corr", "logsd")
+  trJacob <- diag(length(OBJ$theta))
+  if (any(lat)) {
+    trJacob[lat, lat] <- numDeriv::jacobian(function(x) {
+      get_par(replace(OBJ, "theta", list(replace(OBJ$theta, lat, x))), OPTION = "transformed")[lat]
+    }, OBJ$theta[lat])
   }
-  trJacob <- numDeriv::jacobian(Rwr_getPar, x=THETA[LINCON$free_idx])
-  end_time <- Sys.time()
-  totaltime <- as.numeric(difftime(end_time, start_time, units = 'secs')[1])
-  if (isTRUE(VERBOSE)) message('Done! (', round(totaltime, 2),' secs)')
-
-  # Sample estimation of of J (and H)
-  if (isTRUE(VERBOSE)) message('- Estimating H and J...')
-  RcppParallel::setThreadOptions(numThreads = NCORES)
-  HJ <- cpp_sample_estimators_HJ(
-    THETA = THETA,
-    FREQ = FREQ,
-    DATA = DATA,
-    C_VEC = C_VEC,
-    CONSTRMAT = CONSTRMAT,
-    CONSTRLOGSD = CONSTRLOGSD,
-    N = nrow(DATA),
-    CORRFLAG = CORRFLAG,
-    NTHR = NTHR,
-    NLOAD = NLOAD,
-    NCORR= NCORR,
-    NVAR = NVAR,
-    UFREQ = UFREQ,
-    UW = UW,
-    GW = GW,
-    JW = JW,
-    CL = CL,
-    REGMAT = REGMAT,
-    RESCOV = RESCOV
-  )
-  Jhat <- crossprod(K, HJ$J %*% K)
-
-  end_time <- Sys.time()
-  totaltime <- as.numeric(difftime(end_time, start_time, units = 'secs')[1])
-  if (isTRUE(VERBOSE)) message('Done! (', round(totaltime, 2),' secs)')
-
-  # Compute H if needed
+  trJacob <- trJacob %*% lc$K
+  RcppParallel::setThreadOptions(numThreads = OBJ$cores)
+  on.exit(RcppParallel::setThreadOptions(numThreads = 1))
+  HJ <- cpp_HJ(OBJ$theta, OBJ$engine$model, OBJ$engine$data)
+  H <- crossprod(lc$K, HJ$H %*% lc$K)
+  J <- crossprod(lc$K, HJ$J %*% lc$K)
+  if (NUMDERIV) {
+    H <- numDeriv::jacobian(function(x) -as.vector(crossprod(lc$K, cpp_pl(full(x), OBJ$engine$model, OBJ$engine$data, 1L)$gradient)) / OBJ$dims$n, xf)
+  }
+  if (!(det(H) > 0)) stop("H not invertible.")
+  invH <- solve(H)
+  vcov <- trJacob %*% invH %*% J %*% invH %*% t(trJacob)
   opt_noise <- NA
   noise <- NULL
-  Hhat <- crossprod(K, HJ$H %*% K)
-  if(NUMDERIV){
-    if (isTRUE(VERBOSE)) message('- Computing H numerically...')
-    # function for gradient
-    Rwr_ngr <- function(par_vec){
-      mod <- cpp_multiThread_completePairwise(
-        N          = N,
-        C_VEC      = C_VEC,
-        CONSTRMAT  = CONSTRMAT,
-        CONSTRLOGSD= CONSTRLOGSD,
-        FREQ       = FREQ,
-        THETA      = par_vec,
-        CORRFLAG   = CORRFLAG,
-        NTHR       = NTHR,
-        NLOAD      = NLOAD,
-        NCORR      = NCORR,
-        NVAR       = NVAR,
-        GRFLAG     = 1,
-        SILENTFLAG = 1,
-        UFREQ      = UFREQ,
-        REGMAT     = REGMAT,
-        RESCOV     = RESCOV
-      )
-      mod$iter_ngradient/N
-    }
-
-    Hhat <- numDeriv::jacobian(function(x) as.vector(crossprod(K, Rwr_ngr(full(x)))), THETA[LINCON$free_idx])
-    end_time <- Sys.time()
-    totaltime <- as.numeric(difftime(end_time, start_time, units = 'secs')[1])
-    if (isTRUE(VERBOSE)) message('Done! (', round(totaltime, 2),' secs)')
-  }
-
-  if (isTRUE(VERBOSE)) message('- Inverting H...')
-  if(!(det(Hhat)>0)) stop('H not invertible.')
-  invH <- solve(Hhat)
-
-
-  vcov <- trJacob %*% invH %*% Jhat %*% invH %*% t(trJacob)
-
-  asy_var <- diag(vcov)
-  if(METHOD == 'SA'){
-    a1 <- PAIRS*(PAIRS - PPI)/(PPI*(PAIRS-1))
-    a2 <- (PAIRS-PPI)/(PPI*(PAIRS-1))
-    noise <- invH%*%(a1*Hhat - a2*Jhat)%*%invH/(N*IT)
-    eig <- eigen((noise + t(noise))/2, symmetric = TRUE)
+  if (OBJ$method == "SA") {
+    P <- OBJ$dims$pairs
+    ppi <- OBJ$control$PAIRS_PER_ITERATION
+    a1 <- P * (P - ppi) / (ppi * (P - 1))
+    a2 <- (P - ppi) / (ppi * (P - 1))
+    noise <- invH %*% (a1 * H - a2 * J) %*% invH / (OBJ$dims$n * (OBJ$stoFit$last_iter - OBJ$stoFit$burnt))
+    eig <- eigen((noise + t(noise)) / 2, symmetric = TRUE)
     noise <- eig$vectors %*% (pmax(eig$values, 0) * t(eig$vectors))
     opt_noise <- diag(trJacob %*% noise %*% t(trJacob))
   }
-
-  end_time <- Sys.time()
-  totaltime <- as.numeric(difftime(end_time, start_time, units = 'secs')[1])
-  if (isTRUE(VERBOSE)) message('Done! (', round(totaltime, 2),' secs)')
-
-  return(
-    list(
-      trJacob = trJacob,
-      H = Hhat,
-      invH = trJacob%*%invH,
-      J = Jhat,
-      vcov = vcov,
-      asymptotic_variance = asy_var,
-      optimisation_noise = opt_noise,
-      noise = noise,
-      RTime = totaltime
-    )
-  )
-
+  list(trJacob = trJacob, H = H, invH = trJacob %*% invH, J = J, vcov = vcov, asymptotic_variance = diag(vcov),
+       optimisation_noise = opt_noise, noise = noise, RTime = as.numeric(difftime(Sys.time(), start_time, units = "secs")))
 }
 
-plotTraj <- function(OBJ) UseMethod('plotTraj')
+plot_traj <- function(OBJ) UseMethod('plot_traj')
 #' @export
-plotTraj.PlFaFit <- function(OBJ){
+plot_traj.latpl_fit <- function(OBJ){
 
   if(OBJ$method=="ucminf"){
     warning('Trajectories not available for numerical fit.')
@@ -434,7 +188,7 @@ plotTraj.PlFaFit <- function(OBJ){
               c(OBJ$dims$nthr, OBJ$dims$nload, OBJ$dims$ncorr, OBJ$dims$nvar))
   long <- do.call(rbind, Map(function(iter, theta) {
     data.frame(iter = iter,
-               par = getPar(replace(OBJ, "theta", list(theta)), OPTION = "transformed"),
+               par = get_par(replace(OBJ, "theta", list(theta)), OPTION = "transformed"),
                id = seq_along(theta),
                type = type)
   }, OBJ$stoFit$path$iters, OBJ$stoFit$path$avtheta))
@@ -448,6 +202,6 @@ plotTraj.PlFaFit <- function(OBJ){
 }
 
 #' @export
-plotTraj.lavaan <- function(OBJ) {
-  plotTraj(OBJ@external$lavaan.pl)
+plot_traj.lavaan <- function(OBJ) {
+  plot_traj(OBJ@external$lavaan.pl)
 }

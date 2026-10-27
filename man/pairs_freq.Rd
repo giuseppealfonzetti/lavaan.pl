@@ -2,26 +2,22 @@
 % Please edit documentation in R/RcppExports.R
 \name{pairs_freq}
 \alias{pairs_freq}
-\title{Compute pairwise frequencies}
+\title{Pairwise frequencies}
 \usage{
 pairs_freq(Y, C_VEC, WEIGHTS = as.numeric(c()))
 }
 \arguments{
-\item{Y}{Integer matrix of dimension \eqn{n*p}, where \eqn{n} is the sample size
-and \eqn{p} is the number of items considered. Categories must be coded starting from zero.
-For example, an item with three categories can only accept values contained in
-\eqn{\{0, 1, 2\}}.}
+\item{Y}{Data matrix of dimension \eqn{n*p}, with categories coded from zero and \code{NA} for
+missing responses.}
 
-\item{C_VEC}{Integer vector indicating how many possible categories are associated to
-each item in 'Y'.}
+\item{C_VEC}{Number of categories of each item.}
 
-\item{WEIGHTS}{Optional vector of unit weights. Empty for unit weights.}
+\item{WEIGHTS}{Optional vector of unit weights; empty for unit weights.}
 }
 \value{
-It returns a 5-rows matrix with each combination of items and categories as columns.
-Row0: item k, Row1: item l, Row2; category item k, Row3: category item l, Row4: freq
-It is computed just once, before the optimization of the complete pairwise
+The (weighted) frequencies of the bivariate response patterns: pairs \eqn{(k, l)},
+\eqn{l < k}, ordered by \eqn{k}, and within each pair the categories of \eqn{k} then \eqn{l}.
 }
 \description{
-Compute pairwise frequencies
+Pairwise frequencies
 }

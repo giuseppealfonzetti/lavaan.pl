@@ -68,18 +68,18 @@ The call to the `cfa()` function is made as usual:
 # Fit the model (note, this cfa() function is from the lavaan.pl package)
 fit <- cfa(model = mod, data = bfi, std.lv = TRUE, test = "mean.var.adjusted")
 summary(fit)
-#> lavaan 0.7-2 ended normally after 89 iterations
+#> lavaan 0.7-2 ended normally after 91 iterations
 #> 
 #>   Estimator                                        PML
-#>   Optimization method                           NLMINB
+#>   Optimization method                           UCMINF
 #>   Number of model parameters                       160
 #> 
 #>   Number of observations                          2236
 #> 
 #> Model Test User Model:
 #>                                               Standard      Scaled
-#>   Test Statistic                              4584.031    7206.841
-#>   Degrees of freedom                               265     333.112
+#>   Test Statistic                              4584.033    7206.187
+#>   Degrees of freedom                               265     333.082
 #>   P-value (Unknown)                                 NA       0.000
 #>   Scaling correction factor                                  0.636
 #>     mean+var adjusted correction (PML)                            
@@ -309,10 +309,10 @@ All^[Most :)--we're working on it!] `lavaan` methods should carry over, such as:
 
 ``` r
 head(coef(fit), 10)
-#>    opn=~O1    opn=~O2    opn=~O3    opn=~O4    opn=~O5    con=~C1    con=~C2    con=~C3 
-#>  0.6474239 -0.4443221  0.8077954  0.1355670 -0.4862491  0.5644095  0.5707376  0.5430038 
-#>    con=~C4    con=~C5 
-#> -0.7602739 -0.7055655 
+#>    opn=~O1    opn=~O2    opn=~O3    opn=~O4    opn=~O5    con=~C1    con=~C2 
+#>  0.6474239 -0.4443222  0.8077955  0.1355671 -0.4862492  0.5644095  0.5707375 
+#>    con=~C3    con=~C4    con=~C5 
+#>  0.5430036 -0.7602739 -0.7055655 
 head(parameterestimates(fit, se = TRUE))
 ```
 |lhs|op|rhs|est|se|z|pvalue|ci.lower|ci.upper|
@@ -369,11 +369,11 @@ sessionInfo()
 #> Running under: macOS Golden Gate 27.0.1
 #> 
 #> Matrix products: default
-#> BLAS:   /System/Library/Frameworks/Accelerate.framework/Versions/A/Frameworks/vecLib.framework/Versions/A/libBLAS.dylib 
+#> BLAS:   /Library/Frameworks/R.framework/Versions/4.6/Resources/lib/libRblas.0.dylib 
 #> LAPACK: /Library/Frameworks/R.framework/Versions/4.6/Resources/lib/libRlapack.dylib;  LAPACK version 3.12.1
 #> 
 #> locale:
-#> [1] en_US.UTF-8/en_US.UTF-8/en_US.UTF-8/C/en_US.UTF-8/en_US.UTF-8
+#> [1] C.UTF-8/C.UTF-8/C.UTF-8/C/C.UTF-8/C.UTF-8
 #> 
 #> time zone: Europe/Rome
 #> tzcode source: internal
@@ -385,37 +385,46 @@ sessionInfo()
 #> [1] semPlot_1.2.0        lavaan_0.7-2         lavaan.pl_0.1.0.9002
 #> 
 #> loaded via a namespace (and not attached):
-#>  [1] gtable_0.3.6        xfun_0.60           ggplot2_4.0.3       htmlwidgets_1.6.4  
-#>  [5] psych_2.6.5         processx_3.9.0      lattice_0.23-1      callr_3.8.0        
-#>  [9] numDeriv_2016.8-1.1 quadprog_1.5-8      vctrs_0.7.3         tools_4.6.1        
-#> [13] pak_0.11.1          ps_1.9.3            generics_0.1.4      stats4_4.6.1       
-#> [17] parallel_4.6.1      tibble_3.3.1        cluster_2.1.8.2     ucminf_1.2.3       
-#> [21] pkgconfig_2.0.3     qgraph_1.10.1       Matrix_1.7-6        data.table_1.18.6.1
-#> [25] checkmate_2.3.4     RColorBrewer_1.1-3  S7_0.2.2            RcppParallel_6.2.1 
-#> [29] lifecycle_1.0.5     compiler_4.6.1      farver_2.1.2        stringr_1.6.0      
-#> [33] mnormt_2.1.2        codetools_0.2-20    litedown_0.11       glasso_1.11        
-#> [37] htmltools_0.5.9     fdrtool_1.2.18      htmlTable_2.5.0     Formula_1.2-6      
-#> [41] pillar_1.11.1       MASS_7.3-65         Hmisc_5.2-6         abind_1.4-8        
-#> [45] rpart_4.1.27        nlme_3.1-169        gtools_3.9.5        commonmark_2.0.0   
-#> [49] tidyselect_1.2.1    digest_0.6.39       stringi_1.8.9       reshape2_1.4.5     
-#> [53] dplyr_1.2.1         fastmap_1.2.0       grid_4.6.1          colorspace_2.1-3   
-#> [57] cli_3.6.6           magrittr_2.0.5      base64enc_0.1-6     pbivnorm_0.6.0     
-#> [61] foreign_0.8-91      corpcor_1.6.10      scales_1.4.0        backports_1.5.1    
-#> [65] rmarkdown_2.31      jpeg_0.1-11         igraph_2.3.3        otel_0.2.0         
-#> [69] nnet_7.3-20         gridExtra_2.3.1     RcppEigen_0.3.4.0.2 png_0.1-9          
-#> [73] pbapply_1.7-4       evaluate_1.0.5      knitr_1.51          rlang_1.3.0        
-#> [77] Rcpp_1.1.2          glue_1.8.1          rstudioapi_0.19.0   R6_2.6.1           
-#> [81] plyr_1.8.9         
+#>  [1] psych_2.6.5         tidyselect_1.2.1    dplyr_1.2.1        
+#>  [4] farver_2.1.2        S7_0.2.2            fastmap_1.2.0      
+#>  [7] digest_0.6.39       rpart_4.1.27        lifecycle_1.0.5    
+#> [10] cluster_2.1.8.2     ellipsis_0.3.3      magrittr_2.0.5     
+#> [13] compiler_4.6.1      rlang_1.3.0         Hmisc_5.2-6        
+#> [16] tools_4.6.1         igraph_2.3.3        data.table_1.18.6.1
+#> [19] knitr_1.51          htmlwidgets_1.6.4   pkgbuild_1.4.8     
+#> [22] mnormt_2.1.2        plyr_1.8.9          RColorBrewer_1.1-3 
+#> [25] abind_1.4-8         pkgload_1.5.3       foreign_0.8-91     
+#> [28] purrr_1.2.2         numDeriv_2016.8-1.1 desc_1.4.3         
+#> [31] nnet_7.3-20         grid_4.6.1          stats4_4.6.1       
+#> [34] colorspace_2.1-3    ggplot2_4.0.3       gtools_3.9.5       
+#> [37] scales_1.4.0        cli_3.6.6           rmarkdown_2.31     
+#> [40] generics_0.1.4      otel_0.2.0          RcppParallel_6.2.1 
+#> [43] rstudioapi_0.19.0   reshape2_1.4.5      commonmark_2.0.0   
+#> [46] sessioninfo_1.2.4   pbapply_1.7-4       cachem_1.1.0       
+#> [49] stringr_1.6.0       parallel_4.6.1      base64enc_0.1-6    
+#> [52] vctrs_0.7.3         devtools_2.5.2      Matrix_1.7-6       
+#> [55] litedown_0.11       glasso_1.11         Formula_1.2-6      
+#> [58] htmlTable_2.5.0     jpeg_0.1-11         qgraph_1.10.1      
+#> [61] glue_1.8.1          codetools_0.2-20    stringi_1.8.9      
+#> [64] gtable_0.3.6        quadprog_1.5-8      tibble_3.3.1       
+#> [67] pillar_1.11.1       htmltools_0.5.9     R6_2.6.1           
+#> [70] RcppEigen_0.3.4.0.2 ucminf_1.2.3        rprojroot_2.1.1    
+#> [73] evaluate_1.0.5      pbivnorm_0.6.0      lattice_0.23-1     
+#> [76] png_0.1-9           backports_1.5.1     memoise_2.0.1      
+#> [79] corpcor_1.6.10      fdrtool_1.2.18      Rcpp_1.1.2         
+#> [82] nlme_3.1-169        gridExtra_2.3.1     checkmate_2.3.4    
+#> [85] xfun_0.60           fs_2.1.0            usethis_3.2.1      
+#> [88] pkgconfig_2.0.3    
 ```
 
-<!-- To fit a latent factor analysis model with 5 factors, where the first 5 items load on the first factor and so on, we can use the `fit_plFA()` function. -->
+<!-- To fit a latent factor analysis model with 5 factors, where the first 5 items load on the first factor and so on, we can use the `fit_latpl()` function. -->
 <!-- In preparation, we must build the following objects to be supplied as a list to the `CONSTR_LIST` argument: -->
 
 <!-- - `CONSTRMAT`: A matrix of constraints on the factor loadings. -->
 <!-- - `CORRFLAG`: A flag indicating whether the factor correlations are estimated. -->
 <!-- - `CONSTRVAR`: A vector of constraints on the factor variances, if any. -->
 <!-- - `STDLV`: A flag indicating whether the factor loadings are standardised. -->
-<!-- - `LLC`: A list indicating linear constraints on factor loading estimations, if any. -->
+<!-- - `CONSTRAINTS`: Linear equality constraints `list(A, b)` on the parameters, if any. -->
 
 <!-- The above ingredients are prepared using the code below. -->
 
@@ -429,7 +438,7 @@ sessionInfo()
 <!-- head(D) -->
 
 <!-- # Constraint matrix: NA indicate free loadings -->
-<!-- constrmat <- build_constrMat(P = p, Q = q, STRUCT = "simple") -->
+<!-- constrmat <- build_constr_mat(P = p, Q = q, STRUCT = "simple") -->
 <!-- head(constrmat, 12) -->
 
 <!-- # Build constraint list -->
@@ -438,14 +447,14 @@ sessionInfo()
 <!--   CORRFLAG = TRUE, -->
 <!--   CONSTRVAR = rep(1, q),  # these options standardise the   -->
 <!--   STDLV = TRUE,           # factor variances -->
-<!--   LLC = NULL -->
+<!--   CONSTRAINTS = NULL -->
 <!-- ) -->
 <!-- ``` -->
 
 <!-- We can now fit the factor model: -->
 
 <!-- ```{r} -->
-<!-- fit <- fit_plFA( -->
+<!-- fit <- fit_latpl( -->
 <!--   DATA = D,  -->
 <!--   CONSTR_LIST = constr_list, -->
 <!--   METHOD = "ucminf", -->
@@ -456,16 +465,16 @@ sessionInfo()
 
 <!-- The default method is using the optimiser from the `{ucminf}` package, which works well for small data sizes. -->
 <!-- Alternatively, the user may choose `METHOD = "SA"` to turn on the stochastic approximation algorithm. -->
-<!-- Use the function `getPar()` to extract the parameter estimates: -->
+<!-- Use the function `get_par()` to extract the parameter estimates: -->
 
 <!-- ```{r} -->
-<!-- getPar(fit) -->
+<!-- get_par(fit) -->
 <!-- ``` -->
 
-<!-- Computing the standard errors is done separately using the `computeVar()` function: -->
+<!-- Computing the standard errors is done separately using the `compute_var()` function: -->
 
 <!-- ```{r} -->
-<!-- var <- computeVar(OBJ = fit, DATA = D, VERBOSE = TRUE) -->
+<!-- var <- compute_var(OBJ = fit, DATA = D, VERBOSE = TRUE) -->
 <!-- str(var) -->
 
 <!-- # Standard errors -->

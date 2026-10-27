@@ -1,27 +1,6 @@
-#' Compute pairwise frequencies
-#'
-#' It returns a 5-rows matrix, with one column for each combination of items and
-#' categories.
-#' Row0: item k, Row1: item l, Row2; category item k, Row3: category item l, Row4: freq
-#'
-#' @param Y Integer matrix of dimension \eqn{n*p}, where \eqn{n} is the sample size
-#' and \eqn{p} is the number of items considered. Categories must be coded starting from zero.
-#' For example, an item with three categories can only accept values contained in
-#' \eqn{{0, 1, 2}}.
-#' @param C_VEC Integer vector indicating how many possible categories are associated to
-#' each item in 'Y'.
-#'
-#' @export
-compute_frequencies <- function(Y, C_VEC){
-  if(sum(!is.finite(C_VEC))>0 | is.matrix(C_VEC))stop('C_VEC is not a numeric vector.')
-  if(length(C_VEC) != ncol(Y))stop('Y and C_VEC dimensions do not match.')
-
-  pairs_freq(Y = Y, C_VEC = C_VEC)
-}
-
 #' Automatic construction of simple constraints matrices
 #'
-#' build_constrMat() creates a binary matrix with entries equal to 1
+#' build_constr_mat() creates a binary matrix with entries equal to 1
 #' when referring to free loadings, and 0 entries otherwise.
 #'
 #' @param P Number of items.
@@ -31,17 +10,18 @@ compute_frequencies <- function(Y, C_VEC){
 #' @param CROSS Integer referring to the number of items latent i shares with latent i+1
 #'
 #' @export
-build_constrMat <- function(P, Q, STRUCT = c('simple', 'triangular', 'crossed'), CROSS = NULL){
-  p <- check_p(P)
-  q <- check_q(Q)
+build_constr_mat <- function(P, Q, STRUCT = c('simple', 'triangular', 'crossed'), CROSS = NULL){
+  stopifnot(P > 1, Q > 0)
+  p <- as.integer(P)
+  q <- as.integer(Q)
 
   STRUCT <- match.arg(STRUCT)
   if(STRUCT == 'triangular'){
     # Build lower trinagular matrix
-    constrMat <- matrix(NA, nrow = p, ncol = q)
+    out <- matrix(NA, nrow = p, ncol = q)
     for(j in 1:p){
       for (h in 1:q) {
-        if(h > j) constrMat[j,h] <- 0
+        if(h > j) out[j,h] <- 0
       }
     }
 
@@ -50,12 +30,12 @@ build_constrMat <- function(P, Q, STRUCT = c('simple', 'triangular', 'crossed'),
     loadings_per_factor <- p %/% q
     remaining_loadings <- p %% q
 
-    constrMat <- matrix(0, nrow = p, ncol = q)
+    out <- matrix(0, nrow = p, ncol = q)
     for (h in 1:(q-1)) {
-      constrMat[ (loadings_per_factor*(h-1)+1) : (loadings_per_factor*(h-1) + loadings_per_factor), h] <- rep(NA,loadings_per_factor)
+      out[ (loadings_per_factor*(h-1)+1) : (loadings_per_factor*(h-1) + loadings_per_factor), h] <- rep(NA,loadings_per_factor)
     }
     h <- q
-    constrMat[ (loadings_per_factor*(h-1)+1) : (loadings_per_factor*(h-1) + loadings_per_factor + remaining_loadings), h] <- rep(NA,loadings_per_factor + remaining_loadings)
+    out[ (loadings_per_factor*(h-1)+1) : (loadings_per_factor*(h-1) + loadings_per_factor + remaining_loadings), h] <- rep(NA,loadings_per_factor + remaining_loadings)
   } else if( STRUCT == 'crossed'){
     if(is.null(CROSS)) CROSS <- 1
 
@@ -63,18 +43,18 @@ build_constrMat <- function(P, Q, STRUCT = c('simple', 'triangular', 'crossed'),
     loadings_per_factor <- p %/% q
     remaining_loadings <- p %% q
 
-    constrMat <- matrix(0, nrow = p, ncol = q)
+    out <- matrix(0, nrow = p, ncol = q)
     for (h in 1:(q-1)) {
-      constrMat[ max(1, (loadings_per_factor*(h-1) + 1 - CROSS)) : (loadings_per_factor*(h-1) + loadings_per_factor), h] <- NA
+      out[ max(1, (loadings_per_factor*(h-1) + 1 - CROSS)) : (loadings_per_factor*(h-1) + loadings_per_factor), h] <- NA
     }
     h <- q
-    constrMat[ max(1, (loadings_per_factor*(h-1) + 1 - CROSS)) : (loadings_per_factor*(h-1) + loadings_per_factor + remaining_loadings), h] <- NA
+    out[ max(1, (loadings_per_factor*(h-1) + 1 - CROSS)) : (loadings_per_factor*(h-1) + loadings_per_factor + remaining_loadings), h] <- NA
 
   }
 
 
 
-  return(constrMat)
+  return(out)
 }
 
 
@@ -92,29 +72,10 @@ build_constrMat <- function(P, Q, STRUCT = c('simple', 'triangular', 'crossed'),
 #' @param STDLV  Logical indicator. Set it to `TRUE` to fix latent variables scale. Set it `FALSE` to fix loadings scale.
 #' @export
 gen_loadings <- function(CONSTRMAT, FIXED = NULL,  SEED = 123, LB = 0, UB = 1, STDLV=TRUE){
-  CONSTRMAT <- check_cnstr_loadings(CONSTRMAT, STDLV = STDLV)
-
+  out <- t(set_latpl_model(CONSTRMAT, STDLV = STDLV)$CONSTRMAT)
   set.seed(SEED)
-  p <- check_p(nrow(CONSTRMAT))
-  q <- check_q(ncol(CONSTRMAT))
-
-  out <-  CONSTRMAT
-  for (j in 1:p) {
-    for (h in 1:q) {
-      if(is.na(out[j,h])) out[j,h] <- runif(1, LB, UB)
-    }
-  }
-
-  if(!is.null(FIXED)){
-    for (j in 1:p) {
-      for (h in 1:q) {
-        if(is.na(out[j,h])) out[j,h] <- FIXED
-      }
-    }
-  }
-
-
-  return(out)
+  out[is.na(out)] <- if (is.null(FIXED)) runif(sum(is.na(out)), LB, UB) else FIXED
+  t(out)
 }
 
 #' Simulate new data
@@ -131,15 +92,16 @@ gen_loadings <- function(CONSTRMAT, FIXED = NULL,  SEED = 123, LB = 0, UB = 1, S
 #'@export
 sim_data <- function(SAMPLE_SIZE, LOADINGS, THRESHOLDS, LATENT_COV, SEED = 123){
 
-  n          <- check_n(SAMPLE_SIZE)
-  loadings   <- check_loadings(LOADINGS)
-  thresholds <- check_thresholds_j(THRESHOLDS)
-  lat_cov    <- check_latcov(LATENT_COV)
-  stopifnot(ncol(loadings)==ncol(lat_cov))
+  stopifnot(SAMPLE_SIZE > 0, is.matrix(LOADINGS), all(is.finite(LOADINGS)), nrow(LOADINGS) > ncol(LOADINGS),
+            !is.unsorted(THRESHOLDS), isSymmetric(LATENT_COV), ncol(LOADINGS) == ncol(LATENT_COV))
+  n <- as.integer(SAMPLE_SIZE)
+  loadings <- LOADINGS
+  thresholds <- THRESHOLDS
+  lat_cov <- LATENT_COV
 
   set.seed(SEED)
 
-  p <- check_p(nrow(loadings))
+  p <- nrow(loadings)
   error_variance <- diag(1, p, p) - diag(diag(loadings%*%lat_cov%*%t(loadings)),p,p)
 
   ev <- eigen(error_variance, symmetric = TRUE)

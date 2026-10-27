@@ -82,7 +82,7 @@ local({
 
 # Missing data (Katsikatsou et al., 2022, model 5 with MAR missingness) match lavaan PML
 local({
-  cm <- build_constrMat(12, 2, "simple")
+  cm <- build_constr_mat(12, 2, "simple")
   L <- cm; L[is.na(L)] <- c(.4, .5, .6, .7, .8, .9, .4, .5, .6, .7, .8, .9)
   Yc <- sim_data(1000, L, c(-1.5, .5, 1.5), matrix(c(1, .6, .6, 1), 2), SEED = 4)
   Y <- Yl <- Yc

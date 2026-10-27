@@ -1,225 +1,3 @@
-check_data <- function(DATA){
-  stopifnot(is.matrix(DATA))
-  stopifnot(is.finite(DATA) | is.na(DATA))
-  stopifnot(is.numeric(DATA))
-  stopifnot(min(DATA, na.rm = TRUE)==0)
-  return(round(DATA,0))
-}
-check_cnstr_corrflag <- function(CORRFLAG){
-  if(is.null(CORRFLAG)) CORRFLAG <- TRUE
-  stopifnot(CORRFLAG%in%c(0,1))
-  return(as.logical(CORRFLAG))
-}
-check_cnstr_stdlv <- function(STDLV){
-  if(is.null(STDLV)) STDLV <- TRUE
-  stopifnot(is.logical(STDLV))
-  return(STDLV)
-}
-check_cnstr_loadings <- function(MAT, STDLV){
-  stopifnot(is.matrix(MAT))
-  stopifnot(is.numeric(MAT))
-  stopifnot(!is.infinite(sum(MAT, na.rm = TRUE)))
-
-  if(!STDLV){
-    for(j in 1:ncol(MAT)){
-      if(sum(is.na(MAT[,j]))>0){
-        wna <- which(is.na(MAT[,j]))
-        fna <- wna[1]
-        if(is.null(fna)) break
-        if(fna==1){MAT[fna,j] <- 1}else{
-          if(all(MAT[1:(fna-1),j]==0))MAT[fna,j] <- 1
-        }
-      }
-    }
-  }
-
-  return(MAT)
-}
-check_cnstr_latvar <- function(VEC, Q, STDLV){
-  if(is.null(VEC) & STDLV) VEC <- rep(1, Q)
-  if(is.null(VEC) & !STDLV) VEC <- rep(NA, Q)
-
-  stopifnot(is.vector(VEC))
-  stopifnot(!is.infinite(sum(VEC, na.rm = TRUE)))
-  stopifnot(VEC[!is.na(VEC)]>0)
-
-  if(STDLV){
-    VEC[is.na(VEC)] <- 1
-  }
-
-  return(log(sqrt(VEC)))
-}
-check_cnstr <- function(LIST){
-  ls <- list()
-  ls$CORRFLAG <- check_cnstr_corrflag(LIST$CORRFLAG)
-  ls$STDLV    <- check_cnstr_stdlv(LIST$STDLV)
-  ls$CONSTRAINTS <- LIST$CONSTRAINTS
-  ls$CONSTRMAT <- check_cnstr_loadings(LIST$CONSTRMAT, STDLV = ls$STDLV)
-  q <- ncol(ls$CONSTRMAT)
-  ls$CONSTRLOGSD <- check_cnstr_latvar(LIST$CONSTRVAR, Q=q, STDLV = ls$STDLV)
-
-  stopifnot(q==length(ls$CONSTRLOGSD))
-  return(ls)
-}
-check_p <- function(P){
-  stopifnot(is.numeric(P))
-  stopifnot(is.finite(P))
-  stopifnot(P>1)
-  return(as.integer(P))
-}
-check_q <- function(Q){
-  stopifnot(is.numeric(Q))
-  stopifnot(is.finite(Q))
-  stopifnot(Q>0)
-  return(as.integer(Q))
-}
-check_n <- function(N){
-  stopifnot(is.numeric(N))
-  stopifnot(is.finite(N))
-  stopifnot(N>0)
-  return(as.integer(N))
-}
-check_loadings <- function(MAT){
-  stopifnot(is.matrix(MAT))
-  stopifnot(is.numeric(MAT))
-  stopifnot(is.finite(MAT))
-  stopifnot(nrow(MAT)>ncol(MAT))
-  return(MAT)
-}
-check_thresholds_j <- function(TH){
-  stopifnot(is.vector(TH))
-  stopifnot(is.numeric(TH))
-  stopifnot(!is.unsorted(TH))
-  return(TH)
-}
-check_thresholds <- function(THF, CAT){
-  s <- 0
-  for(j in 1:length(CAT)){
-    check_thresholds_j(THF[(s + 1):(s + CAT[j] - 1)])
-    s <- s + CAT[j] - 1
-  }
-  return(THF)
-}
-check_latcov <- function(MAT){
-  stopifnot(is.matrix(MAT))
-  stopifnot(is.numeric(MAT))
-  stopifnot(is.finite(MAT))
-  stopifnot(nrow(MAT)==ncol(MAT))
-  stopifnot(isSymmetric.matrix(MAT))
-  #check also positive definiteness
-  return(MAT)
-}
-check_dims <- function(DATA, CONSTR_LIST){
-  p <- ncol(DATA)
-  n <- nrow(DATA)
-  q <- ncol(CONSTR_LIST$CONSTRMAT)
-  categories <- apply(DATA, 2, max, na.rm = T) + 1
-
-  nthr <- sum(categories)-p
-  nload <- sum(is.na(CONSTR_LIST$CONSTRMAT))
-  ncorr <- 0; if(CONSTR_LIST$CORRFLAG==1) ncorr <- q*(q-1)/2
-  nvar  <- sum(is.na(CONSTR_LIST$CONSTRLOGSD))
-  nreg  <- sum(is.na(CONSTR_LIST$REGMAT))
-  nres  <- if (length(CONSTR_LIST$RESCOV)) sum(is.na(CONSTR_LIST$RESCOV[upper.tri(CONSTR_LIST$RESCOV)])) else 0
-  d <- nthr + nload + ncorr + nvar + nreg + nres
-  stopifnot(q<p)
-  stopifnot(categories>1)
-
-
-
-
-  return(list(
-    n=n,
-    p=p,
-    q=q,
-    nthr=nthr,
-    nload=nload,
-    ncorr=ncorr,
-    nvar=nvar,
-    nreg=nreg,
-    nres=nres,
-    d=d,
-    cat=categories,
-    pairs=p*(p-1)/2
-  ))
-}
-check_theta <- function(THETA){
-
-  stopifnot(is.vector(THETA))
-  stopifnot(is.numeric(THETA))
-  stopifnot(is.finite(THETA))
-
-  return(THETA)
-}
-check_init_par <- function(PAR, DIMS, CONSTR_LIST){
-  stopifnot(is.vector(PAR))
-  stopifnot(is.numeric(PAR))
-  stopifnot(is.finite(PAR))
-  stopifnot(length(PAR)==DIMS$d)
-
-  gp <- extract_par(PAR, "list", CONSTR_LIST$CONSTRMAT, CONSTR_LIST$CONSTRLOGSD, DIMS$nthr, DIMS$nload, DIMS$ncorr,
-                    DIMS$nvar, corrflag_code(CONSTR_LIST), CONSTR_LIST$REGMAT, CONSTR_LIST$RESCOV)
-  check_loadings(gp$loadings)
-  check_latcov(gp$latent_correlations)
-  L <- gp$loadings %*% solve(diag(DIMS$q) - gp$regressions)
-  Sy <- L%*%gp$latent_correlations%*%t(L)
-  if(!all(diag(Sy)<=1)) warning("Negative error variances implied by init parameters")
-  if (!sa_model(CONSTR_LIST)) return(PAR)
-  PAR <- cpp_sa_proj( THETA=PAR,
-                      CONSTRMAT=CONSTR_LIST$CONSTRMAT,
-                      CONSTRLOGSD=CONSTR_LIST$CONSTRLOGSD,
-                      C_VEC=DIMS$cat,
-                      CORRFLAG=CONSTR_LIST$CORRFLAG,
-                      NTHR=DIMS$nthr,
-                      NLOAD=DIMS$nload,
-                      NCORR=DIMS$ncorr,
-                      NVAR=DIMS$nvar)
-
-  return(PAR)
-}
-check_init <- function(INIT, FREQ, DIMS, CONSTR_LIST, INIT_METHOD=c("SA", "custom", "standard"), VERBOSE=FALSE, INIT_CONTROL=set_sa_init_control(), UFREQ=numeric(0)){
-
-  INIT_METHOD <- check_init_method(DIMS=DIMS, INIT_METHOD = INIT_METHOD, INIT = INIT, CONSTR_LIST = CONSTR_LIST)
-
-  # Setup fixed values initialisation
-  if(!is.null(INIT)) {
-    if(VERBOSE) message('- Initialised at user-supplied values.')
-  }else{
-    lambda0_init <- init_thresholds(DIMS, CONSTR_LIST)
-    lambda_init  <- init_loadings(DIMS, CONSTR_LIST)
-    transformed_rhos_init  <- init_transformed_latcorr(DIMS, CONSTR_LIST)
-    transformed_latsd_init <- init_transformed_latsd(DIMS, CONSTR_LIST)
-    INIT <- c(lambda0_init, lambda_init, transformed_rhos_init, transformed_latsd_init, rep(0, DIMS$nreg + DIMS$nres))
-    if (sa_model(CONSTR_LIST)) INIT <- cpp_sa_proj(THETA=INIT,
-                        CONSTRMAT=CONSTR_LIST$CONSTRMAT,
-                        CONSTRLOGSD=CONSTR_LIST$CONSTRLOGSD,
-                        C_VEC=DIMS$cat,
-                        CORRFLAG=CONSTR_LIST$CORRFLAG,
-                        NTHR=DIMS$nthr,
-                        NLOAD=DIMS$nload,
-                        NCORR=DIMS$ncorr,
-                        NVAR=DIMS$nvar)
-    if(VERBOSE) message(' Done.')
-  }
-
-  if(INIT_METHOD=="SA"){
-    if(VERBOSE) message('- Initialising with SA ...', appendLF = FALSE)
-    INIT <- init_par_with_plSA(DIMS, CONSTR_LIST, FREQ, INIT_CONTROL, INIT, UFREQ)
-    if(VERBOSE) message(' Done.')
-  }
-
-  INIT <- check_init_par(INIT, DIMS, CONSTR_LIST)
-  return(INIT)
-}
-check_init_method <- function(DIMS, INIT_METHOD = c("SA", "custom", "standard"), INIT =NULL, CONSTR_LIST = NULL){
-  INIT_METHOD <- match.arg(INIT_METHOD)
-  if(INIT_METHOD == "custom") INIT_METHOD <- "standard"
-
-  if(INIT_METHOD=="SA"){
-    if(DIMS$p<15 || (!is.null(CONSTR_LIST) && !sa_model(CONSTR_LIST)))INIT_METHOD <- "standard"
-  }
-  return(INIT_METHOD)
-}
 #' Ordinal data for pairwise likelihood estimation
 #'
 #'@param DATA Integer data matrix of dimension \eqn{n*p}. Categories must be
@@ -236,7 +14,7 @@ check_init_method <- function(DIMS, INIT_METHOD = c("SA", "custom", "standard"),
 #'@param CLUSTER Cluster membership, one per observation, for cluster-robust standard errors. If
 #'  `NULL`, observations are independent.
 #'
-#' @return An object of class `plfa_data` with the data matrix `Y`, its dimensions `n` and `p`,
+#' @return An object of class `latpl_data` with the data matrix `Y`, its dimensions `n` and `p`,
 #'   the number of categories of each item `cat`, the pairwise frequency tables `freq` and
 #'   `valfreq`, the treatment of missing values `missing`, the unit weights `uweights` and
 #'   univariate frequencies `ufreq` of the available-cases term, the normalised sampling weights
@@ -244,11 +22,12 @@ check_init_method <- function(DIMS, INIT_METHOD = c("SA", "custom", "standard"),
 #'   time spent computing the frequencies `freqTime`.
 #'
 #' @export
-set_plfa_data <- function(DATA, VALDATA = NULL, MISSING = c("listwise", "pairwise", "available.cases"),
+set_latpl_data <- function(DATA, VALDATA = NULL, MISSING = c("listwise", "pairwise", "available.cases"),
                           WEIGHTS = NULL, WEIGHTS_TYPE = c("design", "frequency"), CLUSTER = NULL) {
   MISSING <- match.arg(MISSING)
   WEIGHTS_TYPE <- match.arg(WEIGHTS_TYPE)
-  Y <- check_data(DATA)
+  stopifnot(is.matrix(DATA), is.numeric(DATA), all(is.finite(DATA) | is.na(DATA)), min(DATA, na.rm = TRUE) == 0)
+  Y <- round(DATA)
   stopifnot(
     is.null(WEIGHTS) || (is.numeric(WEIGHTS) && length(WEIGHTS) == nrow(Y) && all(is.finite(WEIGHTS)) && all(WEIGHTS >= 0)),
     is.null(CLUSTER) || (length(CLUSTER) == nrow(Y) && !anyNA(CLUSTER))
@@ -306,7 +85,7 @@ set_plfa_data <- function(DATA, VALDATA = NULL, MISSING = c("listwise", "pairwis
     cluster = cluster,
     freqTime = as.numeric(difftime(Sys.time(), freq_start_time, units = "secs"))
   )
-  class(out) <- "plfa_data"
+  class(out) <- "latpl_data"
   out
 }
 
@@ -336,118 +115,52 @@ set_plfa_data <- function(DATA, VALDATA = NULL, MISSING = c("listwise", "pairwis
 #'  angles, always positive definite) or `"direct"` (the latent covariances themselves, which allows
 #'  linear constraints on them).
 #'
-#' @return An object of class `plfa_model` with the identified loading constraints `CONSTRMAT`,
+#' @return An object of class `latpl_model` with the identified loading constraints `CONSTRMAT`,
 #'   the log standard deviations of the latent variables `CONSTRLOGSD` (`NA` when free),
 #'   `CORRFLAG`, `STDLV`, `CONSTRAINTS`, `LATCOV`, `REGMAT`, `RESCOV`, and the numbers of items `p` and
 #'   latent variables `q`.
 #'
 #' @export
-set_plfa_model <- function(CONSTRMAT, CONSTRVAR = NULL, CORRFLAG = TRUE, STDLV = TRUE, CONSTRAINTS = NULL,
+set_latpl_model <- function(CONSTRMAT, CONSTRVAR = NULL, CORRFLAG = TRUE, STDLV = TRUE, CONSTRAINTS = NULL,
                            LATCOV = c("lkj", "direct"), REGMAT = NULL, RESCOV = NULL) {
   LATCOV <- match.arg(LATCOV)
-  if (is.matrix(CONSTRMAT) && all(is.na(CONSTRMAT))) storage.mode(CONSTRMAT) <- "double"
-  stopifnot(is.matrix(CONSTRMAT))
+  stopifnot(is.matrix(CONSTRMAT), !is.infinite(CONSTRMAT), CORRFLAG %in% c(0, 1), is.logical(STDLV))
+  storage.mode(CONSTRMAT) <- "double"
+  p <- nrow(CONSTRMAT)
+  q <- ncol(CONSTRMAT)
+  if (!STDLV) {
+    for (h in seq_len(q)) {
+      f <- which(is.na(CONSTRMAT[, h]))[1]
+      if (!is.na(f) && all(CONSTRMAT[seq_len(f - 1), h] == 0)) CONSTRMAT[f, h] <- 1
+    }
+  }
+  if (is.null(CONSTRVAR)) CONSTRVAR <- rep(if (STDLV) 1 else NA, q)
+  stopifnot(length(CONSTRVAR) == q, CONSTRVAR[!is.na(CONSTRVAR)] > 0)
+  if (STDLV) CONSTRVAR[is.na(CONSTRVAR)] <- 1
   if (!is.null(CONSTRAINTS)) {
     stopifnot(
       is.list(CONSTRAINTS), is.matrix(CONSTRAINTS$A), is.numeric(CONSTRAINTS$A), all(is.finite(CONSTRAINTS$A)),
       is.numeric(CONSTRAINTS$b), length(CONSTRAINTS$b) == nrow(CONSTRAINTS$A), all(is.finite(CONSTRAINTS$b))
     )
   }
-  out <- check_cnstr(list(CONSTRMAT = CONSTRMAT, CONSTRVAR = CONSTRVAR, CORRFLAG = CORRFLAG, STDLV = STDLV,
-                          CONSTRAINTS = CONSTRAINTS))
-  if (LATCOV == "direct" && !out$CORRFLAG) stop("LATCOV = \"direct\" requires CORRFLAG = TRUE.")
-  out$LATCOV <- LATCOV
-  out$p <- nrow(out$CONSTRMAT)
-  out$q <- ncol(out$CONSTRMAT)
+  if (LATCOV == "direct" && !CORRFLAG) stop("LATCOV = \"direct\" requires CORRFLAG = TRUE.")
   if (is.null(REGMAT)) REGMAT <- matrix(0, 0, 0)
   if (is.null(RESCOV)) RESCOV <- matrix(0, 0, 0)
   storage.mode(REGMAT) <- storage.mode(RESCOV) <- "double"
   if (length(REGMAT)) {
-    stopifnot(is.matrix(REGMAT), dim(REGMAT) == out$q, !is.infinite(REGMAT))
+    stopifnot(is.matrix(REGMAT), dim(REGMAT) == q, !is.infinite(REGMAT))
     if (any(is.na(diag(REGMAT)) | diag(REGMAT) != 0)) stop("The diagonal of REGMAT must be zero.")
-    if (!anyNA(REGMAT) && abs(det(diag(out$q) - REGMAT)) < 1e-8) stop("diag(q) - REGMAT must be invertible.")
+    if (!anyNA(REGMAT) && abs(det(diag(q) - REGMAT)) < 1e-8) stop("diag(q) - REGMAT must be invertible.")
   }
   if (length(RESCOV)) {
-    stopifnot(is.matrix(RESCOV), dim(RESCOV) == out$p, !is.infinite(RESCOV))
+    stopifnot(is.matrix(RESCOV), dim(RESCOV) == p, !is.infinite(RESCOV))
     diag(RESCOV) <- 0
     if (!identical(is.na(RESCOV), t(is.na(RESCOV))) || !isSymmetric(unname(RESCOV))) stop("RESCOV must be symmetric.")
   }
-  out$REGMAT <- REGMAT
-  out$RESCOV <- RESCOV
-  class(out) <- "plfa_model"
+  out <- list(CONSTRMAT = CONSTRMAT, CONSTRLOGSD = log(sqrt(CONSTRVAR)), CORRFLAG = as.logical(CORRFLAG), STDLV = STDLV,
+              CONSTRAINTS = CONSTRAINTS, LATCOV = LATCOV, p = p, q = q, REGMAT = REGMAT, RESCOV = RESCOV)
+  class(out) <- "latpl_model"
   out
-}
-
-#' Names of the model parameters
-#'
-#' @param DATA Data object from [set_plfa_data()].
-#' @param MODEL Model object from [set_plfa_model()].
-#' @return The names of the parameters in the order used by [fit_plFA()]: thresholds `tau[i,k]`,
-#'   free loadings `lambda[j,h]`, latent correlation parameters `eta[r,c]` (or covariances `psi[r,c]`),
-#'   free latent log standard deviations `logsd[h]`, free regression coefficients `beta[i,j]` and free
-#'   residual covariances `theta[k,l]`.
-#' @export
-theta_names <- function(DATA, MODEL) {
-  stopifnot(inherits(DATA, "plfa_data"), inherits(MODEL, "plfa_model"))
-  idx <- which(is.na(MODEL$CONSTRMAT), arr.ind = TRUE)
-  q <- MODEL$q
-  c(
-    unlist(lapply(seq_len(DATA$p), function(i) sprintf("tau[%d,%d]", i, seq_len(DATA$cat[i] - 1)))),
-    sprintf("lambda[%d,%d]", idx[, 1], idx[, 2]),
-    if (MODEL$CORRFLAG && q > 1) unlist(lapply(2:q, function(h) {
-      sprintf(if (corrflag_code(MODEL) == 2) "psi[%d,%d]" else "eta[%d,%d]", seq_len(h - 1), h)
-    })),
-    sprintf("logsd[%d]", which(is.na(MODEL$CONSTRLOGSD))),
-    sprintf("beta[%d,%d]", row(MODEL$REGMAT)[is.na(MODEL$REGMAT)], col(MODEL$REGMAT)[is.na(MODEL$REGMAT)]),
-    sprintf("theta[%d,%d]", row(MODEL$RESCOV)[is.na(MODEL$RESCOV) & upper.tri(MODEL$RESCOV)],
-            col(MODEL$RESCOV)[is.na(MODEL$RESCOV) & upper.tri(MODEL$RESCOV)])
-  )
-}
-
-corrflag_code <- function(MODEL) {
-  if (!MODEL$CORRFLAG) 0L else if (identical(MODEL$LATCOV, "direct")) 2L else 1L
-}
-
-sa_model <- function(MODEL) {
-  corrflag_code(MODEL) != 2 && !length(MODEL$REGMAT) && !length(MODEL$RESCOV)
-}
-
-lincon <- function(CONSTRAINTS, DIMS, DIRECT = FALSE) {
-  d <- DIMS$d
-  if (is.null(CONSTRAINTS) || nrow(CONSTRAINTS$A) == 0) return(list(K = diag(d), c = rep(0, d), free_idx = seq_len(d)))
-  A <- CONSTRAINTS$A
-  b <- CONSTRAINTS$b
-  if (ncol(A) != d) stop("CONSTRAINTS$A must have one column per parameter (", d, "), in the order of theta_names().")
-  block <- rep(1:6, c(DIMS$nthr, DIMS$nload, DIMS$ncorr, DIMS$nvar, DIMS$nreg, DIMS$nres))
-  for (r in seq_len(nrow(A))) {
-    blk <- unique(block[A[r, ] != 0])
-    if (any(blk == 3) && !DIRECT) stop("Constraints on the latent correlations require LATCOV = \"direct\".")
-    if (length(blk) > 1) stop("Each constraint must involve either thresholds, loadings, latent covariances, latent log standard deviations, regressions or residual covariances.")
-  }
-  piv <- integer(0)
-  for (j in seq_len(d)) {
-    r <- length(piv) + 1
-    if (r > nrow(A)) break
-    i <- r - 1 + which.max(abs(A[r:nrow(A), j]))
-    if (abs(A[i, j]) < 1e-10) next
-    A[c(r, i), ] <- A[c(i, r), ]
-    b[c(r, i)] <- b[c(i, r)]
-    b[r] <- b[r] / A[r, j]
-    A[r, ] <- A[r, ] / A[r, j]
-    b[-r] <- b[-r] - A[-r, j] * b[r]
-    A[-r, ] <- A[-r, , drop = FALSE] - outer(A[-r, j], A[r, ])
-    piv <- c(piv, j)
-  }
-  if (any(abs(b[-seq_along(piv)]) > 1e-8)) stop("CONSTRAINTS are inconsistent.")
-  free_idx <- setdiff(seq_len(d), piv)
-  K <- matrix(0, d, length(free_idx))
-  K[cbind(free_idx, seq_along(free_idx))] <- 1
-  cvec <- rep(0, d)
-  for (r in seq_along(piv)) {
-    K[piv[r], ] <- -A[r, free_idx]
-    cvec[piv[r]] <- b[r]
-  }
-  list(K = K, c = cvec, free_idx = free_idx)
 }
 
 #' Starting values for pairwise likelihood estimation
@@ -461,7 +174,7 @@ lincon <- function(CONSTRAINTS, DIMS, DIRECT = FALSE) {
 #' @param THETA Initialising vector. If `NULL`, the `standard` initialisation point is used.
 #' @param CONTROL Control object from [set_sa_init_control()], used when `METHOD = "SA"`.
 #'
-#' @return An object of class `plfa_init` to be passed to [fit_plFA()] via `INIT`, or to [cfa()]
+#' @return An object of class `latpl_init` to be passed to [fit_latpl()] via `INIT`, or to [cfa()]
 #'   via `estimator.args$init`.
 #'
 #' @export
@@ -469,10 +182,10 @@ set_init <- function(METHOD = c("standard", "SA"), THETA = NULL, CONTROL = set_s
   METHOD <- match.arg(METHOD)
   stopifnot(
     is.null(THETA) || (is.numeric(THETA) && is.vector(THETA) && all(is.finite(THETA))),
-    inherits(CONTROL, "plfa_sa_control")
+    inherits(CONTROL, "latpl_sa_control")
   )
   out <- list(METHOD = METHOD, THETA = THETA, CONTROL = CONTROL)
-  class(out) <- "plfa_init"
+  class(out) <- "latpl_init"
   out
 }
 
@@ -483,7 +196,7 @@ set_init <- function(METHOD = c("standard", "SA"), THETA = NULL, CONTROL = set_s
 #' @param STEPMAX Initial maximal step length of the trust region.
 #' @param MAXEVAL Maximum number of function evaluations.
 #'
-#' @return An object of class `plfa_ucminf_control` to be passed to [fit_plFA()] via `CONTROL`
+#' @return An object of class `latpl_ucminf_control` to be passed to [fit_latpl()] via `CONTROL`
 #'   when `METHOD = "ucminf"`, or to [cfa()] via `control`.
 #'
 #' @export
@@ -500,7 +213,7 @@ set_ucminf_control <- function(
     is.numeric(MAXEVAL), length(MAXEVAL) == 1, MAXEVAL >= 1
   )
   out <- list(GRTOL = GRTOL, XTOL = XTOL, STEPMAX = STEPMAX, MAXEVAL = as.integer(MAXEVAL))
-  class(out) <- "plfa_ucminf_control"
+  class(out) <- "latpl_ucminf_control"
   out
 }
 
@@ -522,7 +235,7 @@ set_ucminf_control <- function(
 #' @param TOL_END Tolerance ending the optimisation.
 #' @param SEED Seed of the pair sampling.
 #'
-#' @return An object of class `plfa_sa_control` to be passed to [fit_plFA()] via `CONTROL` when
+#' @return An object of class `latpl_sa_control` to be passed to [fit_latpl()] via `CONTROL` when
 #'   `METHOD = "SA"`, or to [cfa()] via `control`.
 #'
 #' @export
@@ -572,7 +285,7 @@ set_sa_control <- function(
     TOL_END = TOL_END,
     SEED = as.integer(SEED)
   )
-  class(out) <- "plfa_sa_control"
+  class(out) <- "latpl_sa_control"
   out
 }
 
@@ -582,7 +295,7 @@ set_sa_control <- function(
 #' @param STEP0 Initial step length. If `NULL`, it is set to \eqn{\sqrt{1/d}} at fit time, where
 #'   \eqn{d} is the number of free parameters.
 #'
-#' @return An object of class `plfa_sa_control` to be passed to [fit_plFA()] via `INIT_CONTROL`,
+#' @return An object of class `latpl_sa_control` to be passed to [fit_latpl()] via `INIT_CONTROL`,
 #'   or to [cfa()] via `estimator.args$init_control`, when the initialisation method is `"SA"`.
 #'
 #' @export

@@ -32,33 +32,28 @@ reference:
 
   - title: Original functions
     contents:
-      - fit_plFA
-      - print.PlFaFit
-      - getPar
-      - contains("compute")
+      - fit_latpl
+      - print.latpl_fit
+      - get_par
+      - get_par.latpl_fit
+      - compute_var
+      - compute_plrt
+      - compute_plrt.latpl_fit
 
   - title: Inputs and controls
     contents:
       - starts_with("set_")
       - theta_names
+      - theta2par
 
   - title: Generating data
     contents:
       - sim_data
-      -  contains("gen")
-
-  - title: Utilities
-    contents:
-      - build_constrMat
-      - contains("get")
-      - extract_par
+      - gen_loadings
+      - build_constr_mat
       - pairs_freq
 
-  - title: C++ exports
-    contents:
-      - contains("cpp")
-
-  - title: Data sets
+  - title: Data
     contents:
       - LSAT
       - bfi

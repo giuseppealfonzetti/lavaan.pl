@@ -1,21 +1,21 @@
 if (!at_home()) exit_file("Not run on CRAN")
 
 p <- 40; q <- 4; n <- 1000
-cm <- build_constrMat(p, q, "simple")
+cm <- build_constr_mat(p, q, "simple")
 S <- matrix(.3, q, q); diag(S) <- 1
 Y <- sim_data(n, gen_loadings(cm, SEED = 1, LB = .4, UB = .8), c(-1.2, 0, 1.2), S, SEED = 2)
-D <- set_plfa_data(Y)
-M <- set_plfa_model(cm)
+D <- set_latpl_data(Y)
+M <- set_latpl_model(cm)
 
-pml <- fit_plFA(D, M)
-sa <- fit_plFA(D, M, CONTROL = set_sa_control())
+pml <- fit_latpl(D, M)
+sa <- fit_latpl(D, M, CONTROL = set_sa_control())
 
 # SA estimates close to PML
 expect_equal(sa$stoFit$convergence$convergence_full, 1)
-expect_true(max(abs(getPar(sa, OPTION = "transformed") - getPar(pml, OPTION = "transformed"))) < 0.02)
+expect_true(max(abs(get_par(sa, OPTION = "transformed") - get_par(pml, OPTION = "transformed"))) < 0.02)
 
 # Noise term uses the number of averaged iterations
-vs <- computeVar(sa)
+vs <- compute_var(sa)
 it <- sa$stoFit$last_iter - sa$stoFit$burnt
 P <- sa$dims$pairs; ppi <- sa$control$PAIRS_PER_ITERATION
 a1 <- P * (P - ppi) / (ppi * (P - 1))
@@ -25,10 +25,10 @@ noise <- invH %*% (a1 * vs$H - a2 * vs$J) %*% invH / (n * it)
 eig <- eigen((noise + t(noise)) / 2, symmetric = TRUE)
 expect_equal(vs$noise, eig$vectors %*% (pmax(eig$values, 0) * t(eig$vectors)))
 expect_equal(vs$optimisation_noise, diag(vs$trJacob %*% vs$noise %*% t(vs$trJacob)))
-expect_null(computeVar(pml)$noise)
+expect_null(compute_var(pml)$noise)
 
 # Fixed budget: exactly MAXE epochs, averaging after BURNE
-fb <- fit_plFA(D, M, CONTROL = set_sa_control(CHECK_TOL = FALSE, BURNE = 2, MAXE = 4))
+fb <- fit_latpl(D, M, CONTROL = set_sa_control(CHECK_TOL = FALSE, BURNE = 2, MAXE = 4))
 maxtpe <- P %/% ppi
 expect_equal(fb$stoFit$last_iter, 4 * maxtpe + 1)
 expect_equal(fb$stoFit$burnt, 3 * maxtpe + 1)
@@ -55,7 +55,7 @@ for (h in 1:q) {
   idx <- which(is.na(cm[, h]))
   for (j in idx[-1]) Ym[runif(n) < c(.1, .25, .25, .5)[Y[, idx[1]] + 1], j] <- NA
 }
-Dm <- set_plfa_data(unname(Ym), MISSING = "available.cases")
-pml_m <- fit_plFA(Dm, M)
-sa_m <- fit_plFA(Dm, M, CONTROL = set_sa_control())
-expect_true(max(abs(getPar(sa_m, OPTION = "transformed") - getPar(pml_m, OPTION = "transformed"))) < 0.02)
+Dm <- set_latpl_data(unname(Ym), MISSING = "available.cases")
+pml_m <- fit_latpl(Dm, M)
+sa_m <- fit_latpl(Dm, M, CONTROL = set_sa_control())
+expect_true(max(abs(get_par(sa_m, OPTION = "transformed") - get_par(pml_m, OPTION = "transformed"))) < 0.02)
