@@ -25,6 +25,7 @@ model::Spec::Spec(const Rcpp::List MODEL, const Eigen::Ref<const Eigen::VectorXd
   rescov = Rcpp::as<Eigen::MatrixXd>(MODEL["RESCOV"]);
   corrflag = Rcpp::as<int>(MODEL["CORRFLAG"]);
   direct = corrflag == 2;
+  rob = Rcpp::as<double>(MODEL["ROBUST"]);
   p = constrmat.rows();
   q = constrmat.cols();
   ol = L.nthr;

@@ -26,6 +26,8 @@ namespace pairs{
 
   Eigen::MatrixXd rho_hessian(const model::Setup &ST, const Pair &PR);
 
+  double cell_cap(const model::Setup &ST, const Eigen::Ref<const Eigen::VectorXd> FREQ, const Pair &PR);
+
   void pair_contribution(const model::Setup &ST, const Eigen::Ref<const Eigen::VectorXd> FREQ, const int R,
                          const int ORDER, double &LL, Eigen::VectorXd &GRADIENT);
 

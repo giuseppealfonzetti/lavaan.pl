@@ -255,10 +255,16 @@ Eigen::MatrixXd pairs::rho_hessian(const model::Setup &ST, const Pair &PR){
   return hrho;
 }
 
+double pairs::cell_cap(const model::Setup &ST, const Eigen::Ref<const Eigen::VectorXd> FREQ, const Pair &PR){
+  if(!std::isfinite(ST.S.rob)) return std::numeric_limits<double>::infinity();
+  return (1 + ST.S.rob) * FREQ.segment(PR.off, PR.ck * PR.cl).sum();
+}
+
 void pairs::pair_contribution(const model::Setup &ST, const Eigen::Ref<const Eigen::VectorXd> FREQ, const int R,
                               const int ORDER, double &LL, Eigen::VectorXd &GRADIENT){
   const Pair PR(ST, R, ORDER == 1);
   const Grid G(ST.tau, PR.tk, PR.tl, PR.ck, PR.cl, PR.rho, ORDER);
+  const double cap = cell_cap(ST, FREQ, PR);
   Eigen::VectorXd g, gpair = Eigen::VectorXd::Zero(PR.mt + 1);
   Eigen::MatrixXd G2;
   for(int sk = 0; sk < PR.ck; sk++){
@@ -266,8 +272,9 @@ void pairs::pair_contribution(const model::Setup &ST, const Eigen::Ref<const Eig
       const double n = FREQ(PR.off + sk * PR.cl + sl);
       if(n == 0) continue;
       const double pe = G.cell(sk, sl, g, G2);
-      LL += n * std::log(pe);
-      if(ORDER == 1) gpair += n / pe * g;
+      const double ns = std::min(n, cap * pe);
+      LL += n * std::log(pe) + (ns < n ? ns - n - n * std::log(ns / n) : 0);
+      if(ORDER == 1) gpair += ns / pe * g;
     }
   }
   if(ORDER != 1) return;

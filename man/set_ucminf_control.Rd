@@ -4,7 +4,13 @@
 \alias{set_ucminf_control}
 \title{Control options for the ucminf optimiser}
 \usage{
-set_ucminf_control(GRTOL = 1e-06, XTOL = 1e-12, STEPMAX = 1, MAXEVAL = 500)
+set_ucminf_control(
+  GRTOL = 1e-06,
+  XTOL = 1e-12,
+  STEPMAX = 1,
+  MAXEVAL = 500,
+  ROBUST = Inf
+)
 }
 \arguments{
 \item{GRTOL}{Tolerance on the largest absolute gradient element.}
@@ -14,6 +20,10 @@ set_ucminf_control(GRTOL = 1e-06, XTOL = 1e-12, STEPMAX = 1, MAXEVAL = 500)
 \item{STEPMAX}{Initial maximal step length of the trust region.}
 
 \item{MAXEVAL}{Maximum number of function evaluations.}
+
+\item{ROBUST}{Tuning constant \eqn{c \ge 0} of the robust pairwise C-estimator (Welz et al.,
+2026): each bivariate cell frequency is capped at \eqn{1 + c} times its model-implied
+frequency. \code{Inf} gives pairwise maximum likelihood.}
 }
 \value{
 An object of class \code{latpl_ucminf_control} to be passed to \code{\link[=fit_latpl]{fit_latpl()}} via \code{CONTROL}

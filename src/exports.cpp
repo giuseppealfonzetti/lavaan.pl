@@ -39,6 +39,16 @@ Rcpp::List cpp_HJ(const Eigen::Map<Eigen::VectorXd> THETA, const Rcpp::List MODE
   Eigen::MatrixXd cases(S.d, y.rows());
   workers::Cases cw(S.L, y, score, sidx, uscore, uw, cases);
   RcppParallel::parallelFor(0, y.rows(), cw);
+  if(std::isfinite(S.rob)){
+    Eigen::VectorXd m = Eigen::VectorXd::Zero(S.d);
+    for(int r = 0; r < S.L.P; r++){
+      for(int c = 0; c < score[r].cols(); c++){
+        const double nc = freq(S.L.off[r] + c);
+        for(std::size_t a = 0; a < sidx[r].size(); a++) m(sidx[r][a]) += nc * score[r](a, c);
+      }
+    }
+    cases.colwise() -= m / n;
+  }
   const Eigen::MatrixXd sc = wm.size() > 0 ? Eigen::MatrixXd(cases * wm) : Eigen::MatrixXd(cases * wv.asDiagonal());
 
   return Rcpp::List::create(

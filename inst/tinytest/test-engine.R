@@ -103,3 +103,35 @@ expect_message(d_l <- set_latpl_data(Ym), "incomplete observations removed")
 expect_equal(d_l$n, sum(stats::complete.cases(Ym)))
 m <- rowSums(is.na(Ym))
 expect_equal(sum(D$ufreq), sum(m * (ncol(Ym) - m)))
+
+# Robust C-estimator: gradient and H against numerical derivatives with capped cells; with a
+# large tuning constant it reproduces the PML fit, with J centred; no PLRT nor available cases
+Yr <- Y
+set.seed(6)
+Yr[1:30, ] <- sample(0:3, 270, replace = TRUE)
+Yr[1:30, 1:3] <- 1 * (Yr[1:30, 1:3] >= 2)
+Dr <- set_latpl_data(Yr)
+Mr <- set_latpl_model(cm, REGMAT = B, CORRFLAG = FALSE, STDLV = FALSE)
+f <- suppressWarnings(fit_latpl(Dr, Mr, CONTROL = set_ucminf_control(MAXEVAL = 1, ROBUST = 0.3)))
+th <- c(unlist(lapply(Dr$cat - 1, function(m) seq(-0.8, 0.8, length.out = m))), seq(.4, .6, length.out = f$dims$nload),
+        rep(-.5, f$dims$nvar), c(.3, .2, .25))
+pl <- function(x, o) {
+  r <- lavaan.pl:::cpp_pl(x, f$engine$model, f$engine$data, o)
+  if (o) r$gradient else r$pl
+}
+expect_equal(pl(th, 1L), numDeriv::grad(function(x) pl(x, 0L), th), tolerance = 1e-6)
+hj <- lavaan.pl:::cpp_HJ(th, f$engine$model, f$engine$data)
+Hn <- -numDeriv::jacobian(function(x) pl(x, 1L), th) / Dr$n
+expect_equal(hj$H, (Hn + t(Hn)) / 2, tolerance = 1e-6)
+fp <- fit_latpl(Dr, Mr)
+fr <- fit_latpl(Dr, Mr, CONTROL = set_ucminf_control(ROBUST = 1e8))
+expect_equal(fr$theta, fp$theta, tolerance = 1e-6)
+sc <- sapply(seq_len(Dr$n), function(i) {
+  di <- fp$engine$data
+  di$FREQ <- pairs_freq(Dr$Y[i, , drop = FALSE], Dr$cat)
+  lavaan.pl:::cpp_pl(fp$theta, fp$engine$model, di, 1L)$gradient
+})
+sc <- sc - rowMeans(sc)
+expect_equal(lavaan.pl:::cpp_HJ(fp$theta, fr$engine$model, fr$engine$data)$J, tcrossprod(sc) / Dr$n)
+expect_error(fit_latpl(D, Mr, CONTROL = set_ucminf_control(ROBUST = 0.6)), "available.cases")
+expect_error(compute_plrt(fit_latpl(Dr, Mr, CONTROL = set_ucminf_control(ROBUST = 0.6))), "robust")

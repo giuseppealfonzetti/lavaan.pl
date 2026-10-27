@@ -15,6 +15,7 @@ namespace model{
     Layout L;
     int p, q, corrflag, nload, ncorr, nvar, nreg, nres, d, ol, oc, ov, ob, orc;
     bool direct;
+    double rob;
     Eigen::MatrixXd constrmat, regmat, rescov;
     Eigen::VectorXd constrlogsd;
     std::vector<std::vector<int>> lidx, lfac;

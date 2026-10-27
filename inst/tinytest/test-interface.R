@@ -9,7 +9,7 @@ local({
   expect_inherits(uc, "latpl_ucminf_control")
   expect_inherits(sa, "latpl_sa_control")
   expect_inherits(init, "latpl_sa_control")
-  expect_equal(unclass(uc), list(GRTOL = 1e-6, XTOL = 1e-12, STEPMAX = 1, MAXEVAL = 500L))
+  expect_equal(unclass(uc), list(GRTOL = 1e-6, XTOL = 1e-12, STEPMAX = 1, MAXEVAL = 500L, ROBUST = Inf))
   expect_identical(sa$EPOCHS, 20L)
   expect_identical(sa$GAIN, "auto")
   expect_identical(init$EPOCHS, 0L)

@@ -16,6 +16,7 @@ void workers::Hess::operator()(std::size_t BEGIN, std::size_t END){
     const pairs::Pair PR(st, r, true);
     const pairs::Grid G(st.tau, PR.tk, PR.tl, PR.ck, PR.cl, PR.rho, 2);
     const Eigen::MatrixXd hrho = pairs::rho_hessian(st, PR);
+    const double cap = pairs::cell_cap(st, freq, PR);
     const int mt = PR.mt, s = PR.s;
 
     std::vector<int> I;
@@ -32,13 +33,14 @@ void workers::Hess::operator()(std::size_t BEGIN, std::size_t END){
         const int c = sk * PR.cl + sl;
         const double n = freq(PR.off + c);
         const double pe = G.cell(sk, sl, g, G2);
+        const double ns = std::min(n, cap * pe);
         gl.head(mt) = g.head(mt) / pe;
         gl.tail(s) = g(mt) / pe * PR.grho;
-        sc.col(c) = gl;
+        sc.col(c) = ns < n ? Eigen::VectorXd::Zero(mt + s) : gl;
         if(n == 0) continue;
-        gsum += n * gl;
-        M += n * (g * g.transpose() / (pe * pe) - G2 / pe);
-        w += n * g(mt) / pe;
+        gsum += ns * gl;
+        M += (ns < n ? 0 : n) * g * g.transpose() / (pe * pe) - ns * G2 / pe;
+        w += ns * g(mt) / pe;
       }
     }
 

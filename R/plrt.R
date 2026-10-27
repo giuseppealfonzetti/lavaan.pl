@@ -22,6 +22,9 @@ compute_plrt <- function(OBJ, VARS = compute_var(OBJ), H1 = NULL) UseMethod('com
 #'   saturated and independence fits `saturated` and `independence`, and the timing `RTime`.
 #' @export
 compute_plrt.latpl_fit <- function(OBJ, VARS = compute_var(OBJ), H1 = NULL){
+  if (is.finite(OBJ$engine$model$ROBUST) || isTRUE(is.finite(H1$engine$model$ROBUST))) {
+    stop("Pairwise likelihood ratio tests are not available for the robust estimator.")
+  }
   start_time <- Sys.time()
   RcppParallel::setThreadOptions(numThreads = OBJ$cores)
   on.exit(RcppParallel::setThreadOptions(numThreads = 1))

@@ -42,7 +42,9 @@ fit_latpl <- function(
   dims$npar <- length(lc$free_idx)
   RcppParallel::setThreadOptions(numThreads = NCORES)
   on.exit(RcppParallel::setThreadOptions(numThreads = 1))
-  eng <- engine(DATA, MODEL)
+  robust <- if (METHOD == "ucminf") CONTROL$ROBUST else Inf
+  if (is.finite(robust) && DATA$missing == "available.cases") stop("The robust estimator does not support MISSING = \"available.cases\".")
+  eng <- engine(DATA, MODEL, robust)
   fit <- structure(list(data = DATA, model = MODEL, control = CONTROL, dims = dims, method = METHOD, lincon = lc,
                         engine = eng, version = as.character(utils::packageVersion("lavaan.pl")), cores = NCORES),
                    class = "latpl_fit")
@@ -95,8 +97,14 @@ fit_latpl <- function(
       g <- if (pd(theta)) -as.vector(crossprod(lc$K, cpp_pl(theta, eng$model, eng$data, 1L)$gradient)) / dims$n else 0 * x
       if (all(is.finite(g))) g else 0 * x
     }
-    fit$numFit <- ucminf::ucminf(fit$init[lc$free_idx], fn, gr, hessian = 0,
-                                 control = list(grtol = CONTROL$GRTOL, xtol = CONTROL$XTOL, stepmax = CONTROL$STEPMAX, maxeval = CONTROL$MAXEVAL))
+    run <- function(x) ucminf::ucminf(x, fn, gr, hessian = 0,
+                                      control = list(grtol = CONTROL$GRTOL, xtol = CONTROL$XTOL, stepmax = CONTROL$STEPMAX, maxeval = CONTROL$MAXEVAL))
+    fit$numFit <- run(fit$init[lc$free_idx])
+    if (is.finite(robust)) {
+      alt <- replace(fit$init, theta_block(MODEL, dims$nthr) == "tau", unlist(lapply(DATA$cat - 1, function(m) seq_len(m) - (m + 1) / 2)))
+      alt_fit <- run(alt[lc$free_idx])
+      if (alt_fit$value < fit$numFit$value) fit$numFit <- alt_fit
+    }
     fit$theta <- full(fit$numFit$par)
   } else {
     if (VERBOSE) message("- Optimising via pairwise stochastic approximation...")
@@ -115,7 +123,7 @@ fit_latpl <- function(
 # Lists passed to the C++ engine. The units are collapsed to their distinct response
 # patterns, with the square roots of the summed squared score weights WV or, with
 # clusters, the centred and scaled cluster aggregation matrix WM
-engine <- function(DATA, MODEL) {
+engine <- function(DATA, MODEL, ROBUST = Inf) {
   key <- do.call(paste, as.data.frame(DATA$Y))
   first <- !duplicated(key)
   id <- match(key, key[first])
@@ -128,7 +136,7 @@ engine <- function(DATA, MODEL) {
     WM <- (A - rowMeans(A)) * sqrt(G / (G - 1))
   }
   list(model = list(CONSTRMAT = MODEL$CONSTRMAT, CONSTRLOGSD = MODEL$CONSTRLOGSD, CORRFLAG = corrflag_code(MODEL),
-                    REGMAT = MODEL$REGMAT, RESCOV = MODEL$RESCOV),
+                    REGMAT = MODEL$REGMAT, RESCOV = MODEL$RESCOV, ROBUST = ROBUST),
        data = list(N = DATA$n, C_VEC = DATA$cat, FREQ = DATA$freq, UFREQ = DATA$ufreq, Y = DATA$Y[first, , drop = FALSE],
                    UW = DATA$uweights[first], WV = sqrt(as.numeric(rowsum(jw^2, id))), WM = WM))
 }

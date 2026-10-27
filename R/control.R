@@ -195,6 +195,9 @@ set_init <- function(METHOD = c("standard", "SA"), THETA = NULL, CONTROL = set_s
 #' @param XTOL Tolerance on the relative step length.
 #' @param STEPMAX Initial maximal step length of the trust region.
 #' @param MAXEVAL Maximum number of function evaluations.
+#' @param ROBUST Tuning constant \eqn{c \ge 0} of the robust pairwise C-estimator (Welz et al.,
+#'   2026): each bivariate cell frequency is capped at \eqn{1 + c} times its model-implied
+#'   frequency. `Inf` gives pairwise maximum likelihood.
 #'
 #' @return An object of class `latpl_ucminf_control` to be passed to [fit_latpl()] via `CONTROL`
 #'   when `METHOD = "ucminf"`, or to [cfa()] via `control`.
@@ -204,15 +207,17 @@ set_ucminf_control <- function(
   GRTOL = 1e-6,
   XTOL = 1e-12,
   STEPMAX = 1,
-  MAXEVAL = 500
+  MAXEVAL = 500,
+  ROBUST = Inf
 ) {
   stopifnot(
     is.numeric(GRTOL), length(GRTOL) == 1, GRTOL > 0,
     is.numeric(XTOL), length(XTOL) == 1, XTOL > 0,
     is.numeric(STEPMAX), length(STEPMAX) == 1, STEPMAX > 0,
-    is.numeric(MAXEVAL), length(MAXEVAL) == 1, MAXEVAL >= 1
+    is.numeric(MAXEVAL), length(MAXEVAL) == 1, MAXEVAL >= 1,
+    is.numeric(ROBUST), length(ROBUST) == 1, ROBUST >= 0
   )
-  out <- list(GRTOL = GRTOL, XTOL = XTOL, STEPMAX = STEPMAX, MAXEVAL = as.integer(MAXEVAL))
+  out <- list(GRTOL = GRTOL, XTOL = XTOL, STEPMAX = STEPMAX, MAXEVAL = as.integer(MAXEVAL), ROBUST = ROBUST)
   class(out) <- "latpl_ucminf_control"
   out
 }
