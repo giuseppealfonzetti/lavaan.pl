@@ -22,7 +22,7 @@ litedown::reactor(
 The `{lavaan.bingof}` package provides a set of LIGOF tests for CFA models with binary data.
 Models estimated using the `{lavaan.pl}` package are directly compatible.
 
-```{r setup, eval = FALSE}
+```r
 library(lavaan.pl)
 library(lavaan.bingof)
 ```

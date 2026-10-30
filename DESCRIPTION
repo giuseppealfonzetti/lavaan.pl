@@ -25,19 +25,16 @@ Imports:
     RcppParallel (>= 5.1.7),
     stats,
     ucminf
-Suggests: 
-    lavaan.bingof,
+Suggests:
     litedown,
     tinyplot,
     tinytest
-LinkingTo: 
+LinkingTo:
     Rcpp,
     RcppEigen,
     RcppParallel
-VignetteBuilder: 
+VignetteBuilder:
     litedown
-Remotes: 
-    haziqj/lavaan.bingof
 Encoding: UTF-8
 LazyData: true
 Roxygen: list(markdown = TRUE)
