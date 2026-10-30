@@ -52,8 +52,8 @@ namespace workers{
 
     Cases(const model::Layout &LAY, const Eigen::Ref<const Eigen::MatrixXd> Y, const std::vector<Eigen::MatrixXd> &SCORE,
           const std::vector<std::vector<int>> &SIDX, const Eigen::Ref<const Eigen::MatrixXd> USCORE,
-          const Eigen::Ref<const Eigen::VectorXd> UW, Eigen::MatrixXd &OUT):
-      L(LAY), y(Y), score(SCORE), sidx(SIDX), uscore(USCORE), uw(UW), out(OUT){}
+          const Eigen::Ref<const Eigen::VectorXd> UW, Eigen::MatrixXd &CASES):
+      L(LAY), y(Y), score(SCORE), sidx(SIDX), uscore(USCORE), uw(UW), out(CASES){}
     void operator()(std::size_t BEGIN, std::size_t END);
   };
 
