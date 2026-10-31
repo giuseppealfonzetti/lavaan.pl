@@ -20,7 +20,7 @@ Rcpp::List cpp_pl(const Eigen::Map<Eigen::VectorXd> THETA, const Rcpp::List MODE
 }
 
 // [[Rcpp::export]]
-Rcpp::List cpp_HJ(const Eigen::Map<Eigen::VectorXd> THETA, const Rcpp::List MODEL, const Rcpp::List DATA){
+Rcpp::List cpp_HJ(const Eigen::Map<Eigen::VectorXd> THETA, const Rcpp::List MODEL, const Rcpp::List DATA, const bool PAIRVAR = false){
   const model::Spec S(MODEL, get<Eigen::VectorXd>(DATA, "C_VEC"));
   const model::Setup ST(THETA, S);
   const Eigen::VectorXd freq = get<Eigen::VectorXd>(DATA, "FREQ"), ufreq = get<Eigen::VectorXd>(DATA, "UFREQ");
@@ -51,10 +51,29 @@ Rcpp::List cpp_HJ(const Eigen::Map<Eigen::VectorXd> THETA, const Rcpp::List MODE
   }
   const Eigen::MatrixXd sc = wm.size() > 0 ? Eigen::MatrixXd(cases * wm) : Eigen::MatrixXd(cases * wv.asDiagonal());
 
+  Eigen::MatrixXd pairvar;
+  if(PAIRVAR){
+    Eigen::VectorXd ug = Eigen::VectorXd::Zero(S.d);
+    Eigen::MatrixXd hd, ud;
+    double l0 = 0;
+    pairs::univariate_contribution(ST.tau, S.L, ufreq, 1, l0, ug, hd, ud);
+    ug /= S.p - 1;
+    pairvar = Eigen::MatrixXd::Zero(S.d, S.d);
+    for(int r = 0; r < S.L.P; r++){
+      const std::vector<int> &I = sidx[r];
+      Eigen::VectorXd g = score[r] * freq.segment(S.L.off[r], score[r].cols());
+      for(int a = 0; a < S.L.cat(S.L.pk[r]) + S.L.cat(S.L.pl[r]) - 2; a++) g(a) += ug(I[a]);
+      for(std::size_t a = 0; a < I.size(); a++){
+        for(std::size_t b = 0; b < I.size(); b++) pairvar(I[a], I[b]) += g(a) * g(b);
+      }
+    }
+  }
+
   return Rcpp::List::create(
     Rcpp::Named("H") = hw.hessian / n,
     Rcpp::Named("J") = Eigen::MatrixXd(sc * sc.transpose() / n),
-    Rcpp::Named("gradient") = hw.gradient
+    Rcpp::Named("gradient") = hw.gradient,
+    Rcpp::Named("pairvar") = pairvar
   );
 }
 

@@ -63,12 +63,15 @@ expect_equal(tail(sa$stoFit$path$phase, 1), 3)
 vs <- compute_var(sa)
 P <- sa$dims$pairs
 ppi <- sa$control$PAIRS_PER_ITERATION
-a1 <- P * (P - ppi) / (ppi * (P - 1))
-a2 <- (P - ppi) / (ppi * (P - 1))
+hj <- lavaan.pl:::cpp_HJ(sa$theta, sa$engine$model, sa$engine$data, TRUE)
+V <- (P - ppi) /
+  (ppi * (P - 1)) *
+  (P * hj$pairvar / n^2 - tcrossprod(hj$gradient / n))
 invH <- solve(vs$H)
-noise <- invH %*% (a1 * vs$H - a2 * vs$J) %*% invH / (n * sa$stoFit$averaged)
-eig <- eigen((noise + t(noise)) / 2, symmetric = TRUE)
-expect_equal(vs$noise, eig$vectors %*% (pmax(eig$values, 0) * t(eig$vectors)))
+expect_equal(vs$noise, invH %*% V %*% invH / sa$stoFit$averaged)
+expect_true(all(
+  eigen(vs$noise, symmetric = TRUE, only.values = TRUE)$values > -1e-12
+))
 expect_equal(
   vs$optimisation_noise,
   diag(vs$trJacob %*% vs$noise %*% t(vs$trJacob))

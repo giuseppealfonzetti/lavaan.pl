@@ -90,6 +90,29 @@ for (form in c("orthogonal", "lkj", "direct")) {
         ),
         tolerance = 1e-6
       )
+      k <- unlist(lapply(2:D$p, function(k) rep(k, k - 1)))
+      l <- unlist(lapply(2:D$p, function(k) seq_len(k - 1)))
+      off <- cumsum(c(0, D$cat[k] * D$cat[l]))
+      uoff <- cumsum(c(0, D$cat))
+      grad <- function(freq, ufreq) {
+        di <- f$engine$data
+        di$FREQ <- freq
+        di$UFREQ <- ufreq
+        lavaan.pl:::cpp_pl(th, f$engine$model, di, 1L)$gradient
+      }
+      u <- sapply(seq_len(D$p), function(j) {
+        cells <- uoff[j] + seq_len(D$cat[j])
+        grad(0 * D$freq, replace(0 * D$ufreq, cells, D$ufreq[cells]))
+      })
+      gr <- sapply(seq_along(k), function(r) {
+        cells <- off[r] + seq_len(off[r + 1] - off[r])
+        grad(replace(0 * D$freq, cells, D$freq[cells]), 0 * D$ufreq) +
+          (u[, k[r]] + u[, l[r]]) / (D$p - 1)
+      })
+      expect_equal(
+        lavaan.pl:::cpp_HJ(th, f$engine$model, f$engine$data, TRUE)$pairvar,
+        tcrossprod(gr)
+      )
     }
   }
 }
@@ -179,14 +202,26 @@ Yr[1:30, ] <- sample(0:3, 270, replace = TRUE)
 Yr[1:30, 1:3] <- 1 * (Yr[1:30, 1:3] >= 2)
 Dr <- set_latpl_data(Yr)
 Mr <- set_latpl_model(cm, REGMAT = B, CORRFLAG = FALSE, STDLV = FALSE)
-f <- suppressWarnings(fit_latpl(Dr, Mr, CONTROL = set_ucminf_control(MAXEVAL = 1, ROBUST = 0.3)))
-th <- c(unlist(lapply(Dr$cat - 1, function(m) seq(-0.8, 0.8, length.out = m))), seq(.4, .6, length.out = f$dims$nload),
-        rep(-.5, f$dims$nvar), c(.3, .2, .25))
+f <- suppressWarnings(fit_latpl(
+  Dr,
+  Mr,
+  CONTROL = set_ucminf_control(MAXEVAL = 1, ROBUST = 0.3)
+))
+th <- c(
+  unlist(lapply(Dr$cat - 1, function(m) seq(-0.8, 0.8, length.out = m))),
+  seq(.4, .6, length.out = f$dims$nload),
+  rep(-.5, f$dims$nvar),
+  c(.3, .2, .25)
+)
 pl <- function(x, o) {
   r <- lavaan.pl:::cpp_pl(x, f$engine$model, f$engine$data, o)
   if (o) r$gradient else r$pl
 }
-expect_equal(pl(th, 1L), numDeriv::grad(function(x) pl(x, 0L), th), tolerance = 1e-6)
+expect_equal(
+  pl(th, 1L),
+  numDeriv::grad(function(x) pl(x, 0L), th),
+  tolerance = 1e-6
+)
 hj <- lavaan.pl:::cpp_HJ(th, f$engine$model, f$engine$data)
 Hn <- -numDeriv::jacobian(function(x) pl(x, 1L), th) / Dr$n
 expect_equal(hj$H, (Hn + t(Hn)) / 2, tolerance = 1e-6)
@@ -199,6 +234,15 @@ sc <- sapply(seq_len(Dr$n), function(i) {
   lavaan.pl:::cpp_pl(fp$theta, fp$engine$model, di, 1L)$gradient
 })
 sc <- sc - rowMeans(sc)
-expect_equal(lavaan.pl:::cpp_HJ(fp$theta, fr$engine$model, fr$engine$data)$J, tcrossprod(sc) / Dr$n)
-expect_error(fit_latpl(D, Mr, CONTROL = set_ucminf_control(ROBUST = 0.6)), "available.cases")
-expect_error(compute_plrt(fit_latpl(Dr, Mr, CONTROL = set_ucminf_control(ROBUST = 0.6))), "robust")
+expect_equal(
+  lavaan.pl:::cpp_HJ(fp$theta, fr$engine$model, fr$engine$data)$J,
+  tcrossprod(sc) / Dr$n
+)
+expect_error(
+  fit_latpl(D, Mr, CONTROL = set_ucminf_control(ROBUST = 0.6)),
+  "available.cases"
+)
+expect_error(
+  compute_plrt(fit_latpl(Dr, Mr, CONTROL = set_ucminf_control(ROBUST = 0.6))),
+  "robust"
+)

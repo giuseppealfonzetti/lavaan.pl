@@ -26,15 +26,16 @@ BEGIN_RCPP
 END_RCPP
 }
 // cpp_HJ
-Rcpp::List cpp_HJ(const Eigen::Map<Eigen::VectorXd> THETA, const Rcpp::List MODEL, const Rcpp::List DATA);
-RcppExport SEXP _lavaan_pl_cpp_HJ(SEXP THETASEXP, SEXP MODELSEXP, SEXP DATASEXP) {
+Rcpp::List cpp_HJ(const Eigen::Map<Eigen::VectorXd> THETA, const Rcpp::List MODEL, const Rcpp::List DATA, const bool PAIRVAR);
+RcppExport SEXP _lavaan_pl_cpp_HJ(SEXP THETASEXP, SEXP MODELSEXP, SEXP DATASEXP, SEXP PAIRVARSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< const Eigen::Map<Eigen::VectorXd> >::type THETA(THETASEXP);
     Rcpp::traits::input_parameter< const Rcpp::List >::type MODEL(MODELSEXP);
     Rcpp::traits::input_parameter< const Rcpp::List >::type DATA(DATASEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_HJ(THETA, MODEL, DATA));
+    Rcpp::traits::input_parameter< const bool >::type PAIRVAR(PAIRVARSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_HJ(THETA, MODEL, DATA, PAIRVAR));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -129,7 +130,7 @@ END_RCPP
 
 static const R_CallMethodDef CallEntries[] = {
     {"_lavaan_pl_cpp_pl", (DL_FUNC) &_lavaan_pl_cpp_pl, 4},
-    {"_lavaan_pl_cpp_HJ", (DL_FUNC) &_lavaan_pl_cpp_HJ, 3},
+    {"_lavaan_pl_cpp_HJ", (DL_FUNC) &_lavaan_pl_cpp_HJ, 4},
     {"_lavaan_pl_cpp_rho", (DL_FUNC) &_lavaan_pl_cpp_rho, 3},
     {"_lavaan_pl_cpp_saturated", (DL_FUNC) &_lavaan_pl_cpp_saturated, 5},
     {"_lavaan_pl_cpp_saturated_traces", (DL_FUNC) &_lavaan_pl_cpp_saturated_traces, 8},
