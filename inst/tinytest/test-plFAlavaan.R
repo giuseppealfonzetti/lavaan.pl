@@ -1,6 +1,5 @@
 # [binary] cfa function works
 local({
-
   # Generate some data
   set.seed(456)
   mod <- "
@@ -44,7 +43,6 @@ local({
 
 # [ordinal] cfa function works
 local({
-
   # Generate some data
   set.seed(456)
   mod <- "
@@ -110,7 +108,13 @@ local({
     O =~ O1 + O2 + O3 + O4 + O5
   "
 
-  fit <- suppressWarnings(cfa(mod, bfi, std.lv = TRUE, control = set_sa_control(), se = "none"))
+  fit <- suppressWarnings(cfa(
+    mod,
+    bfi,
+    std.lv = TRUE,
+    control = set_sa_control(),
+    se = "none"
+  ))
 
   expect_inherits(fit, "lavaan")
   expect_identical(as.character(class(fit)), "lavaan")
@@ -129,7 +133,6 @@ local({
   expect_equal(Lambda[1, 1], -0.4)
   expect_equal(Lambda[6, 2], 0.6)
   expect_equal(Lambda[3, 1], 0.5 * Lambda[4, 1] + 0.25 * Lambda[5, 1])
-
 })
 
 # Against lavaan::cfa
@@ -142,13 +145,11 @@ local({
 
   expect_equal(coef(fit1), coef(fit3), tolerance = 1e-2)
   expect_equal(coef(fit3), coef(fit4), tolerance = 1e-3)
-
 })
 
 
 # Hinv is the same
 local({
-
   information_matrix <- function(fit, type) {
     lavargs <- list(
       lavmodel = fit@Model,
@@ -158,13 +159,21 @@ local({
       lavcache = fit@Cache
     )
 
-    if (type == "observed")
-      out <- do.call("lav_model_info_observed", lavargs,
-                     envir = asNamespace("lavaan"))
-    else if (type == "expected")
-      out <- do.call("lav_model_info_expected", lavargs,
-                     envir = asNamespace("lavaan"))
-    else stop("Invalid type")
+    if (type == "observed") {
+      out <- do.call(
+        "lav_model_info_observed",
+        lavargs,
+        envir = asNamespace("lavaan")
+      )
+    } else if (type == "expected") {
+      out <- do.call(
+        "lav_model_info_expected",
+        lavargs,
+        envir = asNamespace("lavaan")
+      )
+    } else {
+      stop("Invalid type")
+    }
     return(out)
   }
 
@@ -175,8 +184,12 @@ local({
   Hinv1 <- attr(fit@vcov$vcov, "E.inv")
 
   # Getting Hinv via numDeriv
-  fit <- cfa(mod, LSAT, std.lv = TRUE,
-             estimator.args = list(computevar_numderiv = TRUE))
+  fit <- cfa(
+    mod,
+    LSAT,
+    std.lv = TRUE,
+    estimator.args = list(computevar_numderiv = TRUE)
+  )
   Hinv2 <- attr(fit@vcov$vcov, "E.inv")
 
   # Gtting Hinv from lavaan, which also uses numDeriv
@@ -184,7 +197,6 @@ local({
 
   expect_equal(Hinv1, Hinv2, tolerance = 1e-5)
   expect_equal(Hinv1, Hinv3, tolerance = 1e-5)
-
 })
 
 # vcov is the same
