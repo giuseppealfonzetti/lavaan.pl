@@ -56,8 +56,9 @@ Rcpp::List cpp_sa(
       Psi = ST.sd.asDiagonal() * ST.U.transpose() * ST.U * ST.sd.asDiagonal();
     }
     const Eigen::MatrixXd LP = ST.Lt * Psi;
-    const Eigen::VectorXd v = LP.cwiseProduct(ST.Lt).rowwise().sum();
-    auto ok = [&](const int k, const int l){ return std::abs(LP.row(k).dot(ST.Lt.row(l)) + ST.rc(k, l)) < 1; };
+    const Eigen::VectorXd sc = S.plain ? Eigen::VectorXd::Ones(S.p) : ST.s;
+    const Eigen::VectorXd v = LP.cwiseProduct(ST.Lt).rowwise().sum().cwiseProduct(sc.cwiseAbs2());
+    auto ok = [&](const int k, const int l){ return std::abs(sc(k) * sc(l) * (LP.row(k).dot(ST.Lt.row(l)) + ST.rc(k, l))) < 1; };
     for(const int r : rpairs) if(!ok(S.L.pk[r], S.L.pl[r])) return false;
     if(v.maxCoeff() < 1) return true;
     for(int k = 0; k < S.p; k++){
@@ -93,7 +94,7 @@ Rcpp::List cpp_sa(
         itemw(S.L.pl[r]) += 1;
       }
       itemw *= static_cast<double>(P) / (nu * (S.p - 1));
-      pairs::univariate_contribution(ST.tau, S.L, ufreq, 1, ll, grad, hd, ud, itemw);
+      pairs::univariate(ST, ufreq, 1, ll, grad, hd, ud, itemw);
     }
     if(!std::isfinite(ll) || !grad.allFinite()) return false;
     G = constrained ? Eigen::VectorXd(-Ks.transpose() * grad / n) : Eigen::VectorXd(-grad / n);
@@ -107,7 +108,7 @@ Rcpp::List cpp_sa(
     RcppParallel::parallelReduce(0, P, w);
     Eigen::VectorXd gd;
     Eigen::MatrixXd hd, ud;
-    pairs::univariate_contribution(ST.tau, S.L, VALUFREQ, 0, w.ll, gd, hd, ud);
+    pairs::univariate(ST, VALUFREQ, 0, w.ll, gd, hd, ud);
     return std::isfinite(w.ll) ? -w.ll / n : R_PosInf;
   };
 
@@ -119,7 +120,7 @@ Rcpp::List cpp_sa(
     RcppParallel::parallelReduce(0, P, hw);
     double ll = 0;
     Eigen::MatrixXd ud;
-    pairs::univariate_contribution(ST.tau, S.L, ufreq, 2, ll, hw.gradient, hw.hessian, ud);
+    pairs::univariate(ST, ufreq, 2, ll, hw.gradient, hw.hessian, ud);
     Eigen::MatrixXd H = hw.hessian / n;
     if(constrained) H = Ks.transpose() * H * Ks;
     if(!H.allFinite()) return false;

@@ -95,7 +95,8 @@ RC <- matrix(0, p, p)
 RC[1, 2] <- RC[2, 1] <- NA
 for (Ms in list(
   set_latpl_model(cm, LATCOV = "direct"),
-  set_latpl_model(cm, CORRFLAG = FALSE, REGMAT = B, RESCOV = RC)
+  set_latpl_model(cm, CORRFLAG = FALSE, REGMAT = B, RESCOV = RC),
+  set_latpl_model(cm, PARAMETERIZATION = "theta")
 )) {
   expect_true(
     dist(fit_latpl(D, Ms, CONTROL = set_sa_control()), fit_latpl(D, Ms)) < 1

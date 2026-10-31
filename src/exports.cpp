@@ -15,7 +15,7 @@ Rcpp::List cpp_pl(const Eigen::Map<Eigen::VectorXd> THETA, const Rcpp::List MODE
   workers::PL w(ST, freq, rs, ORDER);
   RcppParallel::parallelReduce(0, rs.size(), w);
   Eigen::MatrixXd hd, ud;
-  pairs::univariate_contribution(ST.tau, S.L, ufreq, ORDER, w.ll, w.gradient, hd, ud);
+  pairs::univariate(ST, ufreq, ORDER, w.ll, w.gradient, hd, ud);
   return Rcpp::List::create(Rcpp::Named("pl") = w.ll, Rcpp::Named("gradient") = w.gradient);
 }
 
@@ -31,8 +31,8 @@ Rcpp::List cpp_HJ(const Eigen::Map<Eigen::VectorXd> THETA, const Rcpp::List MODE
   workers::Hess hw(ST, freq, score, sidx);
   RcppParallel::parallelReduce(0, S.L.P, hw);
   double ll = 0;
-  Eigen::MatrixXd uscore = Eigen::MatrixXd::Zero(S.L.nthr, ufreq.size());
-  pairs::univariate_contribution(ST.tau, S.L, ufreq, 2, ll, hw.gradient, hw.hessian, uscore);
+  Eigen::MatrixXd uscore = Eigen::MatrixXd::Zero(S.d, ufreq.size());
+  pairs::univariate(ST, ufreq, 2, ll, hw.gradient, hw.hessian, uscore);
 
   const Eigen::MatrixXd y = get<Eigen::MatrixXd>(DATA, "Y"), wm = get<Eigen::MatrixXd>(DATA, "WM");
   const Eigen::VectorXd uw = get<Eigen::VectorXd>(DATA, "UW"), wv = get<Eigen::VectorXd>(DATA, "WV");
@@ -53,13 +53,23 @@ Rcpp::List cpp_rho(const Eigen::Map<Eigen::VectorXd> THETA, const Rcpp::List MOD
   const model::Spec S(MODEL, get<Eigen::VectorXd>(DATA, "C_VEC"));
   const model::Setup ST(THETA, S);
   Eigen::VectorXd rho(S.L.P);
-  Eigen::MatrixXd jac = Eigen::MatrixXd::Zero(S.L.P, S.d);
+  Eigen::MatrixXd jac = Eigen::MatrixXd::Zero(S.L.P, S.d), tjac = Eigen::MatrixXd::Zero(S.L.nthr, S.d);
+  auto put = [](const pairs::Pair &PR, const int ROW, const int E, Eigen::MatrixXd &OUT){
+    const std::vector<int> I = PR.local();
+    const Eigen::VectorXd g = PR.lift(Eigen::VectorXd::Unit(PR.mt + 1, E));
+    for(std::size_t a = 0; a < I.size(); a++) OUT(ROW, I[a]) += g(a);
+  };
   for(int r = 0; r < S.L.P; r++){
     const pairs::Pair PR(ST, r, true);
     rho(r) = PR.rho;
-    for(int a = 0; a < PR.s; a++) jac(r, PR.idx[a]) = PR.grho(a);
+    put(PR, r, PR.mt, jac);
   }
-  return Rcpp::List::create(Rcpp::Named("rho") = rho, Rcpp::Named("jacobian") = jac);
+  for(int k = 0; k < S.p; k++){
+    const pairs::Pair PR(ST, -1, true, k);
+    for(int a = 0; a < PR.ck - 1; a++) put(PR, S.L.tk(k) + a, a, tjac);
+  }
+  return Rcpp::List::create(Rcpp::Named("rho") = rho, Rcpp::Named("jacobian") = jac, Rcpp::Named("tau") = ST.taus,
+                            Rcpp::Named("tau_jacobian") = tjac);
 }
 
 // [[Rcpp::export]]

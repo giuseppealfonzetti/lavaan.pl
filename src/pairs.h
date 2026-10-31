@@ -16,15 +16,20 @@ namespace pairs{
   };
 
   struct Pair{
-    int r, k, l, ck, cl, tk, tl, mt, off, nk, lo, mb, s;
-    double rho;
+    int r, k, l, ck, cl, tk, tl, mt, off, nk, lo, mb, s, s0, pa, psk, psl;
+    bool plain;
+    double rho, c;
     std::vector<int> idx;
-    Eigen::MatrixXd Dk, Dl;
-    Eigen::VectorXd x, y, X, Y, grho;
-    Pair(const model::Setup &ST, const int R, const bool GRAD);
+    Eigen::MatrixXd Dk, Dl, Ju;
+    Eigen::VectorXd x, y, X, Y, grho, gc, gmk, gml, gvk, gvl, gsk, gsl;
+    Pair(const model::Setup &ST, const int R, const bool GRAD, const int K = -1);
+    std::vector<int> local() const;
+    Eigen::VectorXd lift(const Eigen::Ref<const Eigen::VectorXd> V) const;
   };
 
   Eigen::MatrixXd rho_hessian(const model::Setup &ST, const Pair &PR);
+
+  Eigen::MatrixXd curvature(const model::Setup &ST, const Pair &PR, const Eigen::Ref<const Eigen::VectorXd> GU);
 
   void pair_contribution(const model::Setup &ST, const Eigen::Ref<const Eigen::VectorXd> FREQ, const int R,
                          const int ORDER, double &LL, Eigen::VectorXd &GRADIENT);
@@ -33,6 +38,10 @@ namespace pairs{
                                const Eigen::Ref<const Eigen::VectorXd> UFREQ, const int ORDER, double &LL,
                                Eigen::VectorXd &GRADIENT, Eigen::MatrixXd &HESSIAN, Eigen::MatrixXd &USCORE,
                                const Eigen::Ref<const Eigen::VectorXd> ITEMW = Eigen::VectorXd());
+
+  void univariate(const model::Setup &ST, const Eigen::Ref<const Eigen::VectorXd> UFREQ, const int ORDER, double &LL,
+                  Eigen::VectorXd &GRADIENT, Eigen::MatrixXd &HESSIAN, Eigen::MatrixXd &USCORE,
+                  const Eigen::Ref<const Eigen::VectorXd> ITEMW = Eigen::VectorXd());
 
 }
 

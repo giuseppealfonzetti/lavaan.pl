@@ -90,16 +90,41 @@ double pairs::Grid::cell(const int SK, const int SL, Eigen::VectorXd &G1, Eigen:
   return pe;
 }
 
-pairs::Pair::Pair(const model::Setup &ST, const int R, const bool GRAD): r(R){
+static Eigen::VectorXd cov_grad(const model::Setup &ST, const int LO, const Eigen::MatrixXd &DA, const Eigen::MatrixXd &DB,
+                                const Eigen::VectorXd &XA, const Eigen::VectorXd &XB, const Eigen::VectorXd &UA,
+                                const Eigen::VectorXd &UB){
   const model::Spec &S = ST.S;
-  k = S.L.pk[r];
-  l = S.L.pl[r];
+  Eigen::VectorXd g;
+  if(S.direct){
+    g = DA.transpose() * (ST.Sig * XB) + DB.transpose() * (ST.Sig * XA);
+    for(int a = 0; a < S.ncorr; a++) g(LO + a) = XA(S.ra[a]) * XB(S.ca[a]) + XA(S.ca[a]) * XB(S.ra[a]);
+    for(int v = 0; v < S.nvar; v++){
+      const int h = S.sfree[v];
+      g(LO + S.ncorr + v) = 2 * ST.sd(h) * ST.sd(h) * XA(h) * XB(h);
+    }
+  }else{
+    g = DA.transpose() * ST.sd.cwiseProduct(ST.U.transpose() * UB) + DB.transpose() * ST.sd.cwiseProduct(ST.U.transpose() * UA);
+    for(int a = 0; a < S.ncorr; a++) g(LO + a) = XA(S.ca[a]) * ST.alpha.col(a).dot(UB) + XB(S.ca[a]) * ST.alpha.col(a).dot(UA);
+    for(int v = 0; v < S.nvar; v++){
+      const int h = S.sfree[v];
+      g(LO + S.ncorr + v) = XA(h) * ST.U.col(h).dot(UB) + XB(h) * ST.U.col(h).dot(UA);
+    }
+  }
+  return g;
+}
+
+pairs::Pair::Pair(const model::Setup &ST, const int R, const bool GRAD, const int K): r(R){
+  const model::Spec &S = ST.S;
+  plain = S.plain;
+  k = K >= 0 ? K : S.L.pk[r];
+  l = K >= 0 ? K : S.L.pl[r];
   ck = S.L.cat(k);
   cl = S.L.cat(l);
   tk = S.L.tk(k);
   tl = S.L.tk(l);
   mt = ck + cl - 2;
-  off = S.L.off[r];
+  off = K >= 0 ? 0 : S.L.off[r];
+  const int ir = K >= 0 ? -1 : S.resid(k, l);
 
   if(S.direct){
     x = ST.Lt.row(k).transpose();
@@ -112,13 +137,15 @@ pairs::Pair::Pair(const model::Setup &ST, const int R, const bool GRAD): r(R){
     Y = ST.U * y;
     rho = X.dot(Y) + ST.rc(k, l);
   }
+  c = rho;
+  if(!plain) rho *= ST.s(k) * ST.s(l);
   if(!GRAD) return;
 
   nk = S.lidx[k].size();
-  const int nl = S.lidx[l].size(), ir = S.resid(k, l);
+  const int nl = S.lidx[l].size();
   lo = nk + nl;
   mb = lo + S.ncorr + S.nvar;
-  s = mb + S.nreg + (ir >= 0);
+  s = s0 = mb + S.nreg + (ir >= 0);
   idx = S.lidx[k];
   idx.insert(idx.end(), S.lidx[l].begin(), S.lidx[l].end());
   for(int a = S.oc; a < S.ob + S.nreg; a++) idx.push_back(a);
@@ -130,23 +157,77 @@ pairs::Pair::Pair(const model::Setup &ST, const int R, const bool GRAD): r(R){
   Dl.middleCols(nk, nl) = ST.J[l].leftCols(nl);
   Dk.middleCols(mb, S.nreg) = ST.J[k].rightCols(S.nreg);
   Dl.middleCols(mb, S.nreg) = ST.J[l].rightCols(S.nreg);
-
-  if(S.direct){
-    grho = Dk.transpose() * (ST.Sig * y) + Dl.transpose() * (ST.Sig * x);
-    for(int a = 0; a < S.ncorr; a++) grho(lo + a) = x(S.ra[a]) * y(S.ca[a]) + x(S.ca[a]) * y(S.ra[a]);
-    for(int v = 0; v < S.nvar; v++){
-      const int h = S.sfree[v];
-      grho(lo + S.ncorr + v) = 2 * ST.sd(h) * ST.sd(h) * x(h) * y(h);
-    }
-  }else{
-    grho = Dk.transpose() * ST.sd.cwiseProduct(ST.U.transpose() * Y) + Dl.transpose() * ST.sd.cwiseProduct(ST.U.transpose() * X);
-    for(int a = 0; a < S.ncorr; a++) grho(lo + a) = x(S.ca[a]) * ST.alpha.col(a).dot(Y) + y(S.ca[a]) * ST.alpha.col(a).dot(X);
-    for(int v = 0; v < S.nvar; v++){
-      const int h = S.sfree[v];
-      grho(lo + S.ncorr + v) = x(h) * ST.U.col(h).dot(Y) + y(h) * ST.U.col(h).dot(X);
-    }
-  }
+  grho = cov_grad(ST, lo, Dk, Dl, x, y, X, Y);
   if(ir >= 0) grho(s - 1) = 1;
+  if(plain) return;
+
+  auto add = [&](const int i){
+    if(i < 0) return -1;
+    idx.push_back(i);
+    return s++;
+  };
+  const int pnk = add(S.nidx[k]), pnl = add(S.nidx[l]);
+  pa = s;
+  for(int a = 0; a < S.nmean; a++) add(S.oa + a);
+  psk = add(S.scidx[k]);
+  psl = add(S.scidx[l]);
+
+  auto pad = [&](const Eigen::VectorXd &V){
+    Eigen::VectorXd o = Eigen::VectorXd::Zero(s);
+    o.head(V.size()) = V;
+    return o;
+  };
+  gc = pad(grho);
+  gmk = pad(Dk.transpose() * ST.kappa);
+  gml = pad(Dl.transpose() * ST.kappa);
+  if(pnk >= 0) gmk(pnk) = 1;
+  if(pnl >= 0) gml(pnl) = 1;
+  for(int a = 0; a < S.nmean; a++){
+    gmk(pa + a) = ST.Lt(k, S.mfree[a]);
+    gml(pa + a) = ST.Lt(l, S.mfree[a]);
+  }
+  gsk = gsl = Eigen::VectorXd::Zero(s);
+  if(S.thetapar){
+    gvk = pad(cov_grad(ST, lo, Dk, Dk, x, x, X, X));
+    gvl = pad(cov_grad(ST, lo, Dl, Dl, y, y, Y, Y));
+    gsk = gvk;
+    gsl = gvl;
+    if(psk >= 0) gsk(psk) += 2 * ST.th(k);
+    if(psl >= 0) gsl(psl) += 2 * ST.th(l);
+    gsk *= -0.5 * std::pow(ST.s(k), 3);
+    gsl *= -0.5 * std::pow(ST.s(l), 3);
+  }else{
+    if(psk >= 0) gsk(psk) = ST.s(k);
+    if(psl >= 0) gsl(psl) = ST.s(l);
+  }
+
+  const double sk = ST.s(k), sl = ST.s(l);
+  Ju = Eigen::MatrixXd::Zero(mt + 1, mt + s);
+  for(int a = 0; a < ck - 1; a++){
+    Ju(a, a) = sk;
+    Ju.row(a).tail(s) = (-sk * gmk + (ST.tau(tk + a) - ST.mu(k)) * gsk).transpose();
+  }
+  for(int b = 0; b < cl - 1; b++){
+    Ju(ck - 1 + b, ck - 1 + b) = sl;
+    Ju.row(ck - 1 + b).tail(s) = (-sl * gml + (ST.tau(tl + b) - ST.mu(l)) * gsl).transpose();
+  }
+  Ju.row(mt).tail(s) = (sl * c * gsk + sk * c * gsl + sk * sl * gc).transpose();
+}
+
+std::vector<int> pairs::Pair::local() const{
+  std::vector<int> I;
+  for(int a = 0; a < ck - 1; a++) I.push_back(tk + a);
+  for(int a = 0; a < cl - 1; a++) I.push_back(tl + a);
+  I.insert(I.end(), idx.begin(), idx.end());
+  return I;
+}
+
+Eigen::VectorXd pairs::Pair::lift(const Eigen::Ref<const Eigen::VectorXd> V) const{
+  if(!plain) return Ju.transpose() * V;
+  Eigen::VectorXd o(mt + s);
+  o.head(mt) = V.head(mt);
+  o.tail(s) = V(mt) * grho;
+  return o;
 }
 
 static void regression_curvature(const model::Setup &ST, const pairs::Pair &PR, const int K,
@@ -165,11 +246,12 @@ static void regression_curvature(const model::Setup &ST, const pairs::Pair &PR, 
   }
 }
 
-Eigen::MatrixXd pairs::rho_hessian(const model::Setup &ST, const Pair &PR){
+static Eigen::MatrixXd cov_hessian(const model::Setup &ST, const pairs::Pair &PR, const Eigen::MatrixXd &Dk,
+                                   const Eigen::MatrixXd &Dl, const Eigen::VectorXd &x, const Eigen::VectorXd &y,
+                                   const Eigen::VectorXd &X, const Eigen::VectorXd &Y,
+                                   const Eigen::Ref<const Eigen::VectorXd> grho, const int K, const int L){
   const model::Spec &S = ST.S;
   const int q = S.q, lo = PR.lo, ncorr = S.ncorr, nvar = S.nvar;
-  const Eigen::VectorXd &x = PR.x, &y = PR.y, &X = PR.X, &Y = PR.Y, &grho = PR.grho;
-  const Eigen::MatrixXd &Dk = PR.Dk, &Dl = PR.Dl;
 
   if(S.direct){
     const Eigen::MatrixXd ll = Dk.transpose() * ST.Sig * Dl;
@@ -191,8 +273,8 @@ Eigen::MatrixXd pairs::rho_hessian(const model::Setup &ST, const Pair &PR){
       hrho(js, js) += 2 * w * x(h) * y(h);
     }
     if(S.nreg > 0){
-      regression_curvature(ST, PR, PR.k, Dk, ST.Sig * y, hrho);
-      regression_curvature(ST, PR, PR.l, Dl, ST.Sig * x, hrho);
+      regression_curvature(ST, PR, K, Dk, ST.Sig * y, hrho);
+      regression_curvature(ST, PR, L, Dl, ST.Sig * x, hrho);
     }
     return hrho;
   }
@@ -249,16 +331,81 @@ Eigen::MatrixXd pairs::rho_hessian(const model::Setup &ST, const Pair &PR){
     }
   }
   if(S.nreg > 0){
-    regression_curvature(ST, PR, PR.k, Dk, ST.sd.cwiseProduct(uY), hrho);
-    regression_curvature(ST, PR, PR.l, Dl, ST.sd.cwiseProduct(uX), hrho);
+    regression_curvature(ST, PR, K, Dk, ST.sd.cwiseProduct(uY), hrho);
+    regression_curvature(ST, PR, L, Dl, ST.sd.cwiseProduct(uX), hrho);
   }
   return hrho;
+}
+
+Eigen::MatrixXd pairs::rho_hessian(const model::Setup &ST, const Pair &PR){
+  return cov_hessian(ST, PR, PR.Dk, PR.Dl, PR.x, PR.y, PR.X, PR.Y, PR.grho, PR.k, PR.l);
+}
+
+Eigen::MatrixXd pairs::curvature(const model::Setup &ST, const Pair &PR, const Eigen::Ref<const Eigen::VectorXd> GU){
+  const model::Spec &S = ST.S;
+  const int mt = PR.mt, s = PR.s, s0 = PR.s0, ck = PR.ck, cl = PR.cl;
+  const double gr = GU(mt);
+  auto hmu = [&](const int K, const Eigen::MatrixXd &D){
+    Eigen::MatrixXd H = Eigen::MatrixXd::Zero(s, s);
+    Eigen::MatrixXd h0 = Eigen::MatrixXd::Zero(s0, s0);
+    regression_curvature(ST, PR, K, D, ST.kappa, h0);
+    H.topLeftCorner(s0, s0) = h0;
+    for(int a = 0; a < S.nmean; a++){
+      const Eigen::VectorXd col = D.row(S.mfree[a]).transpose();
+      H.block(0, PR.pa + a, s0, 1) += col;
+      H.block(PR.pa + a, 0, 1, s0) += col.transpose();
+    }
+    return H;
+  };
+  auto hsc = [&](const int K, const Eigen::MatrixXd &D, const Eigen::VectorXd &x, const Eigen::VectorXd &X,
+                 const Eigen::VectorXd &gv, const int ps){
+    Eigen::MatrixXd H = Eigen::MatrixXd::Zero(s, s);
+    const double sc = ST.s(K);
+    if(!S.thetapar){
+      if(ps >= 0) H(ps, ps) = sc;
+      return H;
+    }
+    Eigen::VectorXd gt = gv;
+    H.topLeftCorner(s0, s0) = cov_hessian(ST, PR, D, D, x, x, X, X, gv.head(s0), K, K);
+    if(ps >= 0){
+      gt(ps) += 2 * ST.th(K);
+      H(ps, ps) += 4 * ST.th(K);
+    }
+    return Eigen::MatrixXd(0.75 * std::pow(sc, 5) * gt * gt.transpose() - 0.5 * std::pow(sc, 3) * H);
+  };
+
+  const Eigen::MatrixXd Hmk = hmu(PR.k, PR.Dk), Hsk = hsc(PR.k, PR.Dk, PR.x, PR.X, PR.gvk, PR.psk);
+  const Eigen::MatrixXd Hml = hmu(PR.l, PR.Dl), Hsl = hsc(PR.l, PR.Dl, PR.y, PR.Y, PR.gvl, PR.psl);
+  Eigen::MatrixXd W = Eigen::MatrixXd::Zero(mt + s, mt + s);
+  auto side = [&](const int K, const int TK, const int CK, const int OFF, const Eigen::VectorXd &gm,
+                  const Eigen::VectorXd &gs, const Eigen::MatrixXd &Hm, const Eigen::MatrixXd &Hs){
+    const Eigen::VectorXd gt = GU.segment(OFF, CK - 1);
+    const double a = gt.sum(), b = gt.dot((ST.tau.segment(TK, CK - 1).array() - ST.mu(K)).matrix());
+    Eigen::VectorXd e = Eigen::VectorXd::Zero(mt + s), g = Eigen::VectorXd::Zero(mt + s);
+    e.segment(OFF, CK - 1) = gt;
+    e.tail(s) = -a * gm;
+    g.tail(s) = gs;
+    W += g * e.transpose() + e * g.transpose();
+    W.bottomRightCorner(s, s) += b * Hs - ST.s(K) * a * Hm;
+  };
+  side(PR.k, PR.tk, ck, 0, PR.gmk, PR.gsk, Hmk, Hsk);
+  side(PR.l, PR.tl, cl, ck - 1, PR.gml, PR.gsl, Hml, Hsl);
+  if(gr != 0){
+    const double sk = ST.s(PR.k), sl = ST.s(PR.l), c = PR.c;
+    const Eigen::VectorXd &gk = PR.gsk, &gl = PR.gsl, &gc = PR.gc;
+    Eigen::MatrixXd R = c * (gk * gl.transpose()) + sl * (gk * gc.transpose()) + sk * (gl * gc.transpose());
+    R += R.transpose().eval();
+    R += c * sl * Hsk + c * sk * Hsl;
+    R.topLeftCorner(s0, s0) += sk * sl * rho_hessian(ST, PR);
+    W.bottomRightCorner(s, s) += gr * R;
+  }
+  return W;
 }
 
 void pairs::pair_contribution(const model::Setup &ST, const Eigen::Ref<const Eigen::VectorXd> FREQ, const int R,
                               const int ORDER, double &LL, Eigen::VectorXd &GRADIENT){
   const Pair PR(ST, R, ORDER == 1);
-  const Grid G(ST.tau, PR.tk, PR.tl, PR.ck, PR.cl, PR.rho, ORDER);
+  const Grid G(ST.taus, PR.tk, PR.tl, PR.ck, PR.cl, PR.rho, ORDER);
   Eigen::VectorXd g, gpair = Eigen::VectorXd::Zero(PR.mt + 1);
   Eigen::MatrixXd G2;
   for(int sk = 0; sk < PR.ck; sk++){
@@ -271,9 +418,15 @@ void pairs::pair_contribution(const model::Setup &ST, const Eigen::Ref<const Eig
     }
   }
   if(ORDER != 1) return;
-  GRADIENT.segment(PR.tk, PR.ck - 1) += gpair.head(PR.ck - 1);
-  GRADIENT.segment(PR.tl, PR.cl - 1) += gpair.segment(PR.ck - 1, PR.cl - 1);
-  for(int a = 0; a < PR.s; a++) GRADIENT(PR.idx[a]) += gpair(PR.mt) * PR.grho(a);
+  if(PR.plain){
+    GRADIENT.segment(PR.tk, PR.ck - 1) += gpair.head(PR.ck - 1);
+    GRADIENT.segment(PR.tl, PR.cl - 1) += gpair.segment(PR.ck - 1, PR.cl - 1);
+    for(int a = 0; a < PR.s; a++) GRADIENT(PR.idx[a]) += gpair(PR.mt) * PR.grho(a);
+    return;
+  }
+  const std::vector<int> I = PR.local();
+  const Eigen::VectorXd gl = PR.lift(gpair);
+  for(std::size_t a = 0; a < I.size(); a++) GRADIENT(I[a]) += gl(a);
 }
 
 void pairs::univariate_contribution(const Eigen::Ref<const Eigen::VectorXd> TAU, const model::Layout &L,
@@ -309,6 +462,40 @@ void pairs::univariate_contribution(const Eigen::Ref<const Eigen::VectorXd> TAU,
           HESSIAN(tk + a - 1, tk + a) += nc * ghi * glo / (pe * pe);
         }
       }
+    }
+  }
+}
+
+void pairs::univariate(const model::Setup &ST, const Eigen::Ref<const Eigen::VectorXd> UFREQ, const int ORDER, double &LL,
+                       Eigen::VectorXd &GRADIENT, Eigen::MatrixXd &HESSIAN, Eigen::MatrixXd &USCORE,
+                       const Eigen::Ref<const Eigen::VectorXd> ITEMW){
+  const model::Spec &S = ST.S;
+  if(S.plain || UFREQ.size() == 0 || ORDER == 0){
+    univariate_contribution(ST.taus, S.L, UFREQ, ORDER, LL, GRADIENT, HESSIAN, USCORE, ITEMW);
+    return;
+  }
+  const int nt = S.L.nthr;
+  Eigen::VectorXd g = Eigen::VectorXd::Zero(nt);
+  Eigen::MatrixXd h = Eigen::MatrixXd::Zero(ORDER == 2 ? nt : 0, ORDER == 2 ? nt : 0);
+  Eigen::MatrixXd us = Eigen::MatrixXd::Zero(USCORE.size() > 0 ? nt : 0, USCORE.cols());
+  univariate_contribution(ST.taus, S.L, UFREQ, ORDER, LL, g, h, us, ITEMW);
+  for(int k = 0, uk = 0; k < S.p; uk += S.L.cat(k), k++){
+    const Pair PR(ST, -1, true, k);
+    const int m = PR.ck - 1, tk = PR.tk;
+    const std::vector<int> I = PR.local();
+    const Eigen::MatrixXd Jk = PR.Ju.topRows(m);
+    const Eigen::VectorXd gl = Jk.transpose() * g.segment(tk, m);
+    for(std::size_t a = 0; a < I.size(); a++) GRADIENT(I[a]) += gl(a);
+    for(int c = 0; c < S.L.cat(k) && us.size() > 0; c++){
+      const Eigen::VectorXd sl = Jk.transpose() * us.block(tk, uk + c, m, 1);
+      for(std::size_t a = 0; a < I.size(); a++) USCORE(I[a], uk + c) += sl(a);
+    }
+    if(ORDER < 2) continue;
+    Eigen::VectorXd gu = Eigen::VectorXd::Zero(PR.mt + 1);
+    gu.head(m) = g.segment(tk, m);
+    const Eigen::MatrixXd HL = Jk.transpose() * h.block(tk, tk, m, m) * Jk - curvature(ST, PR, gu);
+    for(std::size_t a = 0; a < I.size(); a++){
+      for(std::size_t b = 0; b < I.size(); b++) HESSIAN(I[a], I[b]) += HL(a, b);
     }
   }
 }

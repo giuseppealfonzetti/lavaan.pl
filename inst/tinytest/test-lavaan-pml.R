@@ -47,13 +47,31 @@ grid <- list(
     model = "A =~ A1 + a*A2 + b*A3\nC =~ C1 + C2 + C3\nab := a*b",
     data = bfi,
     std.lv = FALSE
+  ),
+  "theta, std.lv" = list(
+    model = "A =~ A1 + A2 + A3 + A4 + A5\nC =~ C1 + C2 + C3",
+    data = bfi,
+    std.lv = TRUE,
+    parameterization = "theta"
+  ),
+  "theta, marker, residual covariance" = list(
+    model = "A =~ A1 + A2 + A3 + A4 + A5\nC =~ C1 + C2 + C3\nA1 ~~ A2",
+    data = bfi,
+    std.lv = FALSE,
+    parameterization = "theta"
+  ),
+  "latent mean" = list(
+    model = "A =~ A1 + A2 + A3 + A4\nA ~ 1\nA1 | 0*t1 + t2 + t3 + t4 + t5",
+    data = bfi,
+    std.lv = TRUE
   )
 )
 
 for (nm in names(grid)) {
   g <- grid[[nm]]
-  ours <- cfa(g$model, g$data, std.lv = g$std.lv)
-  ref <- lavaan::cfa(g$model, g$data, std.lv = g$std.lv, estimator = "PML")
+  pz <- if (is.null(g$parameterization)) "delta" else g$parameterization
+  ours <- cfa(g$model, g$data, std.lv = g$std.lv, parameterization = pz)
+  ref <- lavaan::cfa(g$model, g$data, std.lv = g$std.lv, estimator = "PML", parameterization = pz)
 
   local({
     expect_identical(as.character(class(ours)), "lavaan")
@@ -89,14 +107,19 @@ local({
     "ordinal, std.lv",
     "ordinal, marker",
     "cross-loading",
-    "equality constraints"
+    "equality constraints",
+    "theta, std.lv",
+    "theta, marker, residual covariance",
+    "latent mean"
   )) {
     g <- grid[[nm]]
-    ours <- cfa(g$model, g$data, std.lv = g$std.lv, test = "mean.var.adjusted")
+    pz <- if (is.null(g$parameterization)) "delta" else g$parameterization
+    ours <- cfa(g$model, g$data, std.lv = g$std.lv, parameterization = pz, test = "mean.var.adjusted")
     ref <- lavaan::cfa(
       g$model,
       g$data,
       std.lv = g$std.lv,
+      parameterization = pz,
       estimator = "PML",
       test = "mean.var.adjusted"
     )
@@ -589,10 +612,6 @@ local({
   expect_error(
     sem("A =~ A1 + A2 + A3\nC =~ C1 + C2 + C3\nA1 ~ C", bfi, std.lv = TRUE),
     "observed variables"
-  )
-  expect_error(
-    cfa("A =~ A1 + A2 + A3", bfi, std.lv = TRUE, parameterization = "theta"),
-    "parameterization"
   )
   expect_error(
     cfa("A =~ A1 + A2 + A3", bfi, std.lv = TRUE, group = "gender"),

@@ -219,9 +219,6 @@ spec_from_lavaan <- function(template, start = NULL, valdata = NULL) {
   if (!all(template@Data@ov$type == "ordered")) {
     stop("All measurement items must be declared as ordered factors.", call. = FALSE)
   }
-  if (template@Options$parameterization != "delta") {
-    stop("Only the delta parameterization is currently supported.", call. = FALSE)
-  }
   if (any(pt$op == "<~")) {
     stop("Composites (`<~`) are not currently supported.", call. = FALSE)
   }
@@ -231,10 +228,11 @@ spec_from_lavaan <- function(template, start = NULL, valdata = NULL) {
   if (nrow(template@Model@cin.JAC) > 0L || any(is.finite(c(pt$lower[pt$free > 0], pt$upper[pt$free > 0])))) {
     stop("Inequality constraints and parameter bounds are not currently supported.", call. = FALSE)
   }
-  if (any(pt$free > 0 & pt$op == "~~" & pt$lhs == pt$rhs & !(pt$lhs %in% lv))) {
-    stop("Free residual variances are not currently supported.", call. = FALSE)
+  thetapar <- template@Options$parameterization == "theta"
+  if (!thetapar && any(pt$free > 0 & pt$op == "~~" & pt$lhs == pt$rhs & !(pt$lhs %in% lv))) {
+    stop("Free residual variances require parameterization = \"theta\".", call. = FALSE)
   }
-  other <- pt$free > 0 & !(pt$op %in% c("=~", "~~", "|", "~"))
+  other <- pt$free > 0 & !(pt$op %in% c("=~", "~~", "|", "~", "~1", "~*~"))
   if (any(other)) {
     stop(paste0("Free `", paste(unique(pt$op[other]), collapse = "`, `"), "` parameters are not currently supported."), call. = FALSE)
   }
@@ -277,9 +275,19 @@ spec_from_lavaan <- function(template, start = NULL, valdata = NULL) {
     regmat[free$beta > 0] <- NA
   }
   up <- upper.tri(free$theta)
-  if (any(free$theta[up] > 0) || any(est$theta[up] != 0)) {
+  if (thetapar || any(free$theta[up] > 0) || any(est$theta[up] != 0)) {
     rescov <- est$theta
     rescov[free$theta > 0] <- NA
+  }
+  intercepts <- as.vector(est$nu)
+  intercepts[free$nu > 0] <- NA
+  means <- as.vector(est$alpha)
+  means[free$alpha > 0] <- NA
+  scales <- NULL
+  sfree <- if (thetapar) diag(free$theta) else as.vector(free$delta)
+  if (!thetapar) {
+    scales <- as.vector(est$delta)
+    scales[sfree > 0] <- NA
   }
 
   # Linear equality constraints A theta = b, in lavaan.pl's parameter order
@@ -296,7 +304,11 @@ spec_from_lavaan <- function(template, start = NULL, valdata = NULL) {
   bfree <- if (is.null(regmat)) numeric(0) else free$beta[free$beta > 0]
   tfree <- free$theta[up][free$theta[up] > 0]
   d0 <- nthr + nload + ncorr + sum(vfree)
-  d <- d0 + length(bfree) + length(tfree)
+  nufree <- free$nu[free$nu > 0]
+  afree <- free$alpha[free$alpha > 0]
+  scfree <- sfree[sfree > 0]
+  d1 <- d0 + length(bfree) + length(tfree)
+  d <- d1 + length(nufree) + length(afree) + length(scfree)
   pos <- type <- rep(NA, template@Model@nx.free)
   pos[free$tau[free$tau > 0]] <- which(free$tau > 0)
   type[free$tau[free$tau > 0]] <- "tau"
@@ -309,6 +321,12 @@ spec_from_lavaan <- function(template, start = NULL, valdata = NULL) {
   type[bfree] <- "beta"
   pos[tfree] <- d0 + length(bfree) + seq_along(tfree)
   type[tfree] <- "rescov"
+  pos[nufree] <- d1 + seq_along(nufree)
+  type[nufree] <- "nu"
+  pos[afree] <- d1 + length(nufree) + seq_along(afree)
+  type[afree] <- "alpha"
+  pos[scfree] <- d1 + length(nufree) + length(afree) + seq_along(scfree)
+  type[scfree] <- if (thetapar) "resvar" else "delta"
   cpos <- matrix(NA, q, q)
   if (corrflag) {
     cpos[upper.tri(cpos)] <- nthr + nload + seq_len(ncorr)
@@ -322,18 +340,19 @@ spec_from_lavaan <- function(template, start = NULL, valdata = NULL) {
   for (r in seq_len(nrow(jac))) {
     nz <- which(jac[r, ] != 0)
     row <- numeric(d)
+    logt <- type[nz] %in% c("var", "resvar", "delta")
     if (any(type[nz] == "cov") && any(type[nz] == "var")) {
       stop("Constraints mixing latent covariances and variances are not currently supported.", call. = FALSE)
-    } else if (all(type[nz] == "var")) {
+    } else if (all(logt) && length(unique(type[nz])) == 1L) {
       k <- if (length(nz) == 2L && rhs[r] == 0) -jac[r, nz[2]] / jac[r, nz[1]] else NA
       if (!isTRUE(k > 0)) {
-        stop("Constraints on latent variances must be equalities or ratios (v1 == k*v2).", call. = FALSE)
+        stop("Constraints on variances and scales must be equalities or ratios (v1 == k*v2).", call. = FALSE)
       }
       row[pos[nz]] <- c(1, -1)
       A <- rbind(A, row)
-      b <- c(b, log(k) / 2)
-    } else if (any(type[nz] == "var")) {
-      stop("Constraints mixing latent variances with other parameters are not currently supported.", call. = FALSE)
+      b <- c(b, log(k) / if (type[nz[1]] == "delta") 1 else 2)
+    } else if (any(logt)) {
+      stop("Constraints mixing variances or scales with other parameters are not currently supported.", call. = FALSE)
     } else {
       row[pos[nz]] <- jac[r, nz]
       A <- rbind(A, row)
@@ -364,7 +383,11 @@ spec_from_lavaan <- function(template, start = NULL, valdata = NULL) {
     CONSTRAINTS = if (nrow(A) > 0L) list(A = unname(A), b = b),
     LATCOV = latcov,
     REGMAT = unname(regmat),
-    RESCOV = unname(rescov)
+    RESCOV = unname(rescov),
+    PARAMETERIZATION = template@Options$parameterization,
+    INTERCEPTS = intercepts,
+    MEANS = means,
+    SCALES = scales
   )
   if (!identical(is.na(model$CONSTRMAT), is.na(constrmat))) {
     stop("This identification of the latent variables is not currently supported.", call. = FALSE)
@@ -382,7 +405,8 @@ spec_from_lavaan <- function(template, start = NULL, valdata = NULL) {
   }
   init <- par2theta(model, list(thresholds = as.numeric(start_glist$tau), loadings = start_glist$lambda,
                                 latent_correlations = start_glist$psi, regressions = start_glist$beta,
-                                residual_covariances = start_glist$theta))
+                                residual_covariances = start_glist$theta, intercepts = as.vector(start_glist$nu),
+                                means = as.vector(start_glist$alpha), scales = as.vector(start_glist$delta)))
 
   weights <- NULL
   if (length(template@Data@sampling.weights) > 0L) {
@@ -416,6 +440,9 @@ as_lavaan <- function(fit, vars = NULL, template) {
     x[free$psi[free$psi > 0]] <- par$latent_correlations[free$psi > 0]
     if (!is.null(free$beta)) x[free$beta[free$beta > 0]] <- par$regressions[free$beta > 0]
     x[free$theta[free$theta > 0]] <- par$residual_covariances[free$theta > 0]
+    x[free$nu[free$nu > 0]] <- par$intercepts[free$nu > 0]
+    x[free$alpha[free$alpha > 0]] <- par$means[free$alpha > 0]
+    if (!is.null(par$scales)) x[free$delta[free$delta > 0]] <- par$scales[free$delta > 0]
     x
   }
 

@@ -110,25 +110,39 @@ set_latpl_data <- function(DATA, VALDATA = NULL, MISSING = c("listwise", "pairwi
 #'  `REGMAT[i, j]` the effect of latent variable `j` on latent variable `i`. Elements set to `NA` are
 #'  free, numerical values are fixed. The latent covariances then refer to the disturbances.
 #' @param RESCOV \eqn{p*p}-dimensional symmetric matrix of residual covariances of the items.
-#'  Off-diagonal elements set to `NA` are free, numerical values are fixed. The diagonal is ignored.
+#'  Elements set to `NA` are free, numerical values are fixed. The diagonal holds the residual
+#'  variances with `PARAMETERIZATION = "theta"` (default 1), and is ignored otherwise.
 #' @param LATCOV Parametrisation of the latent correlations: `"lkj"` (Cholesky factor with Fisher-z
 #'  angles, always positive definite) or `"direct"` (the latent covariances themselves, which allows
 #'  linear constraints on them).
+#' @param PARAMETERIZATION `"delta"` (latent responses with unit variances in the reference metric,
+#'  scaled by `SCALES`) or `"theta"` (residual variances in the diagonal of `RESCOV`), as in lavaan.
+#' @param INTERCEPTS \eqn{p}-dimensional vector of item intercepts. Elements set to `NA` are free,
+#'  numerical values are fixed. If `NULL`, all zero.
+#' @param MEANS \eqn{q}-dimensional vector of latent means (intercepts, with `REGMAT`). Elements set
+#'  to `NA` are free, numerical values are fixed. If `NULL`, all zero.
+#' @param SCALES \eqn{p}-dimensional vector of positive scale factors of the latent responses, with
+#'  `PARAMETERIZATION = "delta"`. Elements set to `NA` are free, numerical values are fixed. If
+#'  `NULL`, all one.
 #'
 #' @return An object of class `latpl_model` with the identified loading constraints `CONSTRMAT`,
 #'   the log standard deviations of the latent variables `CONSTRLOGSD` (`NA` when free),
-#'   `CORRFLAG`, `STDLV`, `CONSTRAINTS`, `LATCOV`, `REGMAT`, `RESCOV`, and the numbers of items `p` and
-#'   latent variables `q`.
+#'   `CORRFLAG`, `STDLV`, `CONSTRAINTS`, `LATCOV`, `REGMAT`, `RESCOV`, `PARAMETERIZATION`, the
+#'   intercepts `CONSTRINT` and latent means `CONSTRMEAN`, the log scale factors or log residual
+#'   standard deviations `CONSTRLOGSCALE` (`NA` when free), and the numbers of items `p` and latent
+#'   variables `q`.
 #'
 #' @export
 set_latpl_model <- function(CONSTRMAT, CONSTRVAR = NULL, CORRFLAG = TRUE, STDLV = TRUE, CONSTRAINTS = NULL,
-                           LATCOV = c("lkj", "direct"), REGMAT = NULL, RESCOV = NULL) {
+                           LATCOV = c("lkj", "direct"), REGMAT = NULL, RESCOV = NULL,
+                           PARAMETERIZATION = c("delta", "theta"), INTERCEPTS = NULL, MEANS = NULL, SCALES = NULL) {
   LATCOV <- match.arg(LATCOV)
+  PARAMETERIZATION <- match.arg(PARAMETERIZATION)
   stopifnot(is.matrix(CONSTRMAT), !is.infinite(CONSTRMAT), CORRFLAG %in% c(0, 1), is.logical(STDLV))
   storage.mode(CONSTRMAT) <- "double"
   p <- nrow(CONSTRMAT)
   q <- ncol(CONSTRMAT)
-  if (!STDLV) {
+  if (!STDLV && is.null(CONSTRVAR)) {
     for (h in seq_len(q)) {
       f <- which(is.na(CONSTRMAT[, h]))[1]
       if (!is.na(f) && all(CONSTRMAT[seq_len(f - 1), h] == 0)) CONSTRMAT[f, h] <- 1
@@ -152,13 +166,25 @@ set_latpl_model <- function(CONSTRMAT, CONSTRVAR = NULL, CORRFLAG = TRUE, STDLV 
     if (any(is.na(diag(REGMAT)) | diag(REGMAT) != 0)) stop("The diagonal of REGMAT must be zero.")
     if (!anyNA(REGMAT) && abs(det(diag(q) - REGMAT)) < 1e-8) stop("diag(q) - REGMAT must be invertible.")
   }
+  if (is.null(INTERCEPTS)) INTERCEPTS <- rep(0, p)
+  if (is.null(MEANS)) MEANS <- rep(0, q)
+  stopifnot(length(INTERCEPTS) == p, !is.infinite(INTERCEPTS), length(MEANS) == q, !is.infinite(MEANS))
+  if (PARAMETERIZATION == "theta") {
+    if (!is.null(SCALES)) stop("SCALES requires PARAMETERIZATION = \"delta\"; set the residual variances in the diagonal of RESCOV.")
+    SCALES <- if (length(RESCOV)) sqrt(diag(RESCOV)) else rep(1, p)
+  }
+  if (is.null(SCALES)) SCALES <- rep(1, p)
+  stopifnot(length(SCALES) == p, !is.infinite(SCALES))
+  if (any(SCALES <= 0, na.rm = TRUE)) stop(if (PARAMETERIZATION == "theta") "Residual variances must be positive." else "SCALES must be positive.")
   if (length(RESCOV)) {
     stopifnot(is.matrix(RESCOV), dim(RESCOV) == p, !is.infinite(RESCOV))
     diag(RESCOV) <- 0
     if (!identical(is.na(RESCOV), t(is.na(RESCOV))) || !isSymmetric(unname(RESCOV))) stop("RESCOV must be symmetric.")
   }
   out <- list(CONSTRMAT = CONSTRMAT, CONSTRLOGSD = log(sqrt(CONSTRVAR)), CORRFLAG = as.logical(CORRFLAG), STDLV = STDLV,
-              CONSTRAINTS = CONSTRAINTS, LATCOV = LATCOV, p = p, q = q, REGMAT = REGMAT, RESCOV = RESCOV)
+              CONSTRAINTS = CONSTRAINTS, LATCOV = LATCOV, p = p, q = q, REGMAT = REGMAT, RESCOV = RESCOV,
+              PARAMETERIZATION = PARAMETERIZATION, CONSTRINT = as.numeric(INTERCEPTS), CONSTRMEAN = as.numeric(MEANS),
+              CONSTRLOGSCALE = log(as.numeric(SCALES)))
   class(out) <- "latpl_model"
   out
 }

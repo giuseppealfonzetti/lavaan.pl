@@ -211,7 +211,10 @@ local({
       "loadings",
       "latent_correlations",
       "regressions",
-      "residual_covariances"
+      "residual_covariances",
+      "intercepts",
+      "means",
+      "scales"
     )
   )
   expect_equal(par, theta2par(fit$model, fit$theta))

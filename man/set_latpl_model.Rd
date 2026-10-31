@@ -15,7 +15,11 @@ set_latpl_model(
   CONSTRAINTS = NULL,
   LATCOV = c("lkj", "direct"),
   REGMAT = NULL,
-  RESCOV = NULL
+  RESCOV = NULL,
+  PARAMETERIZATION = c("delta", "theta"),
+  INTERCEPTS = NULL,
+  MEANS = NULL,
+  SCALES = NULL
 )
 }
 \arguments{
@@ -52,13 +56,29 @@ linear constraints on them).}
 free, numerical values are fixed. The latent covariances then refer to the disturbances.}
 
 \item{RESCOV}{\eqn{p*p}-dimensional symmetric matrix of residual covariances of the items.
-Off-diagonal elements set to \code{NA} are free, numerical values are fixed. The diagonal is ignored.}
+Elements set to \code{NA} are free, numerical values are fixed. The diagonal holds the residual
+variances with \code{PARAMETERIZATION = "theta"} (default 1), and is ignored otherwise.}
+
+\item{PARAMETERIZATION}{\code{"delta"} (latent responses with unit variances in the reference metric,
+scaled by \code{SCALES}) or \code{"theta"} (residual variances in the diagonal of \code{RESCOV}), as in lavaan.}
+
+\item{INTERCEPTS}{\eqn{p}-dimensional vector of item intercepts. Elements set to \code{NA} are free,
+numerical values are fixed. If \code{NULL}, all zero.}
+
+\item{MEANS}{\eqn{q}-dimensional vector of latent means (intercepts, with \code{REGMAT}). Elements set
+to \code{NA} are free, numerical values are fixed. If \code{NULL}, all zero.}
+
+\item{SCALES}{\eqn{p}-dimensional vector of positive scale factors of the latent responses, with
+\code{PARAMETERIZATION = "delta"}. Elements set to \code{NA} are free, numerical values are fixed. If
+\code{NULL}, all one.}
 }
 \value{
 An object of class \code{latpl_model} with the identified loading constraints \code{CONSTRMAT},
 the log standard deviations of the latent variables \code{CONSTRLOGSD} (\code{NA} when free),
-\code{CORRFLAG}, \code{STDLV}, \code{CONSTRAINTS}, \code{LATCOV}, \code{REGMAT}, \code{RESCOV}, and the numbers of items \code{p} and
-latent variables \code{q}.
+\code{CORRFLAG}, \code{STDLV}, \code{CONSTRAINTS}, \code{LATCOV}, \code{REGMAT}, \code{RESCOV}, \code{PARAMETERIZATION}, the
+intercepts \code{CONSTRINT} and latent means \code{CONSTRMEAN}, the log scale factors or log residual
+standard deviations \code{CONSTRLOGSCALE} (\code{NA} when free), and the numbers of items \code{p} and latent
+variables \code{q}.
 }
 \description{
 Print method for \code{latpl_model} objects

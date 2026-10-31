@@ -132,7 +132,8 @@ engine <- function(DATA, MODEL) {
     WM <- (A - rowMeans(A)) * sqrt(G / (G - 1))
   }
   list(model = list(CONSTRMAT = MODEL$CONSTRMAT, CONSTRLOGSD = MODEL$CONSTRLOGSD, CORRFLAG = corrflag_code(MODEL),
-                    REGMAT = MODEL$REGMAT, RESCOV = MODEL$RESCOV),
+                    REGMAT = MODEL$REGMAT, RESCOV = MODEL$RESCOV, CONSTRINT = MODEL$CONSTRINT, CONSTRMEAN = MODEL$CONSTRMEAN,
+                    CONSTRLOGSCALE = MODEL$CONSTRLOGSCALE, THETAPAR = MODEL$PARAMETERIZATION == "theta"),
        data = list(N = DATA$n, C_VEC = DATA$cat, FREQ = DATA$freq, UFREQ = DATA$ufreq, Y = DATA$Y[first, , drop = FALSE],
                    UW = DATA$uweights[first], WV = sqrt(as.numeric(rowsum(jw^2, id))), WM = WM))
 }
@@ -152,13 +153,21 @@ init_theta <- function(INIT, DATA, DIMS, MODEL, VERBOSE) {
     marker <- is.na(MODEL$CONSTRLOGSD)
     theta[block == "lambda"][col(MODEL$CONSTRMAT)[is.na(MODEL$CONSTRMAT)] %in% which(marker)] <- 1
     theta[block == "logsd"] <- log(0.25)
+    if (MODEL$PARAMETERIZATION == "theta") {
+      par <- theta2par(MODEL, theta)
+      L <- par$loadings %*% solve(diag(DIMS$q) - par$regressions)
+      theta[block == "tau"] <- theta[block == "tau"] *
+        rep(sqrt(rowSums((L %*% par$latent_correlations) * L) + diag(par$residual_covariances)), DIMS$cat - 1)
+    }
   } else if (VERBOSE) {
     message("- Initialised at user-supplied values.")
   }
   stopifnot(is.numeric(theta), length(theta) == DIMS$d, all(is.finite(theta)))
   par <- theta2par(MODEL, theta)
   L <- par$loadings %*% solve(diag(DIMS$q) - par$regressions)
-  if (any(rowSums((L %*% par$latent_correlations) * L) > 1)) warning("Negative error variances implied by init parameters")
+  if (MODEL$PARAMETERIZATION == "delta" && any(rowSums((L %*% par$latent_correlations) * L) * par$scales^2 > 1)) {
+    warning("Negative error variances implied by init parameters")
+  }
   theta
 }
 

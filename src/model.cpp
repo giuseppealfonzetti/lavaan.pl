@@ -23,6 +23,10 @@ model::Spec::Spec(const Rcpp::List MODEL, const Eigen::Ref<const Eigen::VectorXd
   constrlogsd = Rcpp::as<Eigen::VectorXd>(MODEL["CONSTRLOGSD"]);
   regmat = Rcpp::as<Eigen::MatrixXd>(MODEL["REGMAT"]);
   rescov = Rcpp::as<Eigen::MatrixXd>(MODEL["RESCOV"]);
+  constrint = Rcpp::as<Eigen::VectorXd>(MODEL["CONSTRINT"]);
+  constrmean = Rcpp::as<Eigen::VectorXd>(MODEL["CONSTRMEAN"]);
+  constrlogscale = Rcpp::as<Eigen::VectorXd>(MODEL["CONSTRLOGSCALE"]);
+  thetapar = Rcpp::as<bool>(MODEL["THETAPAR"]);
   corrflag = Rcpp::as<int>(MODEL["CORRFLAG"]);
   direct = corrflag == 2;
   p = constrmat.rows();
@@ -77,7 +81,20 @@ model::Spec::Spec(const Rcpp::List MODEL, const Eigen::Ref<const Eigen::VectorXd
       }
     }
   }
-  d = orc + nres;
+  on = orc + nres;
+  nidx.assign(p, -1);
+  nint = 0;
+  for(int j = 0; j < p; j++) if(!std::isfinite(constrint(j))) nidx[j] = on + nint++;
+  oa = on + nint;
+  for(int h = 0; h < q; h++) if(!std::isfinite(constrmean(h))) mfree.push_back(h);
+  nmean = mfree.size();
+  os = oa + nmean;
+  scidx.assign(p, -1);
+  nscale = 0;
+  for(int j = 0; j < p; j++) if(!std::isfinite(constrlogscale(j))) scidx[j] = os + nscale++;
+  d = os + nscale;
+  plain = !thetapar && nint + nmean + nscale == 0 && (constrint.array() == 0).all() && (constrmean.array() == 0).all() &&
+    (constrlogscale.array() == 0).all();
 }
 
 model::Setup::Setup(const Eigen::Ref<const Eigen::VectorXd> THETA, const Spec &SPEC): S(SPEC){
@@ -125,6 +142,29 @@ model::Setup::Setup(const Eigen::Ref<const Eigen::VectorXd> THETA, const Spec &S
     res.diagonal().setZero();
     for(int c = 1; c < p; c++){
       for(int r = 0; r < c; r++) if(S.resid(r, c) >= 0) res(r, c) = res(c, r) = THETA(S.resid(r, c));
+    }
+  }
+
+  taus = tau;
+  if(!S.plain){
+    Eigen::VectorXd nu = S.constrint, ls = S.constrlogscale;
+    kappa = S.constrmean;
+    for(int j = 0; j < p; j++){
+      if(S.nidx[j] >= 0) nu(j) = THETA(S.nidx[j]);
+      if(S.scidx[j] >= 0) ls(j) = THETA(S.scidx[j]);
+    }
+    for(int a = 0; a < S.nmean; a++) kappa(S.mfree[a]) = THETA(S.oa + a);
+    mu = nu + Lt * kappa;
+    const Eigen::MatrixXd Psi = S.direct ? Sig : Eigen::MatrixXd(sd.asDiagonal() * U.transpose() * U * sd.asDiagonal());
+    v = (Lt * Psi).cwiseProduct(Lt).rowwise().sum();
+    if(S.thetapar){
+      th = (2 * ls).array().exp();
+      s = (v + th).array().rsqrt();
+    }else{
+      s = ls.array().exp();
+    }
+    for(int j = 0; j < p; j++){
+      for(int c = 0; c < S.L.cat(j) - 1; c++) taus(S.L.tk(j) + c) = s(j) * (tau(S.L.tk(j) + c) - mu(j));
     }
   }
 

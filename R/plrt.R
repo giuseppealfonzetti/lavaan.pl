@@ -38,8 +38,9 @@ plrt_adjust <- function(STAT, DF, E, V){
 
 # Nested models: H1 evaluated at the H0 estimates, with the exact restriction given
 # by the Jacobian of the embedding of OBJ into H1. The embedding goes through the model
-# matrices; without regressions in H1, through the implied latent covariance, rescaled
-# to the fixed latent variances of H1
+# matrices: standardised latent responses when H1 has no intercepts, means or scales;
+# without regressions in H1, the implied latent covariance, rescaled to the fixed latent
+# variances of H1
 plrt_nested <- function(OBJ, H1){
   stopifnot(inherits(H1, "latpl_fit"))
   if(!identical(OBJ$data$freq, H1$data$freq) || !identical(OBJ$data$ufreq, H1$data$ufreq) ||
@@ -52,6 +53,20 @@ plrt_nested <- function(OBJ, H1){
   lc1 <- H1$lincon
   emb <- function(x){
     par <- theta2par(OBJ$model, as.vector(lc0$K %*% x + lc0$c))
+    if(H1$model$PARAMETERIZATION == "delta" && all(H1$model$CONSTRINT %in% 0) && all(H1$model$CONSTRMEAN %in% 0) &&
+       all(H1$model$CONSTRLOGSCALE %in% 0)){
+      Lt <- par$loadings %*% solve(diag(OBJ$dims$q) - par$regressions)
+      R <- par$residual_covariances
+      s <- if(is.null(par$scales)) 1 / sqrt(rowSums((Lt %*% par$latent_correlations) * Lt) + diag(R)) else par$scales
+      m <- OBJ$dims$cat - 1
+      par$thresholds <- rep(s, m) * (par$thresholds - rep(as.vector(par$intercepts + Lt %*% par$means), m))
+      par$loadings <- s * par$loadings
+      par$residual_covariances <- s * R * rep(s, each = length(s))
+      diag(par$residual_covariances) <- 0
+      par$intercepts[] <- 0
+      par$means[] <- 0
+      par$scales <- rep(1, length(s))
+    }
     if(!length(H1$model$REGMAT)){
       A <- solve(diag(OBJ$dims$q) - par$regressions)
       S <- A %*% par$latent_correlations %*% t(A)
@@ -145,11 +160,11 @@ plrt_fit <- function(OBJ, VARS){
     psi <- which(lc$free_idx > nthr)
     G <- (invH %*% VARS$J %*% invH)[psi, psi, drop = FALSE]
     P0 <- solve(invH[psi, psi, drop = FALSE], G)
-    tz <- sat_terms(OBJ$theta[1:nthr], r$rho, jac[, psi, drop = FALSE])
+    tz <- sat_terms(r$tau, r$rho, jac[, psi, drop = FALSE])
     cv <- sum(diag(tz$dad %*% G %*% P0))
   }else{
     P0 <- invH %*% VARS$J
-    tz <- sat_terms(OBJ$theta[1:nthr], r$rho, list(tau = lc$K[seq_len(nthr), , drop = FALSE], rho = jac), FULL = TRUE)
+    tz <- sat_terms(r$tau, r$rho, list(tau = r$tau_jacobian %*% lc$K, rho = jac), FULL = TRUE)
     cv <- sum(diag(tz$dad %*% P0 %*% P0 %*% invH))
   }
   model <- plrt_adjust(STAT = 2 * (o$ll - tz$ll),

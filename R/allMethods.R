@@ -15,6 +15,9 @@ print.latpl_fit <- function(x, ...){
        "  - Latent variances:", x$dims$nvar, "\n",
        "  - Regressions:", x$dims$nreg, "\n",
        "  - Residual covariances:", x$dims$nres, "\n",
+       "  - Intercepts:", x$dims$nint, "\n",
+       "  - Latent means:", x$dims$nmean, "\n",
+       "  - Scales:", x$dims$nscale, "\n",
        "  - Total:", x$dims$npar, "\n\n")
 
   if(x$method == 'ucminf'){
@@ -80,6 +83,8 @@ print.latpl_model <- function(x, ...) {
     " Latent variances:", if (anyNA(x$CONSTRLOGSD)) "free" else "fixed", "\n",
     " Free regressions:", sum(is.na(x$REGMAT)), "\n",
     " Free residual covariances:", sum(is.na(x$RESCOV[upper.tri(x$RESCOV)])), "\n",
+    " Parameterization:", x$PARAMETERIZATION, "\n",
+    " Free intercepts, latent means, scales:", sum(is.na(x$CONSTRINT)), sum(is.na(x$CONSTRMEAN)), sum(is.na(x$CONSTRLOGSCALE)), "\n",
     " Linear constraints:", NROW(x$CONSTRAINTS$A), "\n",
     " Identification:", if (x$STDLV) "standardised latent variables" else "marker loadings", "\n"
   )
@@ -99,7 +104,8 @@ get_par <- function(OBJ, ...) UseMethod('get_par')
 #' @param OPTION Can take values \tabular{ll}{
 #'    \code{'raw'} \tab The parameter vector. \cr
 #'    \tab \cr
-#'    \code{'transformed'} \tab Transformed vector of parameters, with interpretable latent correlations and standard deviations. \cr
+#'    \code{'transformed'} \tab Transformed vector of parameters, with interpretable latent correlations and standard
+#'    deviations, scale factors and residual variances. \cr
 #'     \tab \cr
 #'    \code{'list'} \tab The model matrices, as returned by [theta2par()]. \cr
 #' }
@@ -113,7 +119,8 @@ get_par.latpl_fit <- function(OBJ, OPTION = c("list", "raw", "transformed"), ...
   block <- theta_block(OBJ$model, OBJ$dims$nthr)
   R <- stats::cov2cor(par$latent_correlations)
   c(OBJ$theta[block %in% c("tau", "lambda")], if (any(block == "corr")) R[upper.tri(R)],
-    exp(OBJ$theta[block == "logsd"]), OBJ$theta[block %in% c("beta", "rescov")])
+    exp(OBJ$theta[block == "logsd"]), OBJ$theta[block %in% c("beta", "rescov", "nu", "alpha")],
+    exp((1 + (OBJ$model$PARAMETERIZATION == "theta")) * OBJ$theta[block == "scale"]))
 }
 
 #' Compute variance of the estimates
@@ -136,7 +143,7 @@ compute_var.latpl_fit <- function(OBJ, NUMDERIV = FALSE, VERBOSE = FALSE) {
   full <- function(x) as.vector(lc$K %*% x + lc$c)
   xf <- OBJ$theta[lc$free_idx]
   if (VERBOSE) message("- Computing H and J...")
-  lat <- theta_block(OBJ$model, OBJ$dims$nthr) %in% c("corr", "logsd")
+  lat <- theta_block(OBJ$model, OBJ$dims$nthr) %in% c("corr", "logsd", "scale")
   trJacob <- diag(length(OBJ$theta))
   if (any(lat)) {
     trJacob[lat, lat] <- numDeriv::jacobian(function(x) {

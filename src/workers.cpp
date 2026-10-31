@@ -14,39 +14,40 @@ void workers::Hess::operator()(std::size_t BEGIN, std::size_t END){
   Eigen::MatrixXd G2;
   for(std::size_t r = BEGIN; r < END; r++){
     const pairs::Pair PR(st, r, true);
-    const pairs::Grid G(st.tau, PR.tk, PR.tl, PR.ck, PR.cl, PR.rho, 2);
-    const Eigen::MatrixXd hrho = pairs::rho_hessian(st, PR);
+    const pairs::Grid G(st.taus, PR.tk, PR.tl, PR.ck, PR.cl, PR.rho, 2);
     const int mt = PR.mt, s = PR.s;
-
-    std::vector<int> I;
-    for(int a = 0; a < PR.ck - 1; a++) I.push_back(PR.tk + a);
-    for(int a = 0; a < PR.cl - 1; a++) I.push_back(PR.tl + a);
-    I.insert(I.end(), PR.idx.begin(), PR.idx.end());
+    const std::vector<int> I = PR.local();
 
     Eigen::MatrixXd sc(mt + s, PR.ck * PR.cl);
     Eigen::MatrixXd M = Eigen::MatrixXd::Zero(mt + 1, mt + 1);
-    Eigen::VectorXd gl(mt + s), gsum = Eigen::VectorXd::Zero(mt + s);
-    double w = 0;
+    Eigen::VectorXd gu = Eigen::VectorXd::Zero(mt + 1);
     for(int sk = 0; sk < PR.ck; sk++){
       for(int sl = 0; sl < PR.cl; sl++){
         const int c = sk * PR.cl + sl;
         const double n = freq(PR.off + c);
         const double pe = G.cell(sk, sl, g, G2);
-        gl.head(mt) = g.head(mt) / pe;
-        gl.tail(s) = g(mt) / pe * PR.grho;
-        sc.col(c) = gl;
+        if(PR.plain){
+          sc.col(c).head(mt) = g.head(mt) / pe;
+          sc.col(c).tail(s) = g(mt) / pe * PR.grho;
+        }else{
+          sc.col(c) = PR.Ju.transpose() * g / pe;
+        }
         if(n == 0) continue;
-        gsum += n * gl;
+        gu += n / pe * g;
         M += n * (g * g.transpose() / (pe * pe) - G2 / pe);
-        w += n * g(mt) / pe;
       }
     }
+    const Eigen::VectorXd gsum = PR.lift(gu);
 
     Eigen::MatrixXd HL(mt + s, mt + s);
-    HL.topLeftCorner(mt, mt) = M.topLeftCorner(mt, mt);
-    HL.topRightCorner(mt, s) = M.col(mt).head(mt) * PR.grho.transpose();
-    HL.bottomLeftCorner(s, mt) = HL.topRightCorner(mt, s).transpose();
-    HL.bottomRightCorner(s, s) = M(mt, mt) * PR.grho * PR.grho.transpose() - w * hrho;
+    if(PR.plain){
+      HL.topLeftCorner(mt, mt) = M.topLeftCorner(mt, mt);
+      HL.topRightCorner(mt, s) = M.col(mt).head(mt) * PR.grho.transpose();
+      HL.bottomLeftCorner(s, mt) = HL.topRightCorner(mt, s).transpose();
+      HL.bottomRightCorner(s, s) = M(mt, mt) * PR.grho * PR.grho.transpose() - gu(mt) * pairs::rho_hessian(st, PR);
+    }else{
+      HL = PR.Ju.transpose() * M * PR.Ju - pairs::curvature(st, PR, gu);
+    }
     for(int i = 0; i < mt + s; i++){
       gradient(I[i]) += gsum(i);
       for(int j = 0; j < mt + s; j++) hessian(I[i], I[j]) += HL(i, j);
@@ -75,7 +76,7 @@ void workers::Cases::operator()(std::size_t BEGIN, std::size_t END){
     }
     if(uw.size() > 0 && uw(u) > 0){
       for(int k = 0, uk = 0; k < L.p; uk += L.cat(k), k++){
-        if(!std::isnan(y(u, k))) col.head(L.nthr) += uw(u) * uscore.col(uk + y(u, k));
+        if(!std::isnan(y(u, k))) col += uw(u) * uscore.col(uk + y(u, k));
       }
     }
     out.col(u) = col;

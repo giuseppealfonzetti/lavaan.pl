@@ -12,7 +12,8 @@
 \item{OPTION}{Can take values \tabular{ll}{
 \code{'raw'} \tab The parameter vector. \cr
 \tab \cr
-\code{'transformed'} \tab Transformed vector of parameters, with interpretable latent correlations and standard deviations. \cr
+\code{'transformed'} \tab Transformed vector of parameters, with interpretable latent correlations and standard
+deviations, scale factors and residual variances. \cr
 \tab \cr
 \code{'list'} \tab The model matrices, as returned by \code{\link[=theta2par]{theta2par()}}. \cr
 }}

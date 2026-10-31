@@ -94,6 +94,61 @@ for (form in c("orthogonal", "lkj", "direct")) {
   }
 }
 
+# Gradient, H, J with intercepts, latent means, scales and the theta parameterization
+for (pz in c("delta", "theta")) {
+  for (form in c("lkj", "direct")) {
+    for (sem in c(FALSE, TRUE)) {
+      rc <- if (sem) RC else diag(0, 9)
+      if (pz == "theta") diag(rc) <- c(NA, 1.2, NA, 1, NA, 0.8, NA, 1, NA)
+      M <- set_latpl_model(
+        cm,
+        STDLV = FALSE,
+        LATCOV = form,
+        REGMAT = if (sem) B,
+        RESCOV = if (sem || pz == "theta") rc,
+        PARAMETERIZATION = pz,
+        INTERCEPTS = c(NA, 0.1, NA, NA, 0, NA, -0.1, NA, NA),
+        MEANS = c(NA, 0.2, NA),
+        SCALES = if (pz == "delta") c(NA, 1.1, NA, NA, 1, NA, 0.9, NA, NA)
+      )
+      f <- suppressWarnings(fit_latpl(D, M, CONTROL = set_ucminf_control(MAXEVAL = 1)))
+      b <- lavaan.pl:::theta_block(M, sum(D$cat - 1))
+      th <- numeric(length(b))
+      th[b == "tau"] <- unlist(lapply(D$cat - 1, function(m) seq(-0.8, 0.8, length.out = m)))
+      th[b == "lambda"] <- seq(.4, .6, length.out = sum(b == "lambda"))
+      th[b == "corr"] <- c(.1, .15, .05)
+      th[b == "logsd"] <- -.5
+      th[b == "beta"] <- c(.3, .2, .25)[seq_len(sum(b == "beta"))]
+      th[b == "rescov"] <- .05
+      th[b == "nu"] <- seq(-.2, .2, length.out = sum(b == "nu"))
+      th[b == "alpha"] <- c(.3, -.2)
+      th[b == "scale"] <- seq(-.1, .1, length.out = sum(b == "scale"))
+      pl <- function(x, o) {
+        r <- lavaan.pl:::cpp_pl(x, f$engine$model, f$engine$data, o)
+        if (o) r$gradient else r$pl
+      }
+      g <- pl(th, 1L)
+      expect_equal(g, numDeriv::grad(function(x) pl(x, 0L), th), tolerance = 1e-6)
+      hj <- lavaan.pl:::cpp_HJ(th, f$engine$model, f$engine$data)
+      Hn <- -numDeriv::jacobian(function(x) pl(x, 1L), th) / n
+      expect_equal(hj$H, (Hn + t(Hn)) / 2, tolerance = 1e-6)
+      expect_equal(hj$gradient, g)
+      expect_equal(hj$J, crossprod(unit_scores(f, th)) / n)
+      r <- lavaan.pl:::cpp_rho(th, f$engine$model, f$engine$data)
+      expect_equal(
+        r$jacobian,
+        numDeriv::jacobian(function(x) lavaan.pl:::cpp_rho(x, f$engine$model, f$engine$data)$rho, th),
+        tolerance = 1e-6
+      )
+      expect_equal(
+        r$tau_jacobian,
+        numDeriv::jacobian(function(x) lavaan.pl:::cpp_rho(x, f$engine$model, f$engine$data)$tau, th),
+        tolerance = 1e-6
+      )
+    }
+  }
+}
+
 # case weights
 Yc <- Y[, 4:9]
 M <- set_latpl_model(build_constr_mat(6, 2, "simple"))

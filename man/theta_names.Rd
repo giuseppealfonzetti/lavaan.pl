@@ -14,8 +14,10 @@ theta_names(DATA, MODEL)
 \value{
 The names of the parameters in the order used by \code{\link[=fit_latpl]{fit_latpl()}}: thresholds \code{tau[i,k]},
 free loadings \code{lambda[j,h]}, latent correlation parameters \code{eta[r,c]} (or covariances \code{psi[r,c]}),
-free latent log standard deviations \code{logsd[h]}, free regression coefficients \code{beta[i,j]} and free
-residual covariances \code{theta[k,l]}.
+free latent log standard deviations \code{logsd[h]}, free regression coefficients \code{beta[i,j]}, free
+residual covariances \code{theta[k,l]}, free intercepts \code{nu[j]}, free latent means \code{alpha[h]}, and free
+log scale factors \code{logdelta[j]} or, with \code{PARAMETERIZATION = "theta"}, free log residual standard
+deviations \code{logrsd[j]}.
 }
 \description{
 Names of the model parameters

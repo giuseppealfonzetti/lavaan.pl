@@ -15,8 +15,10 @@ par2theta(MODEL, PAR)
 \item{THETA}{Parameter vector, in the order of \code{\link[=theta_names]{theta_names()}}.}
 
 \item{PAR}{List with the thresholds \code{thresholds}, the loading matrix \code{loadings}, the latent
-(disturbance) covariance matrix \code{latent_correlations}, and, when the model has them, the
-regression matrix \code{regressions} and the residual covariance matrix \code{residual_covariances}.}
+(disturbance) covariance matrix \code{latent_correlations}, the regression matrix \code{regressions}, the
+residual covariance matrix \code{residual_covariances} (with the residual variances on the diagonal
+when \code{PARAMETERIZATION = "theta"}), the intercepts \code{intercepts}, the latent means \code{means} and,
+with \code{PARAMETERIZATION = "delta"}, the scale factors \code{scales}.}
 }
 \value{
 \code{theta2par()} returns the list \code{PAR}; \code{par2theta()} returns the parameter vector.
