@@ -4,7 +4,7 @@
 
 // [[Rcpp::export]]
 Rcpp::List cpp_sa(
-    const Eigen::Map<Eigen::VectorXd> THETA_F,
+    const Eigen::Map<Eigen::MatrixXd> STARTS,
     const Eigen::Map<Eigen::MatrixXd> K,
     const Eigen::Map<Eigen::VectorXd> C,
     const Rcpp::List MODEL,
@@ -21,7 +21,7 @@ Rcpp::List cpp_sa(
     const double AVG_FROM,
     const int GAIN,
     const int SEED,
-    const bool BURN_ONLY = false,
+    const bool ADAM_ONLY = false,
     const bool VERBOSE = false
 ){
   typedef std::chrono::steady_clock clk;
@@ -30,7 +30,7 @@ Rcpp::List cpp_sa(
   const model::Spec S(MODEL, Rcpp::as<Eigen::VectorXd>(DATA["C_VEC"]));
   const Eigen::VectorXd freq = Rcpp::as<Eigen::VectorXd>(DATA["FREQ"]), ufreq = Rcpp::as<Eigen::VectorXd>(DATA["UFREQ"]);
   const double n = Rcpp::as<double>(DATA["N"]);
-  const int P = S.L.P, nu = std::min(PAIRS_PER_ITERATION, P), E = (P + nu - 1) / nu, df = THETA_F.size();
+  const int P = S.L.P, nu = std::min(PAIRS_PER_ITERATION, P), E = (P + nu - 1) / nu, df = STARTS.rows();
   const bool constrained = K.size() > 0;
   const Eigen::SparseMatrix<double> Ks = K.sparseView();
   const double b1 = .9, b2 = .999, alpha = ALPHA / std::sqrt(static_cast<double>(E));
@@ -137,7 +137,7 @@ Rcpp::List cpp_sa(
     return out;
   };
 
-  Eigen::VectorXd x = THETA_F, g;
+  Eigen::VectorXd x = STARTS.col(0), g;
   std::unique_ptr<model::Setup> cur;
   auto setx = [&](const Eigen::VectorXd &X){
     std::unique_ptr<model::Setup> st(new model::Setup(full(X), S));
@@ -146,7 +146,6 @@ Rcpp::List cpp_sa(
     cur = std::move(st);
     return true;
   };
-  if(!setx(x)) Rcpp::stop("The starting values are outside the parameter space.");
 
   int rejections = 0, skipped = 0, iter = 0;
   auto update = [&](auto &&DIR){
@@ -180,14 +179,8 @@ Rcpp::List cpp_sa(
     }
   };
 
-  double t_adam = 0, t_newton = 0, t_hess = 0, t_avg = 0, t_mon = 0;
-  clk::time_point t0 = clk::now();
-  double prev_f = objective(x);
-  t_mon += secs(t0);
-  if(!std::isfinite(prev_f)) Rcpp::stop("The starting values are outside the parameter space.");
-  record(x, prev_f, 0);
-  Eigen::VectorXd best = x;
-  double best_f = prev_f;
+  double t_adam = 0, t_newton = 0, t_hess = 0, t_avg = 0, t_mon = 0, prev_f = 0, best_f = 0;
+  Eigen::VectorXd best;
   int calm = 0;
   bool plateau = false;
   auto burn_epoch = [&](auto &&DIR, const int PHASE){
@@ -218,18 +211,48 @@ Rcpp::List cpp_sa(
     v = b2 * v + (1 - b2) * G.cwiseAbs2();
     return Eigen::VectorXd(alpha * (m / (1 - std::pow(b1, ta))).array() / ((v / (1 - std::pow(b2, ta))).array().sqrt() + 1e-8));
   };
-  t0 = clk::now();
-  const int max_adam = GAIN == 1 ? ADAM_EPOCHS : ADAM_EPOCHS + BURN_EPOCHS;
-  while(adam_epochs < max_adam && !plateau){
-    plateau = burn_epoch(adam, 1);
-    adam_epochs++;
+  const int max_adam = ADAM_ONLY || GAIN == 1 ? ADAM_EPOCHS : ADAM_EPOCHS + BURN_EPOCHS;
+  Eigen::VectorXd xw, vw;
+  double fw = R_PosInf;
+  int taw = 0;
+  bool pw = false;
+  clk::time_point t0 = clk::now();
+  for(int j = 0; j < STARTS.cols(); j++){
+    if(!setx(STARTS.col(j))) Rcpp::stop("The starting values are outside the parameter space.");
+    clk::time_point tm = clk::now();
+    prev_f = objective(x);
+    t_mon += secs(tm);
+    if(!std::isfinite(prev_f)) Rcpp::stop("The starting values are outside the parameter space.");
+    record(x, prev_f, 0);
+    best = x;
+    best_f = prev_f;
+    m.setZero();
+    v.setZero();
+    ta = calm = 0;
+    plateau = false;
+    for(int e = 0; e < max_adam && !plateau; e++){
+      plateau = burn_epoch(adam, 1);
+      adam_epochs++;
+    }
+    if(best_f < fw){
+      xw = best;
+      fw = best_f;
+      vw = v;
+      taw = ta;
+      pw = plateau;
+    }
   }
-  setx(best);
+  setx(xw);
+  best = xw;
+  prev_f = best_f = fw;
+  v = vw;
+  ta = taw;
+  plateau = pw;
   t_adam = secs(t0) - t_mon;
 
   Eigen::MatrixXd Gm;
   Eigen::VectorXd Gd;
-  bool hessian = GAIN == 1;
+  bool hessian = GAIN == 1 && !ADAM_ONLY;
   double kappa = 1.0 / E;
   t0 = clk::now();
   const double mon0 = t_mon;
@@ -267,7 +290,7 @@ Rcpp::List cpp_sa(
 
   const int skipped_burn = skipped, rejections_burn = rejections;
   Eigen::VectorXd avg = x;
-  const int T2 = BURN_ONLY ? 0 : EPOCHS * E, T0 = static_cast<int>(AVG_FROM * T2);
+  const int T2 = ADAM_ONLY ? 0 : EPOCHS * E, T0 = static_cast<int>(AVG_FROM * T2);
   t0 = clk::now();
   for(int s = 1; s <= T2; s++){
     const double gam = kappa * std::pow(1.0 + static_cast<double>(s) / E, -DECAY);
@@ -289,7 +312,7 @@ Rcpp::List cpp_sa(
   t_avg = secs(t0);
 
   return Rcpp::List::create(
-    Rcpp::Named("theta") = full(BURN_ONLY ? x_burn : avg),
+    Rcpp::Named("theta") = full(ADAM_ONLY ? x_burn : avg),
     Rcpp::Named("theta_last") = full(x),
     Rcpp::Named("theta_burn") = full(x_burn),
     Rcpp::Named("epoch_length") = E,

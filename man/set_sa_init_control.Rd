@@ -8,9 +8,7 @@ set_sa_init_control(
   PAIRS_PER_ITERATION = 16,
   ALPHA = 0.2,
   ADAM_EPOCHS = 5,
-  BURN_EPOCHS = 5,
   TOL = 0.05,
-  GAIN = c("auto", "hessian", "diagonal"),
   SEED = 123
 )
 }
@@ -22,14 +20,8 @@ iterations per epoch.}
 
 \item{ADAM_EPOCHS}{Maximum number of epochs of the Adam phase.}
 
-\item{BURN_EPOCHS}{Maximum number of epochs of the stochastic Newton burn-in.}
-
 \item{TOL}{Improvement of the pairwise log-likelihood at the epoch average, per free parameter,
 below which, at two consecutive epochs, a burn-in phase ends.}
-
-\item{GAIN}{Gain of the burn-in and averaged phases: \code{"hessian"} (inverse observed information),
-\code{"diagonal"} (Adam's diagonal preconditioner, no Newton burn-in), or \code{"auto"} (\code{"hessian"} up
-to 2000 free parameters).}
 
 \item{SEED}{Seed of the pair sampling.}
 }
@@ -37,5 +29,6 @@ to 2000 free parameters).}
 An object of class \code{latpl_sa_control} to be passed to \code{\link[=set_init]{set_init()}} via \code{CONTROL}.
 }
 \description{
-Only the burn-in phases of \code{\link[=set_sa_control]{set_sa_control()}} run, and their end point is the starting value.
+Only the Adam phase of \code{\link[=set_sa_control]{set_sa_control()}} runs, and its end point is the starting value of
+\code{\link[=set_ucminf_control]{set_ucminf_control()}}.
 }

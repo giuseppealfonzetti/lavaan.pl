@@ -113,9 +113,19 @@ expect_error(
   "outside the parameter space"
 )
 
-# SA burn-in as initialisation of ucminf
+# SA Adam phase as initialisation of ucminf
 fi <- fit_latpl(D, M, INIT = set_init(METHOD = "SA"))
 expect_equal(fi$theta, pml$theta, tolerance = 1e-4)
+
+# Adam phase from several starts: SA continues from the best, counting the epochs of all
+nll <- function(theta) -lavaan.pl:::cpp_pl(theta, sa$engine$model, sa$engine$data)$pl
+starts <- list(sa$init, pml$theta)
+one <- lavaan.pl:::run_sa(starts[1], D, sa$engine, sa$lincon, set_sa_init_control(), TRUE, FALSE)
+two <- lavaan.pl:::run_sa(starts, D, sa$engine, sa$lincon, set_sa_init_control(), TRUE, FALSE)
+expect_true(nll(two$theta) <= nll(one$theta))
+expect_equal(sum(two$path$phase == 0), 2)
+full <- lavaan.pl:::run_sa(starts, D, sa$engine, sa$lincon, set_sa_control(), FALSE, FALSE)
+expect_equal(full$iterations, (full$adam_epochs + full$newton_epochs + 20) * E)
 
 # cfa() with SA
 colnames(Y) <- paste0("y", 1:p)

@@ -167,10 +167,10 @@ set_latpl_model <- function(CONSTRMAT, CONSTRVAR = NULL, CORRFLAG = TRUE, STDLV 
 #'
 #' @param METHOD \tabular{ll}{ \code{'standard'} \tab Thresholds from the univariate margins,
 #'  loadings and regression coefficients at `0.25`, uncorrelated latent variables with unit
-#'  variances, no residual covariances. \cr \tab \cr \code{'SA'} \tab The end point of the burn-in of the
-#'  pairwise stochastic approximation ([set_sa_control()]), started from `THETA` or from the
-#'  `standard` values. \cr }
-#'  With fewer than 15 items, `'SA'` falls back to `'standard'`.
+#'  variances, no residual covariances. \cr \tab \cr \code{'SA'} \tab The end point of the Adam phase of the
+#'  pairwise stochastic approximation ([set_sa_init_control()]), started from `THETA` or from the
+#'  `standard` values. With [set_sa_control()], the Adam phase is already part of the optimiser and
+#'  `'SA'` adds nothing. \cr }
 #' @param THETA Initialising vector. If `NULL`, the `standard` initialisation point is used.
 #' @param CONTROL Control object from [set_sa_init_control()], used when `METHOD = "SA"`.
 #'
@@ -277,15 +277,15 @@ set_sa_control <- function(
 
 #' Control options for the stochastic approximation initialisation
 #'
-#' Only the burn-in phases of [set_sa_control()] run, and their end point is the starting value.
+#' Only the Adam phase of [set_sa_control()] runs, and its end point is the starting value of
+#' [set_ucminf_control()].
 #'
 #' @inheritParams set_sa_control
 #'
 #' @return An object of class `latpl_sa_control` to be passed to [set_init()] via `CONTROL`.
 #'
 #' @export
-set_sa_init_control <- function(PAIRS_PER_ITERATION = 16, ALPHA = 0.2, ADAM_EPOCHS = 5, BURN_EPOCHS = 5, TOL = 0.05,
-                                GAIN = c("auto", "hessian", "diagonal"), SEED = 123) {
+set_sa_init_control <- function(PAIRS_PER_ITERATION = 16, ALPHA = 0.2, ADAM_EPOCHS = 5, TOL = 0.05, SEED = 123) {
   set_sa_control(PAIRS_PER_ITERATION = PAIRS_PER_ITERATION, ALPHA = ALPHA, ADAM_EPOCHS = ADAM_EPOCHS,
-                 BURN_EPOCHS = BURN_EPOCHS, EPOCHS = 0, TOL = TOL, GAIN = GAIN, SEED = SEED)
+                 EPOCHS = 0, TOL = TOL, SEED = SEED)
 }

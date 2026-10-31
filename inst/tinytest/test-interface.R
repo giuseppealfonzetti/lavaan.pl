@@ -16,7 +16,7 @@ local({
   expect_identical(sa$EPOCHS, 20L)
   expect_identical(sa$GAIN, "auto")
   expect_identical(init$EPOCHS, 0L)
-  expect_identical(init$BURN_EPOCHS, 5L)
+  expect_false("BURN_EPOCHS" %in% names(formals(set_sa_init_control)))
   expect_identical(names(sa), names(init))
 })
 
@@ -42,6 +42,10 @@ local({
   expect_identical(fit$method, "SA")
   fit <- fit_latpl(D, cl, CONTROL = set_ucminf_control(MAXEVAL = 5))
   expect_true(fit$numFit$info[["neval"]] <= 5)
+  fs <- fit_latpl(D, cl, INIT = set_init(METHOD = "SA", CONTROL = set_sa_init_control(ADAM_EPOCHS = 100)))
+  fu <- fit_latpl(D, cl)
+  expect_false(identical(fs$init, fu$init))
+  expect_equal(fs$theta, fu$theta, tolerance = 1e-4)
 })
 
 # cfa() checks  control objects

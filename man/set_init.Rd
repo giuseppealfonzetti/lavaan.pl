@@ -13,10 +13,10 @@ set_init(
 \arguments{
 \item{METHOD}{\tabular{ll}{ \code{'standard'} \tab Thresholds from the univariate margins,
 loadings and regression coefficients at \code{0.25}, uncorrelated latent variables with unit
-variances, no residual covariances. \cr \tab \cr \code{'SA'} \tab The end point of the burn-in of the
-pairwise stochastic approximation (\code{\link[=set_sa_control]{set_sa_control()}}), started from \code{THETA} or from the
-\code{standard} values. \cr }
-With fewer than 15 items, \code{'SA'} falls back to \code{'standard'}.}
+variances, no residual covariances. \cr \tab \cr \code{'SA'} \tab The end point of the Adam phase of the
+pairwise stochastic approximation (\code{\link[=set_sa_init_control]{set_sa_init_control()}}), started from \code{THETA} or from the
+\code{standard} values. With \code{\link[=set_sa_control]{set_sa_control()}}, the Adam phase is already part of the optimiser and
+\code{'SA'} adds nothing. \cr }}
 
 \item{THETA}{Initialising vector. If \code{NULL}, the \code{standard} initialisation point is used.}
 

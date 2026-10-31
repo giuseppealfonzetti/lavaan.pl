@@ -46,7 +46,11 @@ fit_latpl <- function(
   fit <- structure(list(data = DATA, model = MODEL, control = CONTROL, dims = dims, method = METHOD, lincon = lc,
                         engine = eng, version = as.character(utils::packageVersion("lavaan.pl")), cores = NCORES),
                    class = "latpl_fit")
-  fit$init <- init_theta(INIT, DATA, dims, MODEL, eng, lc, VERBOSE)
+  fit$init <- init_theta(INIT, DATA, dims, MODEL, VERBOSE)
+  if (METHOD == "ucminf" && INIT$METHOD == "SA") {
+    if (VERBOSE) message("- Initialising with the SA Adam phase...")
+    fit$init <- run_sa(list(fit$init), DATA, eng, lc, INIT$CONTROL, TRUE, FALSE)$theta
+  }
   full <- function(x) as.vector(lc$K %*% x + lc$c)
   nll <- function(theta) -cpp_pl(theta, eng$model, eng$data)$pl / dims$n
 
@@ -100,7 +104,7 @@ fit_latpl <- function(
     fit$theta <- full(fit$numFit$par)
   } else {
     if (VERBOSE) message("- Optimising via pairwise stochastic approximation...")
-    opt <- run_sa(fit$init, DATA, eng, lc, CONTROL, FALSE, VERBOSE)
+    opt <- run_sa(list(fit$init), DATA, eng, lc, CONTROL, FALSE, VERBOSE)
     if (!opt$plateau) warning("The SA burn-in did not reach a plateau of the pairwise likelihood: increase BURN_EPOCHS, or check the estimates against set_ucminf_control().", call. = FALSE)
     if (opt$skipped_averaging > 0) warning(opt$skipped_averaging, " SA iterations of the averaged phase were skipped because no feasible step was found.", call. = FALSE)
     opt$converged <- opt$plateau && opt$skipped_averaging == 0 && all(is.finite(opt$theta))
@@ -133,7 +137,7 @@ engine <- function(DATA, MODEL) {
                    UW = DATA$uweights[first], WV = sqrt(as.numeric(rowsum(jw^2, id))), WM = WM))
 }
 
-init_theta <- function(INIT, DATA, DIMS, MODEL, ENGINE, LINCON, VERBOSE) {
+init_theta <- function(INIT, DATA, DIMS, MODEL, VERBOSE) {
   theta <- INIT$THETA
   if (is.null(theta)) {
     w <- if (length(DATA$weights)) DATA$weights else rep(1, DATA$n)
@@ -152,26 +156,24 @@ init_theta <- function(INIT, DATA, DIMS, MODEL, ENGINE, LINCON, VERBOSE) {
     message("- Initialised at user-supplied values.")
   }
   stopifnot(is.numeric(theta), length(theta) == DIMS$d, all(is.finite(theta)))
-  if (INIT$METHOD == "SA" && DIMS$p >= 15) {
-    if (VERBOSE) message("- Initialising with the SA burn-in...")
-    theta <- run_sa(as.vector(LINCON$K %*% theta[LINCON$free_idx] + LINCON$c), DATA, ENGINE, LINCON, INIT$CONTROL, TRUE, FALSE)$theta
-  }
   par <- theta2par(MODEL, theta)
   L <- par$loadings %*% solve(diag(DIMS$q) - par$regressions)
   if (any(rowSums((L %*% par$latent_correlations) * L) > 1)) warning("Negative error variances implied by init parameters")
   theta
 }
 
-run_sa <- function(THETA, DATA, ENGINE, LINCON, CONTROL, BURN_ONLY, VERBOSE) {
+run_sa <- function(STARTS, DATA, ENGINE, LINCON, CONTROL, ADAM_ONLY, VERBOSE) {
   val <- is.null(DATA$valfreq)
-  free <- length(LINCON$free_idx) < length(THETA)
-  gain <- switch(CONTROL$GAIN, auto = as.integer(length(LINCON$free_idx) <= 2000), hessian = 1L, diagonal = 0L)
-  out <- cpp_sa(THETA_F = THETA[LINCON$free_idx], K = if (free) LINCON$K else matrix(0, 0, 0), C = LINCON$c,
+  npar <- length(LINCON$free_idx)
+  free <- npar < length(STARTS[[1]])
+  gain <- switch(CONTROL$GAIN, auto = as.integer(npar <= 2000), hessian = 1L, diagonal = 0L)
+  out <- cpp_sa(STARTS = matrix(vapply(STARTS, function(x) x[LINCON$free_idx], numeric(npar)), npar),
+                K = if (free) LINCON$K else matrix(0, 0, 0), C = LINCON$c,
                 MODEL = ENGINE$model, DATA = ENGINE$data, VALFREQ = if (val) DATA$freq else DATA$valfreq,
                 VALUFREQ = if (val) DATA$ufreq else numeric(0), PAIRS_PER_ITERATION = CONTROL$PAIRS_PER_ITERATION,
                 ALPHA = CONTROL$ALPHA, ADAM_EPOCHS = CONTROL$ADAM_EPOCHS, BURN_EPOCHS = CONTROL$BURN_EPOCHS,
                 EPOCHS = CONTROL$EPOCHS, TOL = CONTROL$TOL, DECAY = CONTROL$DECAY, AVG_FROM = CONTROL$AVG_FROM,
-                GAIN = gain, SEED = CONTROL$SEED, BURN_ONLY = BURN_ONLY, VERBOSE = VERBOSE)
+                GAIN = gain, SEED = CONTROL$SEED, ADAM_ONLY = ADAM_ONLY, VERBOSE = VERBOSE)
   out$path$nll <- c(out$path$nll, rep(NA, sum(out$path$phase == 3)))
   out
 }

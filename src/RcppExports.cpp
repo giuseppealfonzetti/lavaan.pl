@@ -98,12 +98,12 @@ BEGIN_RCPP
 END_RCPP
 }
 // cpp_sa
-Rcpp::List cpp_sa(const Eigen::Map<Eigen::VectorXd> THETA_F, const Eigen::Map<Eigen::MatrixXd> K, const Eigen::Map<Eigen::VectorXd> C, const Rcpp::List MODEL, const Rcpp::List DATA, const Eigen::Map<Eigen::VectorXd> VALFREQ, const Eigen::Map<Eigen::VectorXd> VALUFREQ, const int PAIRS_PER_ITERATION, const double ALPHA, const int ADAM_EPOCHS, const int BURN_EPOCHS, const int EPOCHS, const double TOL, const double DECAY, const double AVG_FROM, const int GAIN, const int SEED, const bool BURN_ONLY, const bool VERBOSE);
-RcppExport SEXP _lavaan_pl_cpp_sa(SEXP THETA_FSEXP, SEXP KSEXP, SEXP CSEXP, SEXP MODELSEXP, SEXP DATASEXP, SEXP VALFREQSEXP, SEXP VALUFREQSEXP, SEXP PAIRS_PER_ITERATIONSEXP, SEXP ALPHASEXP, SEXP ADAM_EPOCHSSEXP, SEXP BURN_EPOCHSSEXP, SEXP EPOCHSSEXP, SEXP TOLSEXP, SEXP DECAYSEXP, SEXP AVG_FROMSEXP, SEXP GAINSEXP, SEXP SEEDSEXP, SEXP BURN_ONLYSEXP, SEXP VERBOSESEXP) {
+Rcpp::List cpp_sa(const Eigen::Map<Eigen::MatrixXd> STARTS, const Eigen::Map<Eigen::MatrixXd> K, const Eigen::Map<Eigen::VectorXd> C, const Rcpp::List MODEL, const Rcpp::List DATA, const Eigen::Map<Eigen::VectorXd> VALFREQ, const Eigen::Map<Eigen::VectorXd> VALUFREQ, const int PAIRS_PER_ITERATION, const double ALPHA, const int ADAM_EPOCHS, const int BURN_EPOCHS, const int EPOCHS, const double TOL, const double DECAY, const double AVG_FROM, const int GAIN, const int SEED, const bool ADAM_ONLY, const bool VERBOSE);
+RcppExport SEXP _lavaan_pl_cpp_sa(SEXP STARTSSEXP, SEXP KSEXP, SEXP CSEXP, SEXP MODELSEXP, SEXP DATASEXP, SEXP VALFREQSEXP, SEXP VALUFREQSEXP, SEXP PAIRS_PER_ITERATIONSEXP, SEXP ALPHASEXP, SEXP ADAM_EPOCHSSEXP, SEXP BURN_EPOCHSSEXP, SEXP EPOCHSSEXP, SEXP TOLSEXP, SEXP DECAYSEXP, SEXP AVG_FROMSEXP, SEXP GAINSEXP, SEXP SEEDSEXP, SEXP ADAM_ONLYSEXP, SEXP VERBOSESEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< const Eigen::Map<Eigen::VectorXd> >::type THETA_F(THETA_FSEXP);
+    Rcpp::traits::input_parameter< const Eigen::Map<Eigen::MatrixXd> >::type STARTS(STARTSSEXP);
     Rcpp::traits::input_parameter< const Eigen::Map<Eigen::MatrixXd> >::type K(KSEXP);
     Rcpp::traits::input_parameter< const Eigen::Map<Eigen::VectorXd> >::type C(CSEXP);
     Rcpp::traits::input_parameter< const Rcpp::List >::type MODEL(MODELSEXP);
@@ -120,9 +120,9 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< const double >::type AVG_FROM(AVG_FROMSEXP);
     Rcpp::traits::input_parameter< const int >::type GAIN(GAINSEXP);
     Rcpp::traits::input_parameter< const int >::type SEED(SEEDSEXP);
-    Rcpp::traits::input_parameter< const bool >::type BURN_ONLY(BURN_ONLYSEXP);
+    Rcpp::traits::input_parameter< const bool >::type ADAM_ONLY(ADAM_ONLYSEXP);
     Rcpp::traits::input_parameter< const bool >::type VERBOSE(VERBOSESEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_sa(THETA_F, K, C, MODEL, DATA, VALFREQ, VALUFREQ, PAIRS_PER_ITERATION, ALPHA, ADAM_EPOCHS, BURN_EPOCHS, EPOCHS, TOL, DECAY, AVG_FROM, GAIN, SEED, BURN_ONLY, VERBOSE));
+    rcpp_result_gen = Rcpp::wrap(cpp_sa(STARTS, K, C, MODEL, DATA, VALFREQ, VALUFREQ, PAIRS_PER_ITERATION, ALPHA, ADAM_EPOCHS, BURN_EPOCHS, EPOCHS, TOL, DECAY, AVG_FROM, GAIN, SEED, ADAM_ONLY, VERBOSE));
     return rcpp_result_gen;
 END_RCPP
 }
