@@ -6,7 +6,7 @@
 #'methods running via quasi-Newton BFGS or stochastic approximations.
 #'
 #'@param DATA Data object from [set_latpl_data()].
-#'@param MODEL Model object from [set_latpl_model()].
+#'@param MODEL Model object from [set_latpl_model()], or from [set_latpl_groups()] for several groups.
 #'@param CONTROL Control object of the main optimiser: [set_ucminf_control()]
 #'  for the quasi-Newton BFGS optimiser from the \code{ucminf} package,
 #'  [set_sa_control()] for Stochastic Approximations.
@@ -31,14 +31,19 @@ fit_latpl <- function(
   start_time <- Sys.time()
   stopifnot(
     inherits(DATA, "latpl_data"),
-    inherits(MODEL, "latpl_model"),
+    inherits(MODEL, c("latpl_model", "latpl_groups")),
     inherits(CONTROL, c("latpl_ucminf_control", "latpl_sa_control")),
     inherits(INIT, "latpl_init"),
     DATA$p == MODEL$p
   )
+  grouped <- inherits(MODEL, "latpl_groups")
+  models <- if (grouped) MODEL$MODELS else list(MODEL)
+  if (DATA$ngroups != length(models)) stop("DATA has ", DATA$ngroups, " groups, MODEL has ", length(models), ".")
+  direct <- vapply(models, function(x) corrflag_code(x) == 2, logical(1))
+  nthr <- sum(DATA$cat - 1)
   METHOD <- if (inherits(CONTROL, "latpl_sa_control")) "SA" else "ucminf"
   dims <- latpl_dims(DATA, MODEL)
-  lc <- lincon(MODEL, dims$nthr)
+  lc <- lincon(MODEL, nthr)
   dims$npar <- length(lc$free_idx)
   RcppParallel::setThreadOptions(numThreads = NCORES)
   on.exit(RcppParallel::setThreadOptions(numThreads = 1))
@@ -57,19 +62,25 @@ fit_latpl <- function(
   # With the direct parametrisation, points with a non positive definite latent
   # covariance matrix are outside the parameter space
   pd <- function(theta) {
-    corrflag_code(MODEL) != 2 || !inherits(try(chol(theta2par(MODEL, theta)$latent_correlations), silent = TRUE), "try-error")
+    if (!any(direct)) return(TRUE)
+    par <- if (grouped) theta2par(MODEL, theta) else list(theta2par(MODEL, theta))
+    all(!direct | vapply(par, function(x) !inherits(try(chol(x$latent_correlations), silent = TRUE), "try-error"), logical(1)))
   }
 
   # Direct parametrisation: warm start from the LKJ fit without the constraints on
   # the latent covariances, which is better conditioned
-  if (METHOD == "ucminf" && corrflag_code(MODEL) == 2 && pd(fit$init)) {
-    block <- theta_block(MODEL, dims$nthr)
-    warm_model <- MODEL
-    warm_model$LATCOV <- "lkj"
-    if (!is.null(MODEL$CONSTRAINTS)) {
-      keep <- rowSums(MODEL$CONSTRAINTS$A[, block == "corr", drop = FALSE] != 0) == 0
-      warm_model$CONSTRAINTS <- if (any(keep)) list(A = MODEL$CONSTRAINTS$A[keep, , drop = FALSE], b = MODEL$CONSTRAINTS$b[keep])
+  if (METHOD == "ucminf" && any(direct) && pd(fit$init)) {
+    block <- theta_block(MODEL, nthr)
+    uncov <- function(C, B) {
+      keep <- rowSums(C$A[, B == "corr", drop = FALSE] != 0) == 0
+      if (any(keep)) list(A = C$A[keep, , drop = FALSE], b = C$b[keep])
     }
+    warm_models <- lapply(models, function(x) {
+      if (!is.null(x$CONSTRAINTS)) x$CONSTRAINTS <- uncov(x$CONSTRAINTS, theta_block(x, nthr))
+      x$LATCOV <- "lkj"
+      x
+    })
+    warm_model <- if (!grouped) warm_models[[1]] else set_latpl_groups(warm_models, if (!is.null(MODEL$CONSTRAINTS)) uncov(MODEL$CONSTRAINTS, block))
     warm <- fit_latpl(DATA, warm_model, CONTROL, set_init(THETA = par2theta(warm_model, theta2par(MODEL, fit$init))), NCORES)
     RcppParallel::setThreadOptions(numThreads = NCORES)
     theta <- par2theta(MODEL, get_par(warm, OPTION = "list"))
@@ -116,57 +127,77 @@ fit_latpl <- function(
   fit
 }
 
-# Lists passed to the C++ engine. The units are collapsed to their distinct response
-# patterns, with the square roots of the summed squared score weights WV or, with
-# clusters, the centred and scaled cluster aggregation matrix WM
+# Lists passed to the C++ engine, one per group. The units of each group are collapsed to
+# their distinct response patterns, with the square roots of the summed squared score
+# weights WV or, with clusters, the centred and scaled cluster aggregation matrix WM
 engine <- function(DATA, MODEL) {
-  key <- do.call(paste, as.data.frame(DATA$Y))
-  first <- !duplicated(key)
-  id <- match(key, key[first])
+  models <- if (inherits(MODEL, "latpl_groups")) MODEL$MODELS else list(MODEL)
   gw <- if (length(DATA$weights)) DATA$weights else rep(1, DATA$n)
   jw <- if (length(DATA$jweights)) DATA$jweights else rep(1, DATA$n)
-  WM <- matrix(0, 0, 0)
-  if (length(DATA$cluster)) {
-    G <- length(unique(DATA$cluster))
-    A <- tapply(gw, list(factor(id, seq_len(sum(first))), factor(DATA$cluster, seq_len(G) - 1)), sum, default = 0)
-    WM <- (A - rowMeans(A)) * sqrt(G / (G - 1))
-  }
-  list(model = list(CONSTRMAT = MODEL$CONSTRMAT, CONSTRLOGSD = MODEL$CONSTRLOGSD, CORRFLAG = corrflag_code(MODEL),
-                    REGMAT = MODEL$REGMAT, RESCOV = MODEL$RESCOV, CONSTRINT = MODEL$CONSTRINT, CONSTRMEAN = MODEL$CONSTRMEAN,
-                    CONSTRLOGSCALE = MODEL$CONSTRLOGSCALE, THETAPAR = MODEL$PARAMETERIZATION == "theta"),
-       data = list(N = DATA$n, C_VEC = DATA$cat, FREQ = DATA$freq, UFREQ = DATA$ufreq, Y = DATA$Y[first, , drop = FALSE],
-                   UW = DATA$uweights[first], WV = sqrt(as.numeric(rowsum(jw^2, id))), WM = WM))
+  nc <- length(DATA$freq) / DATA$ngroups
+  nu <- length(DATA$ufreq) / DATA$ngroups
+  list(
+    model = lapply(models, function(x) {
+      list(CONSTRMAT = x$CONSTRMAT, CONSTRLOGSD = x$CONSTRLOGSD, CORRFLAG = corrflag_code(x), REGMAT = x$REGMAT,
+           RESCOV = x$RESCOV, CONSTRINT = x$CONSTRINT, CONSTRMEAN = x$CONSTRMEAN, CONSTRLOGSCALE = x$CONSTRLOGSCALE,
+           THETAPAR = x$PARAMETERIZATION == "theta")
+    }),
+    data = lapply(seq_len(DATA$ngroups) - 1, function(g) {
+      rows <- which(DATA$group == g)
+      key <- do.call(paste, as.data.frame(DATA$Y[rows, , drop = FALSE]))
+      first <- !duplicated(key)
+      id <- match(key, key[first])
+      WM <- matrix(0, 0, 0)
+      if (length(DATA$cluster)) {
+        G <- length(unique(DATA$cluster))
+        A <- tapply(gw[rows], list(factor(id, seq_len(sum(first))), factor(DATA$cluster[rows], seq_len(G) - 1)), sum, default = 0)
+        WM <- (A - rowMeans(A)) * sqrt(G / (G - 1))
+      }
+      list(N = length(rows), C_VEC = DATA$cat, FREQ = DATA$freq[g * nc + seq_len(nc)], UFREQ = DATA$ufreq[g * nu + seq_len(nu)],
+           Y = DATA$Y[rows[first], , drop = FALSE], UW = DATA$uweights[rows[first]], WV = sqrt(as.numeric(rowsum(jw[rows]^2, id))),
+           WM = WM)
+    })
+  )
 }
 
 init_theta <- function(INIT, DATA, DIMS, MODEL, VERBOSE) {
+  models <- if (inherits(MODEL, "latpl_groups")) MODEL$MODELS else list(MODEL)
+  nthr <- sum(DATA$cat - 1)
   theta <- INIT$THETA
   if (is.null(theta)) {
     w <- if (length(DATA$weights)) DATA$weights else rep(1, DATA$n)
-    thr <- unlist(lapply(seq_len(DIMS$p), function(j) {
-      pj <- vapply(seq_len(DIMS$cat[j]) - 1, function(a) sum(w[DATA$Y[, j] %in% a]), numeric(1))
-      stats::qnorm(pmin(pmax(cumsum(pj) / sum(pj), 1e-4), 1 - 1e-4))[-DIMS$cat[j]]
+    theta <- unlist(lapply(seq_along(models), function(g) {
+      m <- models[[g]]
+      rows <- DATA$group == g - 1
+      block <- theta_block(m, nthr)
+      th <- rep(0, length(block))
+      th[block == "tau"] <- unlist(lapply(seq_len(DIMS$p), function(j) {
+        pj <- vapply(seq_len(DIMS$cat[j]) - 1, function(a) sum(w[rows & DATA$Y[, j] %in% a]), numeric(1))
+        stats::qnorm(pmin(pmax(cumsum(pj) / sum(pj), 1e-4), 1 - 1e-4))[-DIMS$cat[j]]
+      }))
+      th[block %in% c("lambda", "beta")] <- 0.25
+      # Factors identified by a marker: the image of the standardised start (all loadings 0.25)
+      marker <- is.na(m$CONSTRLOGSD)
+      th[block == "lambda"][col(m$CONSTRMAT)[is.na(m$CONSTRMAT)] %in% which(marker)] <- 1
+      th[block == "logsd"] <- log(0.25)
+      if (m$PARAMETERIZATION == "theta") {
+        par <- theta2par(m, th)
+        L <- par$loadings %*% solve(diag(m$q) - par$regressions)
+        th[block == "tau"] <- th[block == "tau"] *
+          rep(sqrt(rowSums((L %*% par$latent_correlations) * L) + diag(par$residual_covariances)), DIMS$cat - 1)
+      }
+      th
     }))
-    theta <- c(thr, rep(0.25, DIMS$nload), rep(0, DIMS$d - DIMS$nthr - DIMS$nload))
-    block <- theta_block(MODEL, DIMS$nthr)
-    theta[block == "beta"] <- 0.25
-    # Factors identified by a marker: the image of the standardised start (all loadings 0.25)
-    marker <- is.na(MODEL$CONSTRLOGSD)
-    theta[block == "lambda"][col(MODEL$CONSTRMAT)[is.na(MODEL$CONSTRMAT)] %in% which(marker)] <- 1
-    theta[block == "logsd"] <- log(0.25)
-    if (MODEL$PARAMETERIZATION == "theta") {
-      par <- theta2par(MODEL, theta)
-      L <- par$loadings %*% solve(diag(DIMS$q) - par$regressions)
-      theta[block == "tau"] <- theta[block == "tau"] *
-        rep(sqrt(rowSums((L %*% par$latent_correlations) * L) + diag(par$residual_covariances)), DIMS$cat - 1)
-    }
   } else if (VERBOSE) {
     message("- Initialised at user-supplied values.")
   }
   stopifnot(is.numeric(theta), length(theta) == DIMS$d, all(is.finite(theta)))
-  par <- theta2par(MODEL, theta)
-  L <- par$loadings %*% solve(diag(DIMS$q) - par$regressions)
-  if (MODEL$PARAMETERIZATION == "delta" && any(rowSums((L %*% par$latent_correlations) * L) * par$scales^2 > 1)) {
-    warning("Negative error variances implied by init parameters")
+  par <- if (inherits(MODEL, "latpl_groups")) theta2par(MODEL, theta) else list(theta2par(MODEL, theta))
+  for (g in seq_along(models)) {
+    L <- par[[g]]$loadings %*% solve(diag(models[[g]]$q) - par[[g]]$regressions)
+    if (models[[g]]$PARAMETERIZATION == "delta" && any(rowSums((L %*% par[[g]]$latent_correlations) * L) * par[[g]]$scales^2 > 1)) {
+      warning("Negative error variances implied by init parameters")
+    }
   }
   theta
 }

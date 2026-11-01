@@ -16,7 +16,7 @@ fit_latpl(
 \arguments{
 \item{DATA}{Data object from \code{\link[=set_latpl_data]{set_latpl_data()}}.}
 
-\item{MODEL}{Model object from \code{\link[=set_latpl_model]{set_latpl_model()}}.}
+\item{MODEL}{Model object from \code{\link[=set_latpl_model]{set_latpl_model()}}, or from \code{\link[=set_latpl_groups]{set_latpl_groups()}} for several groups.}
 
 \item{CONTROL}{Control object of the main optimiser: \code{\link[=set_ucminf_control]{set_ucminf_control()}}
 for the quasi-Newton BFGS optimiser from the \code{ucminf} package,

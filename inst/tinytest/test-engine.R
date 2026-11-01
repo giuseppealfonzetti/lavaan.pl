@@ -27,8 +27,8 @@ unit_scores <- function(f, theta) {
     y <- D$Y[i, , drop = FALSE]
     um <- D$uweights[i]
     di <- f$engine$data
-    di$FREQ <- pairs_freq(y, D$cat)
-    di$UFREQ <- unlist(lapply(seq_len(D$p), function(j) {
+    di[[1]]$FREQ <- pairs_freq(y, D$cat)
+    di[[1]]$UFREQ <- unlist(lapply(seq_len(D$p), function(j) {
       um * (seq_len(D$cat[j]) - 1 == y[j] & !is.na(y[j]))
     }))
     lavaan.pl:::cpp_pl(theta, f$engine$model, di, 1L)$gradient
@@ -149,6 +149,57 @@ for (pz in c("delta", "theta")) {
   }
 }
 
+# Two groups, the second not plain: gradient, H, J and Jacobians
+Dg <- set_latpl_data(Ym, MISSING = "available.cases", GROUP = rep(c("a", "b"), length.out = nrow(Ym)))
+Mg <- set_latpl_groups(list(
+  set_latpl_model(cm, LATCOV = "direct"),
+  set_latpl_model(
+    cm,
+    STDLV = FALSE,
+    PARAMETERIZATION = "theta",
+    RESCOV = diag(c(NA, 1, NA, 1, 1, 1, 1, 1, 1)),
+    INTERCEPTS = c(NA, 0.1, rep(0, 7)),
+    MEANS = c(NA, 0, 0.2)
+  )
+))
+fg <- suppressWarnings(fit_latpl(Dg, Mg, CONTROL = set_ucminf_control(MAXEVAL = 1)))
+b <- lavaan.pl:::theta_block(Mg, sum(Dg$cat - 1))
+th <- numeric(length(b))
+th[b == "tau"] <- unlist(lapply(Dg$cat - 1, function(m) seq(-0.8, 0.8, length.out = m)))
+th[b == "lambda"] <- seq(.4, .6, length.out = sum(b == "lambda"))
+th[b == "corr"] <- .1
+th[b == "logsd"] <- -.5
+th[b == "nu"] <- -.2
+th[b == "alpha"] <- .3
+th[b == "scale"] <- c(-.1, .1)
+pl <- function(x, o) {
+  r <- lavaan.pl:::cpp_pl(x, fg$engine$model, fg$engine$data, o)
+  if (o) r$gradient else r$pl
+}
+g <- pl(th, 1L)
+expect_equal(g, numDeriv::grad(function(x) pl(x, 0L), th), tolerance = 1e-6)
+hj <- lavaan.pl:::cpp_HJ(th, fg$engine$model, fg$engine$data)
+Hn <- -numDeriv::jacobian(function(x) pl(x, 1L), th) / n
+expect_equal(hj$H, (Hn + t(Hn)) / 2, tolerance = 1e-6)
+expect_equal(hj$gradient, g)
+sc <- t(sapply(seq_len(n), function(i) {
+  y <- Dg$Y[i, , drop = FALSE]
+  di <- lapply(fg$engine$data, function(x) {
+    x$FREQ[] <- 0
+    x$UFREQ[] <- 0
+    x
+  })
+  k <- Dg$group[i] + 1
+  di[[k]]$FREQ <- pairs_freq(y, Dg$cat)
+  di[[k]]$UFREQ <- unlist(lapply(seq_len(Dg$p), function(j) Dg$uweights[i] * (seq_len(Dg$cat[j]) - 1 == y[j] & !is.na(y[j]))))
+  lavaan.pl:::cpp_pl(th, fg$engine$model, di, 1L)$gradient
+}))
+expect_equal(colSums(sc), g)
+expect_equal(hj$J, crossprod(sc) / n)
+r <- lavaan.pl:::cpp_rho(th, fg$engine$model, fg$engine$data)
+expect_equal(r$jacobian, numDeriv::jacobian(function(x) lavaan.pl:::cpp_rho(x, fg$engine$model, fg$engine$data)$rho, th), tolerance = 1e-6)
+expect_equal(r$tau_jacobian, numDeriv::jacobian(function(x) lavaan.pl:::cpp_rho(x, fg$engine$model, fg$engine$data)$tau, th), tolerance = 1e-6)
+
 # case weights
 Yc <- Y[, 4:9]
 M <- set_latpl_model(build_constr_mat(6, 2, "simple"))
@@ -173,7 +224,7 @@ f1 <- fit_latpl(set_latpl_data(Yc), M)
 hd <- lavaan.pl:::cpp_HJ(th, fd$engine$model, fd$engine$data)
 s1 <- t(sapply(seq_len(nrow(Yc)), function(i) {
   di <- f1$engine$data
-  di$FREQ <- pairs_freq(Yc[i, , drop = FALSE], f1$data$cat)
+  di[[1]]$FREQ <- pairs_freq(Yc[i, , drop = FALSE], f1$data$cat)
   lavaan.pl:::cpp_pl(th, f1$engine$model, di, 1L)$gradient
 }))
 z <- rowsum(s1 * fd$data$weights, cl)

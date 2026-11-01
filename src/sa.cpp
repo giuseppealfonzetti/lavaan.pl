@@ -27,121 +27,158 @@ Rcpp::List cpp_sa(
   typedef std::chrono::steady_clock clk;
   auto secs = [](clk::time_point a){ return std::chrono::duration<double>(clk::now() - a).count(); };
 
-  const model::Spec S(MODEL, Rcpp::as<Eigen::VectorXd>(DATA["C_VEC"]));
-  const Eigen::VectorXd freq = Rcpp::as<Eigen::VectorXd>(DATA["FREQ"]), ufreq = Rcpp::as<Eigen::VectorXd>(DATA["UFREQ"]);
-  const double n = Rcpp::as<double>(DATA["N"]);
-  const int P = S.L.P, nu = std::min(PAIRS_PER_ITERATION, P), E = (P + nu - 1) / nu, df = STARTS.rows();
+  const model::Groups GS(MODEL, DATA);
+  const int G = GS.G;
+  std::vector<Eigen::VectorXd> freq(G), ufreq(G), valfreq(G), valufreq(G);
+  for(int g = 0, oc = 0, ou = 0; g < G; g++){
+    const Rcpp::List Dg = DATA[g];
+    const model::Layout &L = GS.S[g].L;
+    freq[g] = Rcpp::as<Eigen::VectorXd>(Dg["FREQ"]);
+    ufreq[g] = Rcpp::as<Eigen::VectorXd>(Dg["UFREQ"]);
+    valfreq[g] = VALFREQ.segment(oc, L.ncell);
+    valufreq[g] = VALUFREQ.size() > 0 ? Eigen::VectorXd(VALUFREQ.segment(ou, L.cat.sum())) : Eigen::VectorXd();
+    oc += L.ncell;
+    ou += L.cat.sum();
+  }
+  const double n = GS.n;
+  const int P = GS.P, nu = std::min(PAIRS_PER_ITERATION, P), E = (P + nu - 1) / nu, df = STARTS.rows();
   const bool constrained = K.size() > 0;
   const Eigen::SparseMatrix<double> Ks = K.sparseView();
   const double b1 = .9, b2 = .999, alpha = ALPHA / std::sqrt(static_cast<double>(E));
 
   auto full = [&](const Eigen::VectorXd &X){ return constrained ? Eigen::VectorXd(Ks * X + C) : X; };
 
-  std::vector<int> rpairs;
-  for(int r = 0; r < P && S.rescov.size() > 0; r++){
-    const int k = S.L.pk[r], l = S.L.pl[r];
-    if(S.resid(k, l) >= 0 || S.rescov(k, l) != 0) rpairs.push_back(r);
+  std::vector<std::vector<int>> rpairs(G), all(G);
+  for(int g = 0; g < G; g++){
+    const model::Spec &S = GS.S[g];
+    all[g].resize(S.L.P);
+    std::iota(all[g].begin(), all[g].end(), 0);
+    for(int r = 0; r < S.L.P && S.rescov.size() > 0; r++){
+      const int k = S.L.pk[r], l = S.L.pl[r];
+      if(S.resid(k, l) >= 0 || S.rescov(k, l) != 0) rpairs[g].push_back(r);
+    }
   }
 
-  auto feasible = [&](const model::Setup &ST){
-    if(!ST.Lt.allFinite()) return false;
-    for(int k = 0; k < S.p; k++){
-      for(int c = 1; c < S.L.cat(k) - 1; c++) if(ST.tau(S.L.tk(k) + c) <= ST.tau(S.L.tk(k) + c - 1)) return false;
-    }
-    Eigen::MatrixXd Psi;
-    if(S.direct){
-      if(ST.Sig.llt().info() != Eigen::Success) return false;
-      Psi = ST.Sig;
-    }else{
-      Psi = ST.sd.asDiagonal() * ST.U.transpose() * ST.U * ST.sd.asDiagonal();
-    }
-    const Eigen::MatrixXd LP = ST.Lt * Psi;
-    const Eigen::VectorXd sc = S.plain ? Eigen::VectorXd::Ones(S.p) : ST.s;
-    const Eigen::VectorXd v = LP.cwiseProduct(ST.Lt).rowwise().sum().cwiseProduct(sc.cwiseAbs2());
-    auto ok = [&](const int k, const int l){ return std::abs(sc(k) * sc(l) * (LP.row(k).dot(ST.Lt.row(l)) + ST.rc(k, l))) < 1; };
-    for(const int r : rpairs) if(!ok(S.L.pk[r], S.L.pl[r])) return false;
-    if(v.maxCoeff() < 1) return true;
-    for(int k = 0; k < S.p; k++){
-      if(v(k) < 1) continue;
-      for(int l = 0; l < S.p; l++) if(l != k && v(k) * v(l) >= 1 && !ok(k, l)) return false;
+  auto feasible = [&](const std::vector<model::Setup> &STS){
+    for(int g = 0; g < G; g++){
+      const model::Setup &ST = STS[g];
+      const model::Spec &S = GS.S[g];
+      if(!ST.Lt.allFinite()) return false;
+      for(int k = 0; k < S.p; k++){
+        for(int c = 1; c < S.L.cat(k) - 1; c++) if(ST.tau(S.L.tk(k) + c) <= ST.tau(S.L.tk(k) + c - 1)) return false;
+      }
+      Eigen::MatrixXd Psi;
+      if(S.direct){
+        if(ST.Sig.llt().info() != Eigen::Success) return false;
+        Psi = ST.Sig;
+      }else{
+        Psi = ST.sd.asDiagonal() * ST.U.transpose() * ST.U * ST.sd.asDiagonal();
+      }
+      const Eigen::MatrixXd LP = ST.Lt * Psi;
+      const Eigen::VectorXd sc = S.plain ? Eigen::VectorXd::Ones(S.p) : ST.s;
+      const Eigen::VectorXd v = LP.cwiseProduct(ST.Lt).rowwise().sum().cwiseProduct(sc.cwiseAbs2());
+      auto ok = [&](const int k, const int l){ return std::abs(sc(k) * sc(l) * (LP.row(k).dot(ST.Lt.row(l)) + ST.rc(k, l))) < 1; };
+      for(const int r : rpairs[g]) if(!ok(S.L.pk[r], S.L.pl[r])) return false;
+      if(v.maxCoeff() < 1) continue;
+      for(int k = 0; k < S.p; k++){
+        if(v(k) < 1) continue;
+        for(int l = 0; l < S.p; l++) if(l != k && v(k) * v(l) >= 1 && !ok(k, l)) return false;
+      }
     }
     return true;
   };
 
   std::mt19937 rng(SEED);
-  std::vector<int> pool(P), drawn(nu), all(P);
+  std::vector<int> pool(P), drawn(nu);
+  std::vector<std::vector<int>> dg(G);
   std::iota(pool.begin(), pool.end(), 0);
-  std::iota(all.begin(), all.end(), 0);
   auto draw = [&](){
+    for(int g = 0; g < G; g++) dg[g].clear();
     for(int i = 0; i < nu; i++){
       std::uniform_int_distribution<int> u(i, P - 1);
       std::swap(pool[i], pool[u(rng)]);
       drawn[i] = pool[i];
+      int g = G - 1;
+      while(GS.poff[g] > drawn[i]) g--;
+      dg[g].push_back(drawn[i] - GS.poff[g]);
     }
   };
 
-  Eigen::VectorXd itemw = Eigen::VectorXd::Zero(S.p);
-  auto stoch = [&](const model::Setup &ST, Eigen::VectorXd &G){
-    workers::PL w(ST, freq, drawn, 1);
-    RcppParallel::parallelReduce(0, nu, w, 4);
-    double ll = w.ll * P / nu;
-    Eigen::VectorXd grad = w.gradient * P / nu;
-    Eigen::MatrixXd hd, ud;
-    if(ufreq.size() > 0){
-      itemw.setZero();
-      for(const int r : drawn){
-        itemw(S.L.pk[r]) += 1;
-        itemw(S.L.pl[r]) += 1;
+  auto stoch = [&](const std::vector<model::Setup> &STS, Eigen::VectorXd &GR){
+    double ll = 0;
+    Eigen::VectorXd grad = Eigen::VectorXd::Zero(GS.d);
+    for(int g = 0; g < G; g++){
+      const model::Spec &S = GS.S[g];
+      workers::PL w(STS[g], freq[g], dg[g], 1);
+      RcppParallel::parallelReduce(0, dg[g].size(), w, 4);
+      w.ll *= static_cast<double>(P) / nu;
+      w.gradient *= static_cast<double>(P) / nu;
+      if(ufreq[g].size() > 0){
+        Eigen::VectorXd itemw = Eigen::VectorXd::Zero(S.p);
+        for(const int r : dg[g]){
+          itemw(S.L.pk[r]) += 1;
+          itemw(S.L.pl[r]) += 1;
+        }
+        itemw *= static_cast<double>(P) / (nu * (S.p - 1));
+        Eigen::MatrixXd hd, ud;
+        pairs::univariate(STS[g], ufreq[g], 1, w.ll, w.gradient, hd, ud, itemw);
       }
-      itemw *= static_cast<double>(P) / (nu * (S.p - 1));
-      pairs::univariate(ST, ufreq, 1, ll, grad, hd, ud, itemw);
+      ll += w.ll;
+      grad.segment(GS.off[g], S.d) = w.gradient;
     }
     if(!std::isfinite(ll) || !grad.allFinite()) return false;
-    G = constrained ? Eigen::VectorXd(-Ks.transpose() * grad / n) : Eigen::VectorXd(-grad / n);
+    GR = constrained ? Eigen::VectorXd(-Ks.transpose() * grad / n) : Eigen::VectorXd(-grad / n);
     return true;
   };
 
   auto objective = [&](const Eigen::VectorXd &X){
-    const model::Setup ST(full(X), S);
-    if(S.direct && ST.Sig.llt().info() != Eigen::Success) return R_PosInf;
-    workers::PL w(ST, VALFREQ, all, 0);
-    RcppParallel::parallelReduce(0, P, w);
-    Eigen::VectorXd gd;
-    Eigen::MatrixXd hd, ud;
-    pairs::univariate(ST, VALUFREQ, 0, w.ll, gd, hd, ud);
-    return std::isfinite(w.ll) ? -w.ll / n : R_PosInf;
+    const std::vector<model::Setup> STS = GS.setup(full(X));
+    double ll = 0;
+    for(int g = 0; g < G; g++){
+      if(GS.S[g].direct && STS[g].Sig.llt().info() != Eigen::Success) return R_PosInf;
+      workers::PL w(STS[g], valfreq[g], all[g], 0);
+      RcppParallel::parallelReduce(0, all[g].size(), w);
+      Eigen::VectorXd gd;
+      Eigen::MatrixXd hd, ud;
+      pairs::univariate(STS[g], valufreq[g], 0, w.ll, gd, hd, ud);
+      ll += w.ll;
+    }
+    return std::isfinite(ll) ? -ll / n : R_PosInf;
   };
 
-  auto hessian_gain = [&](const Eigen::VectorXd &X, Eigen::MatrixXd &G, const double DAMP){
-    const model::Setup ST(full(X), S);
-    std::vector<Eigen::MatrixXd> sc;
-    std::vector<std::vector<int>> si;
-    workers::Hess hw(ST, freq, sc, si);
-    RcppParallel::parallelReduce(0, P, hw);
-    double ll = 0;
-    Eigen::MatrixXd ud;
-    pairs::univariate(ST, ufreq, 2, ll, hw.gradient, hw.hessian, ud);
-    Eigen::MatrixXd H = hw.hessian / n;
+  auto hessian_gain = [&](const Eigen::VectorXd &X, Eigen::MatrixXd &GM, const double DAMP){
+    const std::vector<model::Setup> STS = GS.setup(full(X));
+    Eigen::MatrixXd H = Eigen::MatrixXd::Zero(GS.d, GS.d);
+    for(int g = 0; g < G; g++){
+      std::vector<Eigen::MatrixXd> sc;
+      std::vector<std::vector<int>> si;
+      workers::Hess hw(STS[g], freq[g], sc, si);
+      RcppParallel::parallelReduce(0, GS.S[g].L.P, hw);
+      double ll = 0;
+      Eigen::MatrixXd ud;
+      pairs::univariate(STS[g], ufreq[g], 2, ll, hw.gradient, hw.hessian, ud);
+      H.block(GS.off[g], GS.off[g], GS.S[g].d, GS.S[g].d) = hw.hessian / n;
+    }
     if(constrained) H = Ks.transpose() * H * Ks;
     if(!H.allFinite()) return false;
     const Eigen::VectorXd s = H.diagonal().cwiseAbs().cwiseMax(1e-12).cwiseSqrt().cwiseInverse();
     Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(s.asDiagonal() * (0.5 * (H + H.transpose())) * s.asDiagonal());
     Eigen::VectorXd ev = es.eigenvalues().cwiseAbs();
     ev = ev.cwiseMax(DAMP * ev.maxCoeff());
-    G = s.asDiagonal() * es.eigenvectors() * ev.cwiseInverse().asDiagonal() * es.eigenvectors().transpose() * s.asDiagonal();
-    return G.allFinite();
+    GM = s.asDiagonal() * es.eigenvectors() * ev.cwiseInverse().asDiagonal() * es.eigenvectors().transpose() * s.asDiagonal();
+    return GM.allFinite();
   };
 
-  auto gain_times = [&](const Eigen::MatrixXd &Gm, const Eigen::VectorXd &G){
+  auto gain_times = [&](const Eigen::MatrixXd &Gm, const Eigen::VectorXd &GR){
     Eigen::VectorXd out = Eigen::VectorXd::Zero(df);
-    for(int j = 0; j < df; j++) if(G(j) != 0) out += G(j) * Gm.col(j);
+    for(int j = 0; j < df; j++) if(GR(j) != 0) out += GR(j) * Gm.col(j);
     return out;
   };
 
   Eigen::VectorXd x = STARTS.col(0), g;
-  std::unique_ptr<model::Setup> cur;
+  std::unique_ptr<std::vector<model::Setup>> cur;
   auto setx = [&](const Eigen::VectorXd &X){
-    std::unique_ptr<model::Setup> st(new model::Setup(full(X), S));
+    std::unique_ptr<std::vector<model::Setup>> st(new std::vector<model::Setup>(GS.setup(full(X))));
     if(!feasible(*st)) return false;
     x = X;
     cur = std::move(st);

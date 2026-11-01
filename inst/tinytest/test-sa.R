@@ -103,6 +103,13 @@ for (Ms in list(
   )
 }
 
+# Two groups: SA within one standard error of PML
+Dg <- set_latpl_data(Y, GROUP = rep(1:2, each = n / 2))
+Mg <- set_latpl_groups(list(set_latpl_model(cm), set_latpl_model(cm, PARAMETERIZATION = "theta")))
+sg <- fit_latpl(Dg, Mg, CONTROL = set_sa_control())
+expect_true(sg$stoFit$converged)
+expect_true(dist(sg, fit_latpl(Dg, Mg)) < 1)
+
 # Starting values outside the parameter space are rejected
 expect_error(
   fit_latpl(

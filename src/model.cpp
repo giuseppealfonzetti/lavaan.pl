@@ -176,3 +176,24 @@ model::Setup::Setup(const Eigen::Ref<const Eigen::VectorXd> THETA, const Spec &S
     for(int b = 0; b < S.nreg; b++) J[j].col(nl + b) = Lt(j, S.bi[b]) * A.row(S.bj[b]).transpose();
   }
 }
+
+model::Groups::Groups(const Rcpp::List MODEL, const Rcpp::List DATA): G(MODEL.size()), d(0), P(0), n(0){
+  S.reserve(G);
+  for(int g = 0; g < G; g++){
+    const Rcpp::List Dg = DATA[g];
+    S.emplace_back(Rcpp::as<Rcpp::List>(MODEL[g]), Rcpp::as<Eigen::VectorXd>(Dg["C_VEC"]));
+    off.push_back(d);
+    poff.push_back(P);
+    d += S[g].d;
+    P += S[g].L.P;
+    n += Rcpp::as<double>(Dg["N"]);
+  }
+}
+
+std::vector<model::Setup> model::Groups::setup(const Eigen::Ref<const Eigen::VectorXd> THETA) const{
+  if(THETA.size() != d) Rcpp::stop("THETA has length %d, the model has %d parameters.", (int)THETA.size(), d);
+  std::vector<Setup> out;
+  out.reserve(G);
+  for(int g = 0; g < G; g++) out.emplace_back(THETA.segment(off[g], S[g].d), S[g]);
+  return out;
+}

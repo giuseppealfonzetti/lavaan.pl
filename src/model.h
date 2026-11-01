@@ -32,6 +32,15 @@ namespace model{
     double rc(const int K, const int L) const { return res.size() > 0 ? res(K, L) : 0; }
   };
 
+  struct Groups{
+    std::vector<Spec> S;
+    std::vector<int> off, poff;
+    int G, d, P;
+    double n;
+    Groups(const Rcpp::List MODEL, const Rcpp::List DATA);
+    std::vector<Setup> setup(const Eigen::Ref<const Eigen::VectorXd> THETA) const;
+  };
+
 }
 
 #endif

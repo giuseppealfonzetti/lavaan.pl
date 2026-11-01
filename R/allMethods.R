@@ -7,6 +7,7 @@ print.latpl_fit <- function(x, ...){
   cat( "- Dimensions:\n",
        "  - Sample size:", x$dims$n, "\n",
        "  - Items:", x$dims$p,  "(", x$dims$pairs, " pairs)\n",
+       "  - Groups:", x$dims$ngroups, "\n",
        "  - Latent traits:", x$dims$q,"\n\n",
        "- Free parameters:\n",
        "  - Thresholds:", x$dims$nthr, "\n",
@@ -63,6 +64,7 @@ print.latpl_data <- function(x, ...) {
     " Missing values:", sum(is.na(x$Y)), "(", x$missing, ")\n",
     " Sampling weights:", if (length(x$weights)) "yes" else "none", "\n",
     " Clusters:", if (length(x$cluster)) length(unique(x$cluster)) else "none", "\n",
+    " Groups:", x$ngroups, "\n",
     " Validation data:", if (is.null(x$valfreq)) "none" else "yes", "\n"
   )
   invisible(x)
@@ -116,11 +118,15 @@ get_par.latpl_fit <- function(OBJ, OPTION = c("list", "raw", "transformed"), ...
   if (OPTION == "raw") return(OBJ$theta)
   par <- theta2par(OBJ$model, OBJ$theta)
   if (OPTION == "list") return(par)
-  block <- theta_block(OBJ$model, OBJ$dims$nthr)
-  R <- stats::cov2cor(par$latent_correlations)
-  c(OBJ$theta[block %in% c("tau", "lambda")], if (any(block == "corr")) R[upper.tri(R)],
-    exp(OBJ$theta[block == "logsd"]), OBJ$theta[block %in% c("beta", "rescov", "nu", "alpha")],
-    exp((1 + (OBJ$model$PARAMETERIZATION == "theta")) * OBJ$theta[block == "scale"]))
+  models <- if (inherits(OBJ$model, "latpl_groups")) OBJ$model$MODELS else list(OBJ$model)
+  nthr <- sum(OBJ$data$cat - 1)
+  d <- vapply(models, function(x) length(theta_block(x, nthr)), numeric(1))
+  unlist(Map(function(m, th) {
+    block <- theta_block(m, nthr)
+    R <- stats::cov2cor(theta2par(m, th)$latent_correlations)
+    c(th[block %in% c("tau", "lambda")], if (any(block == "corr")) R[upper.tri(R)], exp(th[block == "logsd"]),
+      th[block %in% c("beta", "rescov", "nu", "alpha")], exp((1 + (m$PARAMETERIZATION == "theta")) * th[block == "scale"]))
+  }, models, split(OBJ$theta, rep(seq_along(d), d))), use.names = FALSE)
 }
 
 #' Compute variance of the estimates
@@ -143,7 +149,7 @@ compute_var.latpl_fit <- function(OBJ, NUMDERIV = FALSE, VERBOSE = FALSE) {
   full <- function(x) as.vector(lc$K %*% x + lc$c)
   xf <- OBJ$theta[lc$free_idx]
   if (VERBOSE) message("- Computing H and J...")
-  lat <- theta_block(OBJ$model, OBJ$dims$nthr) %in% c("corr", "logsd", "scale")
+  lat <- theta_block(OBJ$model, sum(OBJ$data$cat - 1)) %in% c("corr", "logsd", "scale")
   trJacob <- diag(length(OBJ$theta))
   if (any(lat)) {
     trJacob[lat, lat] <- numDeriv::jacobian(function(x) {
@@ -195,7 +201,7 @@ plot_traj.latpl_fit <- function(OBJ){
   }
 
   path <- OBJ$stoFit$path
-  type <- theta_block(OBJ$model, OBJ$dims$nthr)
+  type <- theta_block(OBJ$model, sum(OBJ$data$cat - 1))
   long <- do.call(rbind, Map(function(iter, theta) {
     data.frame(iter = iter,
                par = get_par(replace(OBJ, "theta", list(theta)), OPTION = "transformed"),

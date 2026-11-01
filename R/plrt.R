@@ -51,30 +51,35 @@ plrt_nested <- function(OBJ, H1){
   pl <- function(FIT, THETA) cpp_pl(THETA, FIT$engine$model, FIT$engine$data)$pl
   lc0 <- OBJ$lincon
   lc1 <- H1$lincon
+  m1 <- if(inherits(H1$model, "latpl_groups")) H1$model$MODELS else list(H1$model)
   emb <- function(x){
     par <- theta2par(OBJ$model, as.vector(lc0$K %*% x + lc0$c))
-    if(H1$model$PARAMETERIZATION == "delta" && all(H1$model$CONSTRINT %in% 0) && all(H1$model$CONSTRMEAN %in% 0) &&
-       all(H1$model$CONSTRLOGSCALE %in% 0)){
-      Lt <- par$loadings %*% solve(diag(OBJ$dims$q) - par$regressions)
-      R <- par$residual_covariances
-      s <- if(is.null(par$scales)) 1 / sqrt(rowSums((Lt %*% par$latent_correlations) * Lt) + diag(R)) else par$scales
-      m <- OBJ$dims$cat - 1
-      par$thresholds <- rep(s, m) * (par$thresholds - rep(as.vector(par$intercepts + Lt %*% par$means), m))
-      par$loadings <- s * par$loadings
-      par$residual_covariances <- s * R * rep(s, each = length(s))
-      diag(par$residual_covariances) <- 0
-      par$intercepts[] <- 0
-      par$means[] <- 0
-      par$scales <- rep(1, length(s))
-    }
-    if(!length(H1$model$REGMAT)){
-      A <- solve(diag(OBJ$dims$q) - par$regressions)
-      S <- A %*% par$latent_correlations %*% t(A)
-      sc <- ifelse(is.finite(H1$model$CONSTRLOGSD), sqrt(diag(S)) / exp(H1$model$CONSTRLOGSD), 1)
-      par$loadings <- par$loadings %*% diag(sc, OBJ$dims$q)
-      par$latent_correlations <- S / tcrossprod(sc)
-    }
-    par2theta(H1$model, par)[lc1$free_idx]
+    if(!inherits(OBJ$model, "latpl_groups")) par <- list(par)
+    par <- Map(function(par, m){
+      q <- ncol(par$loadings)
+      if(m$PARAMETERIZATION == "delta" && all(m$CONSTRINT %in% 0) && all(m$CONSTRMEAN %in% 0) && all(m$CONSTRLOGSCALE %in% 0)){
+        Lt <- par$loadings %*% solve(diag(q) - par$regressions)
+        R <- par$residual_covariances
+        s <- if(is.null(par$scales)) 1 / sqrt(rowSums((Lt %*% par$latent_correlations) * Lt) + diag(R)) else par$scales
+        k <- OBJ$dims$cat - 1
+        par$thresholds <- rep(s, k) * (par$thresholds - rep(as.vector(par$intercepts + Lt %*% par$means), k))
+        par$loadings <- s * par$loadings
+        par$residual_covariances <- s * R * rep(s, each = length(s))
+        diag(par$residual_covariances) <- 0
+        par$intercepts[] <- 0
+        par$means[] <- 0
+        par$scales <- rep(1, length(s))
+      }
+      if(!length(m$REGMAT)){
+        A <- solve(diag(q) - par$regressions)
+        S <- A %*% par$latent_correlations %*% t(A)
+        sc <- ifelse(is.finite(m$CONSTRLOGSD), sqrt(diag(S)) / exp(m$CONSTRLOGSD), 1)
+        par$loadings <- par$loadings %*% diag(sc, q)
+        par$latent_correlations <- S / tcrossprod(sc)
+      }
+      par
+    }, par, m1)
+    par2theta(H1$model, if(inherits(H1$model, "latpl_groups")) par else par[[1]])[lc1$free_idx]
   }
   theta0f <- OBJ$theta[lc0$free_idx]
   theta1 <- as.vector(lc1$K %*% emb(theta0f) + lc1$c)
@@ -87,65 +92,82 @@ plrt_nested <- function(OBJ, H1){
   plrt_adjust(STAT = 2 * (pl(H1, H1$theta) - pl0), DF = H1$dims$npar - OBJ$dims$npar, E = sum(diag(M)), V = 2 * sum(M * t(M)))
 }
 
-# Model and independence model against the saturated model
+# Model and independence model against the saturated model, fitted in each group
 plrt_fit <- function(OBJ, VARS){
   dims <- OBJ$dims
   n <- dims$n
-  nthr <- dims$nthr
+  nthr <- sum(dims$cat - 1)
+  P <- dims$p * (dims$p - 1) / 2
   eng <- OBJ$engine$data
-  sat <- function(tau, rho, order, scores = FALSE) cpp_saturated(tau, rho, eng, order, scores)
+  sat <- function(g, tau, rho, order, scores = FALSE) cpp_saturated(tau, rho, eng[[g]], order, scores)
 
   # Independence model: thresholds from the univariate margins, with unit weights
-  # given by the number of pairs and univariate terms each observed item enters
-  Y <- OBJ$data$Y
-  v <- (rowSums(!is.na(Y)) - 1 + OBJ$data$uweights) * (if(length(OBJ$data$weights)) OBJ$data$weights else 1)
-  tau_ind <- unlist(lapply(seq_len(dims$p), function(j){
-    pj <- vapply(seq_len(dims$cat[j]) - 1, function(a) sum(v[Y[, j] %in% a]), numeric(1))
-    stats::qnorm(cumsum(pj)[-dims$cat[j]] / sum(pj))
-  }))
-
+  # given by the number of pairs and univariate terms each observed item enters.
   # Saturated model: Newton steps through the Schur complement of the diagonal
   # correlations block
-  tau <- tau_ind
-  rho <- rep(0, dims$pairs)
-  o <- sat(tau, rho, 2)
-  for(iter in 1:100){
-    if(max(abs(o$gradient)) / n < 1e-8) break
-    gt <- o$gradient[1:nthr]
-    gr <- o$gradient[-(1:nthr)]
-    dt <- as.vector(solve(o$hschur, gt - o$htr %*% (gr / o$hrr)))
-    dr <- as.vector(gr - crossprod(o$htr, dt)) / o$hrr
-    step <- 1
-    repeat{
-      if(all(abs(rho + step * dr) < 1)){
-        o_new <- sat(tau + step * dt, rho + step * dr, 2)
-        if(isTRUE(o_new$ll >= o$ll - 1e-12 * abs(o$ll))) break
+  Y <- OBJ$data$Y
+  v <- (rowSums(!is.na(Y)) - 1 + OBJ$data$uweights) * (if(length(OBJ$data$weights)) OBJ$data$weights else 1)
+  fits <- lapply(seq_len(dims$ngroups), function(g){
+    rows <- OBJ$data$group == g - 1
+    tau_ind <- unlist(lapply(seq_len(dims$p), function(j){
+      pj <- vapply(seq_len(dims$cat[j]) - 1, function(a) sum(v[rows & Y[, j] %in% a]), numeric(1))
+      stats::qnorm(cumsum(pj)[-dims$cat[j]] / sum(pj))
+    }))
+    tau <- tau_ind
+    rho <- rep(0, P)
+    o <- sat(g, tau, rho, 2)
+    for(iter in 1:100){
+      if(max(abs(o$gradient)) / n < 1e-8) break
+      gt <- o$gradient[1:nthr]
+      gr <- o$gradient[-(1:nthr)]
+      dt <- as.vector(solve(o$hschur, gt - o$htr %*% (gr / o$hrr)))
+      dr <- as.vector(gr - crossprod(o$htr, dt)) / o$hrr
+      step <- 1
+      repeat{
+        if(all(abs(rho + step * dr) < 1)){
+          o_new <- sat(g, tau + step * dt, rho + step * dr, 2)
+          if(isTRUE(o_new$ll >= o$ll - 1e-12 * abs(o$ll))) break
+        }
+        step <- step / 2
+        if(step < 1e-10) stop('Saturated model fit failed.')
       }
-      step <- step / 2
-      if(step < 1e-10) stop('Saturated model fit failed.')
+      tau <- tau + step * dt
+      rho <- rho + step * dr
+      o <- o_new
     }
-    tau <- tau + step * dt
-    rho <- rho + step * dr
-    o <- o_new
-  }
-  if(max(abs(o$gradient)) / n >= 1e-8) warning('Saturated model fit did not converge.')
+    if(max(abs(o$gradient)) / n >= 1e-8) warning('Saturated model fit did not converge.')
+    list(tau = tau, rho = rho, ll = o$ll, iter = iter, tau_ind = tau_ind)
+  })
+  tau_ind <- unlist(lapply(fits, function(x) x$tau_ind))
+  ll_sat <- sum(vapply(fits, function(x) x$ll, numeric(1)))
 
   # Traces of the saturated model at (TAU, RHO), from per unit information blocks
-  # and the weighted scores of the distinct response patterns
+  # and the weighted scores of the distinct response patterns. The saturated
+  # information is block diagonal across groups, so the traces add up
   sat_terms <- function(TAU, RHO, DELTA = NULL, FULL = FALSE){
-    s <- sat(TAU, RHO, 2, TRUE)
-    htt <- s$htt / n
-    htr <- s$htr / n
-    d <- s$hrr / n
-    w <- function(S) if(length(eng$WM)) S %*% eng$WM else S * rep(eng$WV, each = nrow(S))
-    tr <- cpp_saturated_traces(htt, htr, d, s$hschur / n, w(s$st), w(s$sr), n, FULL)
-    out <- list(ll = s$ll, e = tr[1], v = 2 * tr[2])
-    if(!is.null(DELTA) && FULL){
-      ht <- crossprod(DELTA$tau, htr %*% DELTA$rho)
-      out$dad <- crossprod(DELTA$tau, htt %*% DELTA$tau) + ht + t(ht) + crossprod(DELTA$rho, DELTA$rho * d)
-    }else if(!is.null(DELTA)){
-      hd <- htr %*% DELTA
-      out$dad <- crossprod(DELTA, DELTA * d) - crossprod(hd, solve(htt, hd))
+    out <- list(ll = 0, e = 0, v = 0, dad = 0)
+    for(g in seq_len(dims$ngroups)){
+      it <- (g - 1) * nthr + seq_len(nthr)
+      ir <- (g - 1) * P + seq_len(P)
+      s <- sat(g, TAU[it], RHO[ir], 2, TRUE)
+      htt <- s$htt / n
+      htr <- s$htr / n
+      d <- s$hrr / n
+      w <- function(S) if(length(eng[[g]]$WM)) S %*% eng[[g]]$WM else S * rep(eng[[g]]$WV, each = nrow(S))
+      tr <- cpp_saturated_traces(htt, htr, d, s$hschur / n, w(s$st), w(s$sr), n, FULL)
+      out$ll <- out$ll + s$ll
+      out$e <- out$e + tr[1]
+      out$v <- out$v + 2 * tr[2]
+      if(!is.null(DELTA) && FULL){
+        Dt <- DELTA$tau[it, , drop = FALSE]
+        Dr <- DELTA$rho[ir, , drop = FALSE]
+        ht <- crossprod(Dt, htr %*% Dr)
+        out$dad <- out$dad + crossprod(Dt, htt %*% Dt) + ht + t(ht) + crossprod(Dr, Dr * d)
+      }else if(!is.null(DELTA)){
+        Dr <- DELTA[ir, , drop = FALSE]
+        hd <- htr %*% Dr
+        out$dad <- out$dad + crossprod(Dr, Dr * d) - crossprod(hd, solve(htt, hd))
+      }
     }
     out
   }
@@ -156,8 +178,9 @@ plrt_fit <- function(OBJ, VARS){
   r <- cpp_rho(OBJ$theta, OBJ$engine$model, eng)
   jac <- if (ncol(lc$K) < nrow(lc$K)) r$jacobian %*% lc$K else r$jacobian
   invH <- solve(VARS$H)
-  if(all(seq_len(nthr) %in% lc$free_idx)){
-    psi <- which(lc$free_idx > nthr)
+  tpos <- which(theta_block(OBJ$model, nthr) == "tau")
+  if(all(tpos %in% lc$free_idx)){
+    psi <- which(!(lc$free_idx %in% tpos))
     G <- (invH %*% VARS$J %*% invH)[psi, psi, drop = FALSE]
     P0 <- solve(invH[psi, psi, drop = FALSE], G)
     tz <- sat_terms(r$tau, r$rho, jac[, psi, drop = FALSE])
@@ -167,19 +190,20 @@ plrt_fit <- function(OBJ, VARS){
     tz <- sat_terms(r$tau, r$rho, list(tau = r$tau_jacobian %*% lc$K, rho = jac), FULL = TRUE)
     cv <- sum(diag(tz$dad %*% P0 %*% P0 %*% invH))
   }
-  model <- plrt_adjust(STAT = 2 * (o$ll - tz$ll),
-                       DF   = nthr + dims$pairs - dims$npar,
+  model <- plrt_adjust(STAT = 2 * (ll_sat - tz$ll),
+                       DF   = dims$nthr + dims$pairs - dims$npar,
                        E    = tz$e - sum(diag(P0)),
                        V    = tz$v + 2 * sum(P0 * t(P0)) - 4 * cv)
 
   # Independence model against saturated
   tb <- sat_terms(tau_ind, rep(0, dims$pairs))
-  baseline <- plrt_adjust(STAT = 2 * (o$ll - tb$ll), DF = dims$pairs, E = tb$e, V = tb$v)
+  baseline <- plrt_adjust(STAT = 2 * (ll_sat - tb$ll), DF = dims$pairs, E = tb$e, V = tb$v)
 
   list(
     model = model,
     baseline = baseline,
-    saturated = list(tau = tau, rho = rho, logl = o$ll, iterations = iter),
+    saturated = list(tau = unlist(lapply(fits, function(x) x$tau)), rho = unlist(lapply(fits, function(x) x$rho)),
+                     logl = ll_sat, iterations = max(vapply(fits, function(x) x$iter, numeric(1)))),
     independence = list(tau = tau_ind, logl = tb$ll)
   )
 }

@@ -10,7 +10,7 @@ theta2par(MODEL, THETA)
 par2theta(MODEL, PAR)
 }
 \arguments{
-\item{MODEL}{Model object from \code{\link[=set_latpl_model]{set_latpl_model()}}.}
+\item{MODEL}{Model object from \code{\link[=set_latpl_model]{set_latpl_model()}} or \code{\link[=set_latpl_groups]{set_latpl_groups()}}.}
 
 \item{THETA}{Parameter vector, in the order of \code{\link[=theta_names]{theta_names()}}.}
 
@@ -21,7 +21,8 @@ when \code{PARAMETERIZATION = "theta"}), the intercepts \code{intercepts}, the l
 with \code{PARAMETERIZATION = "delta"}, the scale factors \code{scales}.}
 }
 \value{
-\code{theta2par()} returns the list \code{PAR}; \code{par2theta()} returns the parameter vector.
+\code{theta2par()} returns the list \code{PAR}, or with \code{\link[=set_latpl_groups]{set_latpl_groups()}} a list of them, one
+per group; \code{par2theta()} returns the parameter vector.
 }
 \description{
 Convert between the parameter vector and the model matrices

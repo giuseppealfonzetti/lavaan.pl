@@ -13,7 +13,8 @@ set_latpl_data(
   MISSING = c("listwise", "pairwise", "available.cases"),
   WEIGHTS = NULL,
   WEIGHTS_TYPE = c("design", "frequency"),
-  CLUSTER = NULL
+  CLUSTER = NULL,
+  GROUP = NULL
 )
 }
 \arguments{
@@ -39,14 +40,18 @@ observations. If \code{NULL}, unit weights.}
 
 \item{CLUSTER}{Cluster membership, one per observation, for cluster-robust standard errors. If
 \code{NULL}, observations are independent.}
+
+\item{GROUP}{Group membership, one per observation, for multigroup models (see
+\code{\link[=set_latpl_groups]{set_latpl_groups()}}). Groups are numbered in order of appearance. If \code{NULL}, a single group.}
 }
 \value{
 An object of class \code{latpl_data} with the data matrix \code{Y}, its dimensions \code{n} and \code{p},
 the number of categories of each item \code{cat}, the pairwise frequency tables \code{freq} and
 \code{valfreq}, the treatment of missing values \code{missing}, the unit weights \code{uweights} and
 univariate frequencies \code{ufreq} of the available-cases term, the normalised sampling weights
-\code{weights} and their factors on the scores \code{jweights}, the cluster indices \code{cluster}, and the
-time spent computing the frequencies \code{freqTime}.
+\code{weights} and their factors on the scores \code{jweights}, the cluster indices \code{cluster}, the group
+indices \code{group} (from zero) and their number \code{ngroups}, and the time spent computing the
+frequencies \code{freqTime}. With several groups, \code{freq} and \code{ufreq} stack the tables of each group.
 }
 \description{
 Print method for \code{latpl_data} objects

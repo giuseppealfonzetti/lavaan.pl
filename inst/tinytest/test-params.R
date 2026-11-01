@@ -201,3 +201,48 @@ fr <- fit_latpl(D, set_latpl_model(cm, REGMAT = B, RESCOV = RF))
 expect_equal(get_par(fr, OPTION = "list")$residual_covariances[2, 1], 0.1)
 expect_error(set_latpl_model(cm, REGMAT = diag(3)), "diagonal")
 expect_error(set_latpl_model(cm, RESCOV = replace(RC, 2, 0.2)), "symmetric")
+
+# Two unconstrained groups reproduce the separate fits; equality constraints across groups
+Y1 <- Y[1:150, 4:9]
+Y2 <- Y[151:300, 4:9]
+cm2 <- build_constr_mat(6, 2, "simple")
+M2 <- set_latpl_model(cm2)
+f1 <- fit_latpl(set_latpl_data(Y1), M2)
+f2 <- fit_latpl(set_latpl_data(Y2), M2)
+Dg <- set_latpl_data(rbind(Y1, Y2), GROUP = rep(c("b", "a"), each = 150))
+Mg <- set_latpl_groups(list(M2, M2))
+fg <- fit_latpl(Dg, Mg)
+expect_identical(Dg$group, rep(c(0, 1), each = 150))
+expect_equal(fg$theta, c(f1$theta, f2$theta), tolerance = 1e-5)
+expect_equal(
+  lavaan.pl:::cpp_pl(fg$theta, fg$engine$model, fg$engine$data)$pl,
+  lavaan.pl:::cpp_pl(f1$theta, f1$engine$model, f1$engine$data)$pl + lavaan.pl:::cpp_pl(f2$theta, f2$engine$model, f2$engine$data)$pl
+)
+expect_equal(
+  compute_var(fg)$asymptotic_variance / 300,
+  c(compute_var(f1)$asymptotic_variance, compute_var(f2)$asymptotic_variance) / 150,
+  tolerance = 1e-4
+)
+expect_length(get_par(fg), 2)
+expect_equal(get_par(fg)[[2]], theta2par(M2, f2$theta), tolerance = 1e-4)
+expect_equal(par2theta(Mg, get_par(fg)), fg$theta)
+nm <- theta_names(Dg, Mg)
+expect_identical(nm, c(theta_names(Dg, M2), paste0(theta_names(Dg, M2), ".g2")))
+A <- matrix(0, 1, length(nm))
+A[1, match(c("lambda[1,1]", "lambda[1,1].g2"), nm)] <- c(1, -1)
+fc <- fit_latpl(Dg, set_latpl_groups(list(M2, M2), list(A = A, b = 0)))
+expect_equal(fc$theta[match("lambda[1,1]", nm)], fc$theta[match("lambda[1,1].g2", nm)])
+expect_equal(fc$dims$npar, fg$dims$npar - 1)
+expect_error(fit_latpl(Dg, M2), "groups")
+expect_error(fit_latpl(set_latpl_data(Y1), Mg), "groups")
+Yg <- rbind(Y1, Y2)
+expect_error(set_latpl_data(Yg, GROUP = rep(1:2, 150), VALDATA = Yg), "VALDATA")
+expect_error(set_latpl_data(Yg, GROUP = rep(1:2, 150), CLUSTER = rep(1:30, 10)), "CLUSTER")
+
+# Frequency weights equal replicated rows, within groups
+set.seed(2)
+w <- sample(1:3, 300, replace = TRUE)
+gr <- rep(1:2, each = 150)
+fw <- fit_latpl(set_latpl_data(Yg, WEIGHTS = w, WEIGHTS_TYPE = "frequency", GROUP = gr), Mg)
+fr <- fit_latpl(set_latpl_data(Yg[rep(1:300, w), ], GROUP = gr[rep(1:300, w)]), Mg)
+expect_equal(fw$theta, fr$theta, tolerance = 1e-6)

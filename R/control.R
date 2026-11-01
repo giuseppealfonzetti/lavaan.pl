@@ -13,31 +13,40 @@
 #'@param WEIGHTS_TYPE Type of sampling weights, as in lavaan: `"design"` or `"frequency"`.
 #'@param CLUSTER Cluster membership, one per observation, for cluster-robust standard errors. If
 #'  `NULL`, observations are independent.
+#'@param GROUP Group membership, one per observation, for multigroup models (see
+#'  [set_latpl_groups()]). Groups are numbered in order of appearance. If `NULL`, a single group.
 #'
 #' @return An object of class `latpl_data` with the data matrix `Y`, its dimensions `n` and `p`,
 #'   the number of categories of each item `cat`, the pairwise frequency tables `freq` and
 #'   `valfreq`, the treatment of missing values `missing`, the unit weights `uweights` and
 #'   univariate frequencies `ufreq` of the available-cases term, the normalised sampling weights
-#'   `weights` and their factors on the scores `jweights`, the cluster indices `cluster`, and the
-#'   time spent computing the frequencies `freqTime`.
+#'   `weights` and their factors on the scores `jweights`, the cluster indices `cluster`, the group
+#'   indices `group` (from zero) and their number `ngroups`, and the time spent computing the
+#'   frequencies `freqTime`. With several groups, `freq` and `ufreq` stack the tables of each group.
 #'
 #' @export
 set_latpl_data <- function(DATA, VALDATA = NULL, MISSING = c("listwise", "pairwise", "available.cases"),
-                          WEIGHTS = NULL, WEIGHTS_TYPE = c("design", "frequency"), CLUSTER = NULL) {
+                          WEIGHTS = NULL, WEIGHTS_TYPE = c("design", "frequency"), CLUSTER = NULL, GROUP = NULL) {
   MISSING <- match.arg(MISSING)
   WEIGHTS_TYPE <- match.arg(WEIGHTS_TYPE)
   stopifnot(is.matrix(DATA), is.numeric(DATA), all(is.finite(DATA) | is.na(DATA)), min(DATA, na.rm = TRUE) == 0)
   Y <- round(DATA)
   stopifnot(
     is.null(WEIGHTS) || (is.numeric(WEIGHTS) && length(WEIGHTS) == nrow(Y) && all(is.finite(WEIGHTS)) && all(WEIGHTS >= 0)),
-    is.null(CLUSTER) || (length(CLUSTER) == nrow(Y) && !anyNA(CLUSTER))
+    is.null(CLUSTER) || (length(CLUSTER) == nrow(Y) && !anyNA(CLUSTER)),
+    is.null(GROUP) || (length(GROUP) == nrow(Y) && !anyNA(GROUP))
   )
+  group <- if (is.null(GROUP)) rep(0, nrow(Y)) else match(GROUP, unique(GROUP)) - 1
+  G <- max(group) + 1
+  if (G > 1 && !is.null(VALDATA)) stop("VALDATA is not supported with several groups.")
+  if (G > 1 && !is.null(CLUSTER)) stop("CLUSTER is not supported with several groups.")
   if (MISSING == "listwise" && anyNA(Y)) {
     keep <- stats::complete.cases(Y)
     message(sum(!keep), " incomplete observations removed (MISSING = \"listwise\").")
     Y <- Y[keep, , drop = FALSE]
     if (!is.null(WEIGHTS)) WEIGHTS <- WEIGHTS[keep]
     if (!is.null(CLUSTER)) CLUSTER <- CLUSTER[keep]
+    group <- group[keep]
   }
   stopifnot(nrow(Y) > 0, colSums(!is.na(Y)) > 0)
   cat <- apply(Y, 2, max, na.rm = TRUE) + 1
@@ -52,11 +61,13 @@ set_latpl_data <- function(DATA, VALDATA = NULL, MISSING = c("listwise", "pairwi
     stopifnot(length(unique(cluster)) > 1)
   }
   freq_start_time <- Sys.time()
-  freq <- pairs_freq(Y, cat, weights)
   uweights <- if (MISSING == "available.cases") rowSums(is.na(Y)) else rep(0, nrow(Y))
   uw <- if (length(weights)) uweights * weights else uweights
-  ufreq <- unlist(lapply(seq_len(ncol(Y)), function(j) {
-    vapply(seq_len(cat[j]) - 1, function(a) sum(uw[Y[, j] %in% a]), numeric(1))
+  freq <- unlist(lapply(seq_len(G) - 1, function(g) {
+    pairs_freq(Y[group == g, , drop = FALSE], cat, if (length(weights)) weights[group == g] else numeric(0))
+  }))
+  ufreq <- unlist(lapply(seq_len(G) - 1, function(g) {
+    lapply(seq_len(ncol(Y)), function(j) vapply(seq_len(cat[j]) - 1, function(a) sum(uw[group == g & Y[, j] %in% a]), numeric(1)))
   }))
   valfreq <- NULL
   if (!is.null(VALDATA)) {
@@ -83,6 +94,8 @@ set_latpl_data <- function(DATA, VALDATA = NULL, MISSING = c("listwise", "pairwi
     weights = weights,
     jweights = jweights,
     cluster = cluster,
+    group = group,
+    ngroups = G,
     freqTime = as.numeric(difftime(Sys.time(), freq_start_time, units = "secs"))
   )
   class(out) <- "latpl_data"
@@ -186,6 +199,35 @@ set_latpl_model <- function(CONSTRMAT, CONSTRVAR = NULL, CORRFLAG = TRUE, STDLV 
               PARAMETERIZATION = PARAMETERIZATION, CONSTRINT = as.numeric(INTERCEPTS), CONSTRMEAN = as.numeric(MEANS),
               CONSTRLOGSCALE = log(as.numeric(SCALES)))
   class(out) <- "latpl_model"
+  out
+}
+
+#' Multigroup factor model for pairwise likelihood estimation
+#'
+#' @param MODELS List of model objects from [set_latpl_model()], one per group in the order of the
+#'   groups of [set_latpl_data()], with the same number of items.
+#' @param CONSTRAINTS Linear equality constraints `A %*% theta = b` across groups, as
+#'  `list(A = , b = )`, with one column of `A` per parameter in the order of [theta_names()]: the
+#'  parameters of the first group, then those of the second, and so on. Each model's own
+#'  `CONSTRAINTS` apply within its group.
+#'
+#' @return An object of class `latpl_groups` with `MODELS`, `CONSTRAINTS`, the number of items `p`
+#'   and the number of groups `ngroups`, to be passed to [fit_latpl()] via `MODEL`.
+#'
+#' @export
+set_latpl_groups <- function(MODELS, CONSTRAINTS = NULL) {
+  stopifnot(
+    is.list(MODELS), length(MODELS) > 0, all(vapply(MODELS, inherits, logical(1), "latpl_model")),
+    length(unique(vapply(MODELS, function(x) x$p, numeric(1)))) == 1
+  )
+  if (!is.null(CONSTRAINTS)) {
+    stopifnot(
+      is.list(CONSTRAINTS), is.matrix(CONSTRAINTS$A), is.numeric(CONSTRAINTS$A), all(is.finite(CONSTRAINTS$A)),
+      is.numeric(CONSTRAINTS$b), length(CONSTRAINTS$b) == nrow(CONSTRAINTS$A), all(is.finite(CONSTRAINTS$b))
+    )
+  }
+  out <- list(MODELS = MODELS, CONSTRAINTS = CONSTRAINTS, p = MODELS[[1]]$p, ngroups = length(MODELS))
+  class(out) <- "latpl_groups"
   out
 }
 

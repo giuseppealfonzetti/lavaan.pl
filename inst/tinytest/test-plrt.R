@@ -156,3 +156,22 @@ V <- 2 *
 expect_equal(r$model$df, nt + f$dims$pairs - f$dims$npar)
 expect_equal(r$model$scaling.factor, (V / 2) / E)
 expect_equal(r$model$df.scaled, E^2 / (V / 2))
+
+# Two unconstrained groups: statistic, df and the traces add up over groups
+Dg <- set_latpl_data(Y, GROUP = rep(1:2, each = 150))
+Mg <- set_latpl_groups(list(set_latpl_model(cm), set_latpl_model(cm)))
+fg <- fit_latpl(Dg, Mg)
+traces <- function(x) c(x$stat, x$df, x$df.scaled * x$scaling.factor, x$df.scaled * x$scaling.factor^2)
+rs <- lapply(1:2, function(g) {
+  compute_plrt(fit_latpl(set_latpl_data(Y[Dg$group == g - 1, ]), set_latpl_model(cm)))
+})
+rg <- compute_plrt(fg)
+expect_equal(traces(rg$model), traces(rs[[1]]$model) + traces(rs[[2]]$model), tolerance = 1e-6)
+expect_equal(traces(rg$baseline), traces(rs[[1]]$baseline) + traces(rs[[2]]$baseline), tolerance = 1e-6)
+A <- matrix(0, 1, length(fg$theta))
+nm <- theta_names(Dg, Mg)
+A[1, match(c("lambda[2,1]", "lambda[2,1].g2"), nm)] <- c(1, -1)
+fc <- fit_latpl(Dg, set_latpl_groups(Mg$MODELS, list(A = A, b = 0)))
+rn <- compute_plrt(fc, H1 = fg)$model
+expect_equal(rn$df, 1)
+expect_equal(rn$stat, 2 * (lavaan.pl:::cpp_pl(fg$theta, fg$engine$model, fg$engine$data)$pl - lavaan.pl:::cpp_pl(fc$theta, fc$engine$model, fc$engine$data)$pl))
