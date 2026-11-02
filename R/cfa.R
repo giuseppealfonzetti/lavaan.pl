@@ -209,9 +209,6 @@ spec_from_lavaan <- function(template, start = NULL, valdata = NULL) {
   pt <- lavaan::parTable(template)
   lv <- lavaan::lavNames(template, "lv")
 
-  if (template@Data@ngroups > 1L) {
-    stop("Multigroup analysis is not currently supported.", call. = FALSE)
-  }
   if (template@Data@nlevels > 1L) {
     stop("Multilevel models are not currently supported.", call. = FALSE)
   }
@@ -237,102 +234,120 @@ spec_from_lavaan <- function(template, start = NULL, valdata = NULL) {
     stop(paste0("Free `", paste(unique(pt$op[other]), collapse = "`, `"), "` parameters are not currently supported."), call. = FALSE)
   }
 
-  data <- template@Data@X[[1]] - 1
+  X <- lapply(template@Data@X, function(x) x - 1)
+  G <- length(X)
   missing <- template@Options$missing
   if (!missing %in% c("listwise", "pairwise", "available.cases")) {
     stop("missing = \"", missing, "\" is not currently supported; use \"listwise\", \"pairwise\" or \"available.cases\".", call. = FALSE)
   }
   nlev <- template@Data@ov$nlev[match(template@Data@ov.names[[1]], template@Data@ov$name)]
-  if (any(apply(data, 2, max, na.rm = TRUE) + 1 != nlev)) {
-    stop("Every category of every item must be observed at least once.", call. = FALSE)
+  if (any(vapply(X, function(x) any(apply(x, 2, max, na.rm = TRUE) + 1 != nlev), logical(1)))) {
+    stop("Every category of every item must be observed at least once in every group.", call. = FALSE)
   }
-
-  free <- lapply(lavaan::lavInspect(template, "free"), unclass)
-  est <- lapply(lavaan::lavInspect(template, "est"), unclass)
-  q <- ncol(free$lambda)
-
-  # Latent correlations: LKJ when all free and unconstrained, orthogonal when all
-  # fixed to zero, direct covariances otherwise
-  off <- lower.tri(free$psi)
-  cov_x <- free$psi[off][free$psi[off] > 0]
-  cov_con <- nrow(template@Model@ceq.JAC) > 0L && any(template@Model@ceq.JAC[, cov_x, drop = FALSE] != 0)
-  corrflag <- !all(free$psi[off] == 0 & est$psi[off] == 0)
-  latcov <- if (corrflag && (!all(free$psi[off] > 0) || cov_con)) "direct" else "lkj"
-  constrvar <- diag(est$psi)
-  constrvar[diag(free$psi) > 0] <- NA
-  if (any(constrvar <= 0, na.rm = TRUE)) {
-    stop("Fixed latent variances must be positive.", call. = FALSE)
-  }
-
-  # Build the p x q loading constraints matrix
-  constrmat <- est$lambda
-  constrmat[free$lambda > 0] <- NA
-
-  # Structural regressions and residual covariances: NA when free
-  regmat <- rescov <- NULL
-  if (!is.null(free$beta) && (any(free$beta > 0) || any(est$beta != 0))) {
-    regmat <- est$beta
-    regmat[free$beta > 0] <- NA
-  }
-  up <- upper.tri(free$theta)
-  if (thetapar || any(free$theta[up] > 0) || any(est$theta[up] != 0)) {
-    rescov <- est$theta
-    rescov[free$theta > 0] <- NA
-  }
-  intercepts <- as.vector(est$nu)
-  intercepts[free$nu > 0] <- NA
-  means <- as.vector(est$alpha)
-  means[free$alpha > 0] <- NA
-  scales <- NULL
-  sfree <- if (thetapar) diag(free$theta) else as.vector(free$delta)
-  if (!thetapar) {
-    scales <- as.vector(est$delta)
-    scales[sfree > 0] <- NA
-  }
-
-  # Linear equality constraints A theta = b, in lavaan.pl's parameter order
   if (isTRUE(template@Model@ceq.simple.only)) {
     stop("ceq.simple = TRUE is not currently supported.", call. = FALSE)
   }
   if (length(template@Model@ceq.nonlinear.idx) > 0L) {
     stop("Nonlinear equality constraints are not currently supported.", call. = FALSE)
   }
-  nthr <- length(est$tau)
-  nload <- sum(is.na(constrmat))
-  ncorr <- if (corrflag) q * (q - 1) / 2 else 0
-  vfree <- diag(free$psi) > 0
-  bfree <- if (is.null(regmat)) numeric(0) else free$beta[free$beta > 0]
-  tfree <- free$theta[up][free$theta[up] > 0]
-  d0 <- nthr + nload + ncorr + sum(vfree)
-  nufree <- free$nu[free$nu > 0]
-  afree <- free$alpha[free$alpha > 0]
-  scfree <- sfree[sfree > 0]
-  d1 <- d0 + length(bfree) + length(tfree)
-  d <- d1 + length(nufree) + length(afree) + length(scfree)
+
+  frees <- lapply(lavaan::lavInspect(template, "free", drop.list.single.group = FALSE), function(x) lapply(x, unclass))
+  ests <- lapply(lavaan::lavInspect(template, "est", drop.list.single.group = FALSE), function(x) lapply(x, unclass))
   pos <- type <- rep(NA, template@Model@nx.free)
-  pos[free$tau[free$tau > 0]] <- which(free$tau > 0)
-  type[free$tau[free$tau > 0]] <- "tau"
-  pos[free$lambda[free$lambda > 0]] <- nthr + seq_len(nload)
-  type[free$lambda[free$lambda > 0]] <- "lambda"
-  pos[diag(free$psi)[vfree]] <- nthr + nload + ncorr + seq_len(sum(vfree))
-  type[diag(free$psi)[vfree]] <- "var"
-  type[cov_x] <- "cov"
-  pos[bfree] <- d0 + seq_along(bfree)
-  type[bfree] <- "beta"
-  pos[tfree] <- d0 + length(bfree) + seq_along(tfree)
-  type[tfree] <- "rescov"
-  pos[nufree] <- d1 + seq_along(nufree)
-  type[nufree] <- "nu"
-  pos[afree] <- d1 + length(nufree) + seq_along(afree)
-  type[afree] <- "alpha"
-  pos[scfree] <- d1 + length(nufree) + length(afree) + seq_along(scfree)
-  type[scfree] <- if (thetapar) "resvar" else "delta"
-  cpos <- matrix(NA, q, q)
-  if (corrflag) {
-    cpos[upper.tri(cpos)] <- nthr + nload + seq_len(ncorr)
-    cpos[lower.tri(cpos)] <- t(cpos)[lower.tri(cpos)]
-    pos[cov_x] <- cpos[off][free$psi[off] > 0]
+  fix <- fixval <- numeric(0)
+  specs <- vector("list", G)
+  shift <- 0
+  for (g in seq_len(G)) {
+    free <- frees[[g]]
+    est <- ests[[g]]
+    q <- ncol(free$lambda)
+
+    # Latent correlations: LKJ when all free and unconstrained, orthogonal when all
+    # fixed to zero, direct covariances otherwise
+    off <- lower.tri(free$psi)
+    cov_x <- free$psi[off][free$psi[off] > 0]
+    cov_con <- nrow(template@Model@ceq.JAC) > 0L && any(template@Model@ceq.JAC[, cov_x, drop = FALSE] != 0)
+    corrflag <- !all(free$psi[off] == 0 & est$psi[off] == 0)
+    latcov <- if (corrflag && (!all(free$psi[off] > 0) || cov_con)) "direct" else "lkj"
+    constrvar <- diag(est$psi)
+    constrvar[diag(free$psi) > 0] <- NA
+    if (any(constrvar <= 0, na.rm = TRUE)) {
+      stop("Fixed latent variances must be positive.", call. = FALSE)
+    }
+
+    # Build the p x q loading constraints matrix
+    constrmat <- est$lambda
+    constrmat[free$lambda > 0] <- NA
+
+    # Structural regressions and residual covariances: NA when free
+    regmat <- rescov <- NULL
+    if (!is.null(free$beta) && (any(free$beta > 0) || any(est$beta != 0))) {
+      regmat <- est$beta
+      regmat[free$beta > 0] <- NA
+    }
+    up <- upper.tri(free$theta)
+    if (thetapar || any(free$theta[up] > 0) || any(est$theta[up] != 0)) {
+      rescov <- est$theta
+      rescov[free$theta > 0] <- NA
+    }
+    intercepts <- as.vector(est$nu)
+    intercepts[free$nu > 0] <- NA
+    means <- as.vector(est$alpha)
+    means[free$alpha > 0] <- NA
+    scales <- NULL
+    sfree <- if (thetapar) diag(free$theta) else as.vector(free$delta)
+    if (!thetapar) {
+      scales <- as.vector(est$delta)
+      scales[sfree > 0] <- NA
+    }
+
+    nthr <- length(est$tau)
+    nload <- sum(is.na(constrmat))
+    ncorr <- if (corrflag) q * (q - 1) / 2 else 0
+    vfree <- diag(free$psi) > 0
+    bfree <- if (is.null(regmat)) numeric(0) else free$beta[free$beta > 0]
+    tfree <- free$theta[up][free$theta[up] > 0]
+    d0 <- nthr + nload + ncorr + sum(vfree)
+    nufree <- free$nu[free$nu > 0]
+    afree <- free$alpha[free$alpha > 0]
+    scfree <- sfree[sfree > 0]
+    d1 <- d0 + length(bfree) + length(tfree)
+    pos[free$tau[free$tau > 0]] <- shift + which(free$tau > 0)
+    type[free$tau[free$tau > 0]] <- "tau"
+    pos[free$lambda[free$lambda > 0]] <- shift + nthr + seq_len(nload)
+    type[free$lambda[free$lambda > 0]] <- "lambda"
+    pos[diag(free$psi)[vfree]] <- shift + nthr + nload + ncorr + seq_len(sum(vfree))
+    type[diag(free$psi)[vfree]] <- "var"
+    type[cov_x] <- "cov"
+    pos[bfree] <- shift + d0 + seq_along(bfree)
+    type[bfree] <- "beta"
+    pos[tfree] <- shift + d0 + length(bfree) + seq_along(tfree)
+    type[tfree] <- "rescov"
+    pos[nufree] <- shift + d1 + seq_along(nufree)
+    type[nufree] <- "nu"
+    pos[afree] <- shift + d1 + length(nufree) + seq_along(afree)
+    type[afree] <- "alpha"
+    pos[scfree] <- shift + d1 + length(nufree) + length(afree) + seq_along(scfree)
+    type[scfree] <- if (thetapar) "resvar" else "delta"
+    cpos <- matrix(NA, q, q)
+    if (corrflag) {
+      cpos[upper.tri(cpos)] <- shift + nthr + nload + seq_len(ncorr)
+      cpos[lower.tri(cpos)] <- t(cpos)[lower.tri(cpos)]
+      pos[cov_x] <- cpos[off][free$psi[off] > 0]
+    }
+    fix <- c(fix, shift + which(free$tau == 0))
+    fixval <- c(fixval, est$tau[free$tau == 0])
+    if (latcov == "direct") {
+      fix <- c(fix, cpos[off & free$psi == 0])
+      fixval <- c(fixval, est$psi[off & free$psi == 0])
+    }
+    specs[[g]] <- list(constrmat = constrmat, constrvar = constrvar, corrflag = corrflag, latcov = latcov,
+                       regmat = regmat, rescov = rescov, intercepts = intercepts, means = means, scales = scales)
+    shift <- shift + d1 + length(nufree) + length(afree) + length(scfree)
   }
+
+  # Linear equality constraints A theta = b, in lavaan.pl's parameter order
+  d <- shift
   jac <- template@Model@ceq.JAC
   rhs <- template@Model@ceq.rhs
   A <- matrix(0, 0, d)
@@ -359,65 +374,74 @@ spec_from_lavaan <- function(template, start = NULL, valdata = NULL) {
       b <- c(b, rhs[r])
     }
   }
-  for (k in which(free$tau == 0)) {
+  for (k in seq_along(fix)) {
     row <- numeric(d)
-    row[k] <- 1
+    row[fix[k]] <- 1
     A <- rbind(A, row)
-    b <- c(b, est$tau[k])
-  }
-  if (latcov == "direct") {
-    for (k in which(off & free$psi == 0)) {
-      row <- numeric(d)
-      row[cpos[k]] <- 1
-      A <- rbind(A, row)
-      b <- c(b, est$psi[k])
-    }
+    b <- c(b, fixval[k])
   }
 
   # Build constraint list
-  model <- set_latpl_model(
-    CONSTRMAT = constrmat,
-    CONSTRVAR = constrvar,
-    CORRFLAG = corrflag,
-    STDLV = !anyNA(constrvar),
-    CONSTRAINTS = if (nrow(A) > 0L) list(A = unname(A), b = b),
-    LATCOV = latcov,
-    REGMAT = unname(regmat),
-    RESCOV = unname(rescov),
-    PARAMETERIZATION = template@Options$parameterization,
-    INTERCEPTS = intercepts,
-    MEANS = means,
-    SCALES = scales
-  )
-  if (!identical(is.na(model$CONSTRMAT), is.na(constrmat))) {
-    stop("This identification of the latent variables is not currently supported.", call. = FALSE)
-  }
-
-  # Note: the values in lavaan.pl are always in the order of thresholds, loadings, latent
-  # correlations, latent variances, regressions, then residual covariances.
-  if (is.null(start)) {
-    start_glist <- lapply(lavaan::lavInspect(template, "start"), unclass)
-    start_glist$tau[] <- unlist(lapply(seq_len(ncol(data)), function(j) {
-      stats::qnorm(cumsum(tabulate(data[, j] + 1, nlev[j]))[-nlev[j]] / sum(!is.na(data[, j])))
-    }))
-  } else {
-    start_glist <- lavaan::lav_model_set_parameters(template@Model, as.numeric(start))@GLIST
-  }
-  init <- par2theta(model, list(thresholds = as.numeric(start_glist$tau), loadings = start_glist$lambda,
-                                latent_correlations = start_glist$psi, regressions = start_glist$beta,
-                                residual_covariances = start_glist$theta, intercepts = as.vector(start_glist$nu),
-                                means = as.vector(start_glist$alpha), scales = as.vector(start_glist$delta)))
+  con <- if (nrow(A) > 0L) list(A = unname(A), b = b)
+  models <- lapply(specs, function(s) {
+    m <- set_latpl_model(
+      CONSTRMAT = s$constrmat,
+      CONSTRVAR = s$constrvar,
+      CORRFLAG = s$corrflag,
+      STDLV = !anyNA(s$constrvar),
+      CONSTRAINTS = if (G == 1L) con,
+      LATCOV = s$latcov,
+      REGMAT = unname(s$regmat),
+      RESCOV = unname(s$rescov),
+      PARAMETERIZATION = template@Options$parameterization,
+      INTERCEPTS = s$intercepts,
+      MEANS = s$means,
+      SCALES = s$scales
+    )
+    if (!identical(is.na(m$CONSTRMAT), is.na(s$constrmat))) {
+      stop("This identification of the latent variables is not currently supported.", call. = FALSE)
+    }
+    m
+  })
+  model <- if (G == 1L) models[[1]] else set_latpl_groups(models, con)
 
   weights <- NULL
   if (length(template@Data@sampling.weights) > 0L) {
-    if (template@Options$sampling.weights.normalization == "none") {
-      stop("sampling.weights.normalization = \"none\" is not currently supported.", call. = FALSE)
+    norm <- template@Options$sampling.weights.normalization
+    if (norm == "none" || (norm == "group" && G > 1L)) {
+      stop("sampling.weights.normalization = \"", norm, "\" is not currently supported.", call. = FALSE)
     }
-    weights <- template@Data@weights[[1]]
+    weights <- unlist(template@Data@weights)
   }
-  cluster <- if (isTRUE(template@Options$.clustered)) template@Data@Lp[[1]]$cluster.idx[[2]] else NULL
-  data_spec <- set_latpl_data(data, valdata, MISSING = missing, WEIGHTS = weights,
-                             WEIGHTS_TYPE = template@Options$sampling.weights.type, CLUSTER = cluster)
+  cluster <- if (isTRUE(template@Options$.clustered)) unlist(lapply(template@Data@Lp, function(x) x$cluster.idx[[2]]))
+  data_spec <- set_latpl_data(Reduce(rbind, X), valdata, MISSING = missing, WEIGHTS = weights,
+                              WEIGHTS_TYPE = template@Options$sampling.weights.type, CLUSTER = cluster,
+                              GROUP = rep(seq_len(G), vapply(X, nrow, numeric(1))))
+
+  # Note: the values in lavaan.pl are always in the order of thresholds, loadings, latent
+  # correlations, latent variances, regressions, then residual covariances.
+  if (is.null(start) && G > 1L) {
+    init <- init_theta(set_init(), data_spec, latpl_dims(data_spec, model), model, FALSE)
+    sgn <- unlist(Map(function(s, f) s$lambda[f$lambda > 0], lavaan::lavInspect(template, "start"), frees))
+    lam <- theta_block(model, sum(data_spec$cat - 1)) == "lambda"
+    init[lam] <- ifelse(sgn < 0, -1, 1) * init[lam]
+  } else {
+    if (is.null(start)) {
+      starts <- list(lapply(lavaan::lavInspect(template, "start"), unclass))
+      starts[[1]]$tau[] <- unlist(lapply(seq_len(ncol(X[[1]])), function(j) {
+        stats::qnorm(cumsum(tabulate(X[[1]][, j] + 1, nlev[j]))[-nlev[j]] / sum(!is.na(X[[1]][, j])))
+      }))
+    } else {
+      glist <- lavaan::lav_model_set_parameters(template@Model, as.numeric(start))@GLIST
+      starts <- unname(split(glist, rep(seq_len(G), template@Model@nmat)))
+    }
+    pars <- lapply(starts, function(s) {
+      list(thresholds = as.numeric(s$tau), loadings = s$lambda, latent_correlations = s$psi, regressions = s$beta,
+           residual_covariances = s$theta, intercepts = as.vector(s$nu), means = as.vector(s$alpha),
+           scales = as.vector(s$delta))
+    })
+    init <- par2theta(model, if (G == 1L) pars[[1]] else pars)
+  }
 
   list(DATA = data_spec, MODEL = model, THETA = init)
 }
@@ -430,19 +454,24 @@ spec_from_lavaan <- function(template, start = NULL, valdata = NULL) {
 #' @return A [lavaan::lavaan] object.
 #' @export
 as_lavaan <- function(fit, vars = NULL, template) {
-  free <- lapply(lavaan::lavInspect(template, "free"), unclass)
+  frees <- lapply(lavaan::lavInspect(template, "free", drop.list.single.group = FALSE), function(x) lapply(x, unclass))
   par_lav <- function(theta) {
     fit$theta <- theta
-    par <- get_par(fit, OPTION = "list")
+    pars <- get_par(fit, OPTION = "list")
+    if (!inherits(fit$model, "latpl_groups")) pars <- list(pars)
     x <- numeric(template@Model@nx.free)
-    x[free$tau[free$tau > 0]] <- par$thresholds[free$tau > 0]
-    x[free$lambda[free$lambda > 0]] <- par$loadings[free$lambda > 0]
-    x[free$psi[free$psi > 0]] <- par$latent_correlations[free$psi > 0]
-    if (!is.null(free$beta)) x[free$beta[free$beta > 0]] <- par$regressions[free$beta > 0]
-    x[free$theta[free$theta > 0]] <- par$residual_covariances[free$theta > 0]
-    x[free$nu[free$nu > 0]] <- par$intercepts[free$nu > 0]
-    x[free$alpha[free$alpha > 0]] <- par$means[free$alpha > 0]
-    if (!is.null(par$scales)) x[free$delta[free$delta > 0]] <- par$scales[free$delta > 0]
+    for (g in seq_along(frees)) {
+      free <- frees[[g]]
+      par <- pars[[g]]
+      x[free$tau[free$tau > 0]] <- par$thresholds[free$tau > 0]
+      x[free$lambda[free$lambda > 0]] <- par$loadings[free$lambda > 0]
+      x[free$psi[free$psi > 0]] <- par$latent_correlations[free$psi > 0]
+      if (!is.null(free$beta)) x[free$beta[free$beta > 0]] <- par$regressions[free$beta > 0]
+      x[free$theta[free$theta > 0]] <- par$residual_covariances[free$theta > 0]
+      x[free$nu[free$nu > 0]] <- par$intercepts[free$nu > 0]
+      x[free$alpha[free$alpha > 0]] <- par$means[free$alpha > 0]
+      if (!is.null(par$scales)) x[free$delta[free$delta > 0]] <- par$scales[free$delta > 0]
+    }
     x
   }
 
@@ -495,12 +524,13 @@ as_lavaan <- function(fit, vars = NULL, template) {
       warning(sprintf("test option %s not available for estimator PML", t), call. = FALSE)
     }
     pml_test <- function(x) {
-      std <- max(x$stat, 0)
-      out_test <- list(standard = list(test = "standard", stat = std, stat.group = std, df = x$df,
+      sg <- pmax(x$stat.group, 0)
+      std <- sum(sg)
+      out_test <- list(standard = list(test = "standard", stat = std, stat.group = sg, df = x$df,
                                        refdistr = "unknown", pvalue = NA))
       if ("mean.var.adjusted" %in% tests) {
         out_test$mean.var.adjusted <- list(
-          test = "mean.var.adjusted", stat = x$stat.scaled, stat.group = std / x$scaling.factor,
+          test = "mean.var.adjusted", stat = x$stat.scaled, stat.group = sg / x$scaling.factor,
           df = x$df.scaled, pvalue = x$pvalue.scaled, scaling.factor = x$scaling.factor,
           scaled.test.stat = std, scaled.test = "standard", label = "mean+var adjusted correction (PML)",
           shift.parameter = NA, trace.UGamma = NA, trace.UGamma4 = NA, trace.UGamma2 = NA,

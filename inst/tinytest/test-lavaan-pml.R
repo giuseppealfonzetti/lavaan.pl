@@ -587,6 +587,75 @@ local({
   expect_equal(lavTestLRT(fr, fc)[2, "Chisq diff"] > 0, TRUE)
 })
 
+# Multigroup models and the invariance chain match lavaan PML
+local({
+  m <- "A =~ A1 + A2 + A3\nC =~ C1 + C2 + C3"
+  d <- bfi[1:1000, ]
+  fm <- c(
+    "chisq",
+    "df",
+    "chisq.scaled",
+    "df.scaled",
+    "pvalue.scaled",
+    "chisq.scaling.factor",
+    "baseline.chisq.scaled",
+    "cfi.scaled",
+    "tli.scaled"
+  )
+  ge <- list(
+    none = character(0),
+    load = "loadings",
+    thr = "thresholds",
+    tl = c("thresholds", "loadings"),
+    tli = c("thresholds", "loadings", "intercepts")
+  )
+  for (pz in c("delta", "theta")) {
+    sl <- pz == "delta"
+    ours <- refs <- list()
+    for (nm in names(ge)) {
+      ours[[nm]] <- cfa(m, d, group = "gender", group.equal = ge[[nm]], std.lv = sl, parameterization = pz,
+                        test = "mean.var.adjusted")
+      refs[[nm]] <- lavaan::cfa(m, d, group = "gender", group.equal = ge[[nm]], std.lv = sl, parameterization = pz,
+                                estimator = "PML", test = "mean.var.adjusted")
+      pe <- parameterEstimates(ours[[nm]])
+      pr <- parameterEstimates(refs[[nm]])
+      expect_identical(pe[, c("lhs", "op", "rhs", "group")], pr[, c("lhs", "op", "rhs", "group")])
+      expect_equal(pe$est, pr$est, tolerance = 1e-3)
+      expect_equal(pe$se, pr$se, tolerance = 1e-3)
+      expect_equal(ours[[nm]]@optim$logl, refs[[nm]]@optim$logl, tolerance = 1e-6)
+      expect_equal(
+        lapply(ours[[nm]]@test, function(x) x[c("stat", "stat.group", "df")]),
+        lapply(refs[[nm]]@test, function(x) x[c("stat", "stat.group", "df")]),
+        tolerance = 1e-3
+      )
+      expect_equal(fitMeasures(ours[[nm]], fm), fitMeasures(refs[[nm]], fm), tolerance = 1e-3)
+    }
+
+    lrt <- lavTestLRT(ours$none, ours$thr, ours$tl, ours$tli)
+    ref <- suppressWarnings(lavaan::lavTestLRT(refs$none, refs$thr, refs$tl, refs$tli))
+    cols <- c("Df", "PL_AIC", "PL_BIC", "Chisq")
+    expect_equal(unlist(lrt[, cols]), unlist(ref[, cols]), tolerance = 1e-6)
+    expect_true(all(lrt[-1, "Chisq diff"] > 0 & lrt[-1, "Df diff"] > 0))
+
+    expect_error(lavTestLRT(ours$load, ours$tl), "not nested")
+
+    if (!sl) {
+      m10 <- lavaan:::lav_test_diff_m10(m1 = ours$none, m0 = ours$load, test = FALSE)
+      iH <- solve(lavaan::lavTech(m10, "information.observed"))
+      J <- lavaan::lavTech(m10, "first.order")
+      A <- lavaan:::lav_test_diff_a(m1 = ours$none, m0 = ours$load, method = "exact")
+      M <- (A %*% iH %*% J %*% iH %*% t(A)) %*% solve(A %*% iH %*% t(A))
+      out <- lavTestLRT(ours$none, ours$load)
+      expect_equal(
+        out[2, "Chisq diff"],
+        sum(diag(M)) / sum(diag(M %*% M)) * 2 * (ours$none@optim$logl - ours$load@optim$logl),
+        tolerance = 1e-4
+      )
+      expect_equal(out[2, "Df diff"], sum(diag(M))^2 / sum(diag(M %*% M)), tolerance = 1e-4)
+    }
+  }
+})
+
 # unsupported models are rejected
 local({
   expect_error(
@@ -612,9 +681,5 @@ local({
   expect_error(
     sem("A =~ A1 + A2 + A3\nC =~ C1 + C2 + C3\nA1 ~ C", bfi, std.lv = TRUE),
     "observed variables"
-  )
-  expect_error(
-    cfa("A =~ A1 + A2 + A3", bfi, std.lv = TRUE, group = "gender"),
-    "group"
   )
 })
