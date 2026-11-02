@@ -225,6 +225,14 @@ fit_latpl <- function(
 }
 
 
+#' Inputs of the C++ routines
+#'
+#' @param DATA Data object from [set_latpl_data()].
+#' @param MODEL Model object from [set_latpl_model()] or [set_latpl_groups()].
+#' @return A list with `model` and `data`, each a list with one element per group: the model specification, and
+#'   the frequencies, distinct response patterns, unit weights and cluster weights of the group.
+#' @seealso [fit_latpl()], [run_sa()]
+#' @keywords internal
 engine <- function(DATA, MODEL) {
   models <- if (inherits(MODEL, "latpl_groups")) MODEL$MODELS else list(MODEL)
   gw <- if (length(DATA$weights)) DATA$weights else rep(1, DATA$n)
@@ -278,6 +286,17 @@ engine <- function(DATA, MODEL) {
   )
 }
 
+#' Starting values
+#'
+#' @param INIT Initialisation object from [set_init()].
+#' @param DATA Data object from [set_latpl_data()].
+#' @param DIMS Dimensions from [latpl_dims()].
+#' @param MODEL Model object from [set_latpl_model()] or [set_latpl_groups()].
+#' @param VERBOSE If `TRUE`, report user-supplied starting values.
+#' @return The starting parameter vector: `INIT$THETA` when supplied, otherwise thresholds from the margins of each
+#'   group and fixed values for the other parameters.
+#' @seealso [fit_latpl()], [spec_from_lavaan()]
+#' @keywords internal
 init_theta <- function(INIT, DATA, DIMS, MODEL, VERBOSE) {
   models <- if (inherits(MODEL, "latpl_groups")) MODEL$MODELS else list(MODEL)
   nthr <- sum(DATA$cat - 1)
@@ -349,6 +368,20 @@ init_theta <- function(INIT, DATA, DIMS, MODEL, VERBOSE) {
   theta
 }
 
+#' Stochastic approximation
+#'
+#' @param STARTS List of starting parameter vectors.
+#' @param DATA Data object from [set_latpl_data()].
+#' @param ENGINE Output of [engine()].
+#' @param LINCON Output of [lincon()].
+#' @param CONTROL Control object from [set_sa_control()] or [set_sa_init_control()].
+#' @param ADAM_ONLY If `TRUE`, stop after the Adam phase.
+#' @param VERBOSE If `TRUE`, print progress.
+#' @return A list with the estimate `theta`, the last and end-of-burn-in iterates `theta_last` and `theta_burn`,
+#'   the epoch length and phase counts, the rejected and skipped steps, the trajectory `path` and the timings
+#'   `time`.
+#' @seealso [fit_latpl()], [set_sa_control()]
+#' @keywords internal
 run_sa <- function(STARTS, DATA, ENGINE, LINCON, CONTROL, ADAM_ONLY, VERBOSE) {
   val <- is.null(DATA$valfreq)
   npar <- length(LINCON$free_idx)

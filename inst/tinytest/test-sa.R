@@ -2,180 +2,185 @@ if (!at_home()) {
   exit_file("Not run on CRAN")
 }
 
+#### Data and models ####
 p <- 40
 q <- 4
 n <- 1000
-cm <- build_constr_mat(p, q, "simple")
-S <- matrix(.3, q, q)
-diag(S) <- 1
-Y <- sim_data(
+loadings_structure <- build_constr_mat(p, q, "simple")
+latent_correlations <- matrix(.3, q, q)
+diag(latent_correlations) <- 1
+items <- sim_data(
   n,
-  gen_loadings(cm, SEED = 1, LB = .4, UB = .8),
+  gen_loadings(loadings_structure, SEED = 1, LB = .4, UB = .8),
   c(-1.2, 0, 1.2),
-  S,
+  latent_correlations,
   SEED = 2
 )
-D <- set_latpl_data(Y)
-# distance between SA and PML estimates, in PML standard errors
-dist <- function(sa, pml) {
-  se <- sqrt(compute_var(pml)$asymptotic_variance / pml$dims$n)
-  max((abs(
-    get_par(sa, OPTION = "transformed") - get_par(pml, OPTION = "transformed")
-  ) /
-    se)[se > 0])
+data <- set_latpl_data(items)
+model <- set_latpl_model(loadings_structure)
+fit_pml <- fit_latpl(data, model)
+fit_sa <- fit_latpl(data, model, CONTROL = set_sa_control())
+epoch_length <- fit_sa$stoFit$epoch_length
+
+#### Helpers ####
+distance_in_se <- function(fit_sa, fit_pml) {
+  se <- sqrt(compute_var(fit_pml)$asymptotic_variance / fit_pml$dims$n)
+  difference <- abs(get_par(fit_sa, OPTION = "transformed") - get_par(fit_pml, OPTION = "transformed"))
+  max((difference / se)[se > 0])
 }
 
-# SA estimates within one standard error of PML
-for (stdlv in c(TRUE, FALSE)) {
-  M <- set_latpl_model(cm, STDLV = stdlv)
-  pml <- fit_latpl(D, M)
-  sa <- fit_latpl(D, M, CONTROL = set_sa_control())
-  expect_true(sa$stoFit$converged)
-  expect_identical(sa$stoFit$gain, "hessian")
-  expect_true(dist(sa, pml) < 1)
-}
-M <- set_latpl_model(cm)
-pml <- fit_latpl(D, M)
-sd <- fit_latpl(D, M, CONTROL = set_sa_control(GAIN = "diagonal"))
-expect_identical(sd$stoFit$gain, "diagonal")
-expect_identical(sd$stoFit$newton_epochs, 0L)
-expect_true(dist(sd, pml) < 1)
-
-# Reproducible with a fixed seed, different with another seed
-sa <- fit_latpl(D, M, CONTROL = set_sa_control())
-expect_identical(fit_latpl(D, M, CONTROL = set_sa_control())$theta, sa$theta)
-expect_false(identical(
-  fit_latpl(D, M, CONTROL = set_sa_control(SEED = 7))$theta,
-  sa$theta
-))
-
-# Averaged phase lasts EPOCHS epochs, averaging after AVG_FROM of it
-E <- sa$stoFit$epoch_length
-expect_equal(E, ceiling(sa$dims$pairs / 16))
-expect_equal(sa$stoFit$averaged, 20 * E - floor(0.25 * 20 * E))
-expect_equal(
-  sa$stoFit$iterations,
-  (sa$stoFit$adam_epochs + sa$stoFit$newton_epochs + 20) * E
-)
-expect_equal(tail(sa$stoFit$path$phase, 1), 3)
-
-# Noise term uses the number of averaged iterations
-vs <- compute_var(sa)
-P <- sa$dims$pairs
-ppi <- sa$control$PAIRS_PER_ITERATION
-a1 <- P * (P - ppi) / (ppi * (P - 1))
-a2 <- (P - ppi) / (ppi * (P - 1))
-invH <- solve(vs$H)
-noise <- invH %*% (a1 * vs$H - a2 * vs$J) %*% invH / (n * sa$stoFit$averaged)
-eig <- eigen((noise + t(noise)) / 2, symmetric = TRUE)
-expect_equal(vs$noise, eig$vectors %*% (pmax(eig$values, 0) * t(eig$vectors)))
-expect_equal(
-  vs$optimisation_noise,
-  diag(vs$trJacob %*% vs$noise %*% t(vs$trJacob))
-)
-expect_null(compute_var(pml)$noise)
-
-# Linear constraints hold exactly
-nm <- theta_names(D, M)
-A <- rbind(
-  replace(
-    numeric(length(nm)),
-    match(c("lambda[2,1]", "lambda[3,1]"), nm),
-    c(1, -1)
-  ),
-  replace(numeric(length(nm)), match("tau[4,2]", nm), 1)
-)
-Mc <- set_latpl_model(cm, CONSTRAINTS = list(A = A, b = c(0, 0.25)))
-sc <- fit_latpl(D, Mc, CONTROL = set_sa_control())
-expect_equal(as.vector(A %*% sc$theta), c(0, 0.25))
-expect_true(dist(sc, fit_latpl(D, Mc)) < 1)
-B <- matrix(0, q, q)
-B[2, 1] <- B[3, 2] <- NA
-RC <- matrix(0, p, p)
-RC[1, 2] <- RC[2, 1] <- NA
-for (Ms in list(
-  set_latpl_model(cm, LATCOV = "direct"),
-  set_latpl_model(cm, CORRFLAG = FALSE, REGMAT = B, RESCOV = RC),
-  set_latpl_model(cm, PARAMETERIZATION = "theta")
-)) {
-  expect_true(
-    dist(fit_latpl(D, Ms, CONTROL = set_sa_control()), fit_latpl(D, Ms)) < 1
-  )
-}
-
-# Two groups: SA within one standard error of PML
-Dg <- set_latpl_data(Y, GROUP = rep(1:2, each = n / 2))
-Mg <- set_latpl_groups(list(set_latpl_model(cm), set_latpl_model(cm, PARAMETERIZATION = "theta")))
-sg <- fit_latpl(Dg, Mg, CONTROL = set_sa_control())
-expect_true(sg$stoFit$converged)
-expect_true(dist(sg, fit_latpl(Dg, Mg)) < 1)
-
-# Starting values outside the parameter space are rejected
-expect_error(
-  fit_latpl(
-    D,
-    M,
-    CONTROL = set_sa_control(),
-    INIT = set_init(THETA = replace(pml$theta, 121, 5))
-  ),
-  "outside the parameter space"
-)
-
-# SA Adam phase as initialisation of ucminf
-fi <- fit_latpl(D, M, INIT = set_init(METHOD = "SA"))
-expect_equal(fi$theta, pml$theta, tolerance = 1e-4)
-
-# Adam phase from several starts: SA continues from the best, counting the epochs of all
-nll <- function(theta) -lavaan.pl:::cpp_pl(theta, sa$engine$model, sa$engine$data)$pl
-starts <- list(sa$init, pml$theta)
-one <- lavaan.pl:::run_sa(starts[1], D, sa$engine, sa$lincon, set_sa_init_control(), TRUE, FALSE)
-two <- lavaan.pl:::run_sa(starts, D, sa$engine, sa$lincon, set_sa_init_control(), TRUE, FALSE)
-expect_true(nll(two$theta) <= nll(one$theta))
-expect_equal(sum(two$path$phase == 0), 2)
-full <- lavaan.pl:::run_sa(starts, D, sa$engine, sa$lincon, set_sa_control(), FALSE, FALSE)
-expect_equal(full$iterations, (full$adam_epochs + full$newton_epochs + 20) * E)
-
-# cfa() with SA
-colnames(Y) <- paste0("y", 1:p)
-dat <- as.data.frame(lapply(as.data.frame(Y), ordered))
-mod <- paste(
-  sapply(1:q, function(h) {
-    paste0("f", h, " =~ ", paste0("y", which(is.na(cm[, h])), collapse = " + "))
-  }),
-  collapse = "\n"
-)
-fit <- cfa(mod, dat, std.lv = TRUE, control = set_sa_control())
-template <- lavaan::cfa(
-  mod,
-  dat,
-  std.lv = TRUE,
-  estimator = "PML",
-  se = "robust.huber.white",
-  information = "observed",
-  test = "none",
-  do.fit = FALSE
-)
-plain <- as_lavaan(
-  fit@external$lavaan.pl,
-  modifyList(fit@external$vars, list(noise = NULL)),
-  template
-)
-expect_true(lavaan::lavInspect(fit, "converged"))
-expect_true(all(is.finite(lavaan::parameterEstimates(fit)$se)))
-expect_true(all(diag(lavaan::vcov(fit)) >= diag(lavaan::vcov(plain))))
-expect_true(any(diag(lavaan::vcov(fit)) > diag(lavaan::vcov(plain))))
-expect_equal(attr(fit@vcov$vcov, "E.inv"), attr(plain@vcov$vcov, "E.inv"))
-
-# SA with available cases
-Ym <- unname(Y)
-set.seed(6)
-for (h in 1:q) {
-  idx <- which(is.na(cm[, h]))
-  for (j in idx[-1]) {
-    Ym[runif(n) < c(.1, .25, .25, .5)[Y[, idx[1]] + 1], j] <- NA
+#### SA estimates are within one standard error of PML ####
+local({
+  fit_marker_pml <- fit_latpl(data, set_latpl_model(loadings_structure, STDLV = FALSE))
+  fit_marker_sa <- fit_latpl(data, set_latpl_model(loadings_structure, STDLV = FALSE), CONTROL = set_sa_control())
+  for (fits in list(list(fit_sa, fit_pml), list(fit_marker_sa, fit_marker_pml))) {
+    expect_true(fits[[1]]$stoFit$converged)
+    expect_identical(fits[[1]]$stoFit$gain, "hessian")
+    expect_true(distance_in_se(fits[[1]], fits[[2]]) < 1)
   }
-}
-Dm <- set_latpl_data(Ym, MISSING = "available.cases")
-expect_true(
-  dist(fit_latpl(Dm, M, CONTROL = set_sa_control()), fit_latpl(Dm, M)) < 1
-)
+})
+
+#### The diagonal gain skips the Newton phase ####
+local({
+  fit_diagonal <- fit_latpl(data, model, CONTROL = set_sa_control(GAIN = "diagonal"))
+  expect_identical(fit_diagonal$stoFit$gain, "diagonal")
+  expect_identical(fit_diagonal$stoFit$newton_epochs, 0L)
+  expect_true(distance_in_se(fit_diagonal, fit_pml) < 1)
+})
+
+#### SA is reproducible with a fixed seed and changes with another seed ####
+local({
+  expect_identical(fit_latpl(data, model, CONTROL = set_sa_control())$theta, fit_sa$theta)
+  expect_false(identical(fit_latpl(data, model, CONTROL = set_sa_control(SEED = 7))$theta, fit_sa$theta))
+})
+
+#### The averaged phase lasts EPOCHS epochs and averages from AVG_FROM of it ####
+local({
+  expect_equal(epoch_length, ceiling(fit_sa$dims$pairs / 16))
+  expect_equal(fit_sa$stoFit$averaged, 20 * epoch_length - floor(0.25 * 20 * epoch_length))
+  expect_equal(
+    fit_sa$stoFit$iterations,
+    (fit_sa$stoFit$adam_epochs + fit_sa$stoFit$newton_epochs + 20) * epoch_length
+  )
+  expect_equal(tail(fit_sa$stoFit$path$phase, 1), 3)
+})
+
+#### The optimisation noise uses the number of averaged iterations ####
+local({
+  vars <- compute_var(fit_sa)
+  pairs <- fit_sa$dims$pairs
+  pairs_per_iteration <- fit_sa$control$PAIRS_PER_ITERATION
+  hessian_weight <- pairs * (pairs - pairs_per_iteration) / (pairs_per_iteration * (pairs - 1))
+  variability_weight <- (pairs - pairs_per_iteration) / (pairs_per_iteration * (pairs - 1))
+  inverse_hessian <- solve(vars$H)
+  noise <- inverse_hessian %*% (hessian_weight * vars$H - variability_weight * vars$J) %*% inverse_hessian /
+    (n * fit_sa$stoFit$averaged)
+  eigen_noise <- eigen((noise + t(noise)) / 2, symmetric = TRUE)
+  expect_equal(vars$noise, eigen_noise$vectors %*% (pmax(eigen_noise$values, 0) * t(eigen_noise$vectors)))
+  expect_equal(vars$optimisation_noise, diag(vars$trJacob %*% vars$noise %*% t(vars$trJacob)))
+  expect_null(compute_var(fit_pml)$noise)
+})
+
+#### Linear constraints hold exactly ####
+local({
+  names_free <- theta_names(data, model)
+  constraints <- rbind(
+    replace(numeric(length(names_free)), match(c("lambda[2,1]", "lambda[3,1]"), names_free), c(1, -1)),
+    replace(numeric(length(names_free)), match("tau[4,2]", names_free), 1)
+  )
+  model_constrained <- set_latpl_model(loadings_structure, CONSTRAINTS = list(A = constraints, b = c(0, 0.25)))
+  fit_constrained <- fit_latpl(data, model_constrained, CONTROL = set_sa_control())
+  expect_equal(as.vector(constraints %*% fit_constrained$theta), c(0, 0.25))
+  expect_true(distance_in_se(fit_constrained, fit_latpl(data, model_constrained)) < 1)
+})
+
+#### Direct covariances, structural models and the theta parameterization are within one standard error ####
+local({
+  regressions <- matrix(0, q, q)
+  regressions[2, 1] <- regressions[3, 2] <- NA
+  residual_covariances <- matrix(0, p, p)
+  residual_covariances[1, 2] <- residual_covariances[2, 1] <- NA
+  for (other_model in list(
+    set_latpl_model(loadings_structure, LATCOV = "direct"),
+    set_latpl_model(loadings_structure, CORRFLAG = FALSE, REGMAT = regressions, RESCOV = residual_covariances),
+    set_latpl_model(loadings_structure, PARAMETERIZATION = "theta")
+  )) {
+    expect_true(distance_in_se(
+      fit_latpl(data, other_model, CONTROL = set_sa_control()),
+      fit_latpl(data, other_model)
+    ) < 1)
+  }
+})
+
+#### Two groups are within one standard error ####
+local({
+  data_two_groups <- set_latpl_data(items, GROUP = rep(1:2, each = n / 2))
+  model_two_groups <- set_latpl_groups(list(
+    set_latpl_model(loadings_structure),
+    set_latpl_model(loadings_structure, PARAMETERIZATION = "theta")
+  ))
+  fit_two_groups <- fit_latpl(data_two_groups, model_two_groups, CONTROL = set_sa_control())
+  expect_true(fit_two_groups$stoFit$converged)
+  expect_true(distance_in_se(fit_two_groups, fit_latpl(data_two_groups, model_two_groups)) < 1)
+})
+
+#### Starting values outside the parameter space are rejected ####
+local({
+  expect_error(
+    fit_latpl(data, model, CONTROL = set_sa_control(), INIT = set_init(THETA = replace(fit_pml$theta, 121, 5))),
+    "outside the parameter space"
+  )
+})
+
+#### The Adam phase initialises ucminf ####
+local({
+  expect_equal(fit_latpl(data, model, INIT = set_init(METHOD = "SA"))$theta, fit_pml$theta, tolerance = 1e-4)
+})
+
+#### From several starts, SA continues from the best and counts the epochs of all ####
+local({
+  negative_pl <- function(theta) -lavaan.pl:::cpp_pl(theta, fit_sa$engine$model, fit_sa$engine$data)$pl
+  starts <- list(fit_sa$init, fit_pml$theta)
+  run_sa <- function(starts, control, adam_only) {
+    lavaan.pl:::run_sa(starts, data, fit_sa$engine, fit_sa$lincon, control, adam_only, FALSE)
+  }
+  one_start <- run_sa(starts[1], set_sa_init_control(), TRUE)
+  two_starts <- run_sa(starts, set_sa_init_control(), TRUE)
+  full_run <- run_sa(starts, set_sa_control(), FALSE)
+  expect_true(negative_pl(two_starts$theta) <= negative_pl(one_start$theta))
+  expect_equal(sum(two_starts$path$phase == 0), 2)
+  expect_equal(full_run$iterations, (full_run$adam_epochs + full_run$newton_epochs + 20) * epoch_length)
+})
+
+#### cfa() with SA adds the optimisation noise to the covariance matrix ####
+local({
+  colnames(items) <- paste0("y", 1:p)
+  items_ordered <- as.data.frame(lapply(as.data.frame(items), ordered))
+  syntax <- paste(
+    sapply(1:q, function(h) paste0("f", h, " =~ ", paste0("y", which(is.na(loadings_structure[, h])), collapse = " + "))),
+    collapse = "\n"
+  )
+  fit <- cfa(syntax, items_ordered, std.lv = TRUE, control = set_sa_control())
+  template <- lavaan::cfa(syntax, items_ordered, std.lv = TRUE, estimator = "PML", se = "robust.huber.white",
+                          information = "observed", test = "none", do.fit = FALSE)
+  without_noise <- as_lavaan(fit@external$lavaan.pl, modifyList(fit@external$vars, list(noise = NULL)), template)
+  expect_true(lavaan::lavInspect(fit, "converged"))
+  expect_true(all(is.finite(lavaan::parameterEstimates(fit)$se)))
+  expect_true(all(diag(lavaan::vcov(fit)) >= diag(lavaan::vcov(without_noise))))
+  expect_true(any(diag(lavaan::vcov(fit)) > diag(lavaan::vcov(without_noise))))
+  expect_equal(attr(fit@vcov$vcov, "E.inv"), attr(without_noise@vcov$vcov, "E.inv"))
+})
+
+#### SA handles available cases ####
+local({
+  items_missing <- unname(items)
+  set.seed(6)
+  for (h in 1:q) {
+    indicators <- which(is.na(loadings_structure[, h]))
+    for (j in indicators[-1]) {
+      items_missing[runif(n) < c(.1, .25, .25, .5)[items[, indicators[1]] + 1], j] <- NA
+    }
+  }
+  data_missing <- set_latpl_data(items_missing, MISSING = "available.cases")
+  expect_true(distance_in_se(fit_latpl(data_missing, model, CONTROL = set_sa_control()), fit_latpl(data_missing, model)) < 1)
+})

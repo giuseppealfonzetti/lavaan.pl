@@ -2,684 +2,193 @@ if (!at_home()) {
   exit_file("Not run on CRAN")
 }
 
-grid <- list(
-  "binary, one factor" = list(
-    model = "eta =~ y1 + y2 + y3 + y4 + y5",
-    data = LSAT,
-    std.lv = TRUE
-  ),
-  "ordinal, std.lv" = list(
-    model = "A =~ A1 + A2 + A3 + A4 + A5\nC =~ C1 + C2 + C3",
-    data = bfi,
-    std.lv = TRUE
-  ),
-  "ordinal, marker" = list(
-    model = "A =~ A1 + A2 + A3 + A4 + A5\nC =~ C1 + C2 + C3",
-    data = bfi,
-    std.lv = FALSE
-  ),
-  "covariance written first" = list(
-    model = "A ~~ C\nA =~ A1 + A2 + A3 + A4 + A5\nC =~ C1 + C2 + C3",
-    data = bfi,
-    std.lv = FALSE
-  ),
-  "orthogonal factors" = list(
-    model = "A =~ A1 + A2 + A3\nC =~ C1 + C2 + C3\nA ~~ 0*C",
-    data = bfi,
-    std.lv = TRUE
-  ),
-  "fixed loading" = list(
-    model = "A =~ A1 + A2 + A3\nC =~ 0.6*C1 + C2 + C3",
-    data = bfi,
-    std.lv = TRUE
-  ),
-  "cross-loading" = list(
-    model = "A =~ A1 + A2 + A3 + C1\nC =~ C1 + C2 + C3",
-    data = bfi,
-    std.lv = TRUE
-  ),
-  "equality constraints" = list(
-    model = "A =~ A1 + a*A2 + b*A3 + c*A4 + A5\nC =~ C1 + d*C2 + d*C3\na == 0.5*b + 0.25*c",
-    data = bfi,
-    std.lv = TRUE
-  ),
-  "defined parameter" = list(
-    model = "A =~ A1 + a*A2 + b*A3\nC =~ C1 + C2 + C3\nab := a*b",
-    data = bfi,
-    std.lv = FALSE
-  ),
-  "theta, std.lv" = list(
-    model = "A =~ A1 + A2 + A3 + A4 + A5\nC =~ C1 + C2 + C3",
-    data = bfi,
-    std.lv = TRUE,
-    parameterization = "theta"
-  ),
-  "theta, marker, residual covariance" = list(
-    model = "A =~ A1 + A2 + A3 + A4 + A5\nC =~ C1 + C2 + C3\nA1 ~~ A2",
-    data = bfi,
-    std.lv = FALSE,
-    parameterization = "theta"
-  ),
-  "latent mean" = list(
-    model = "A =~ A1 + A2 + A3 + A4\nA ~ 1\nA1 | 0*t1 + t2 + t3 + t4 + t5",
-    data = bfi,
-    std.lv = TRUE
+#### Data and models ####
+source("fixtures/lavaan-pml-cases.R")
+reference <- readRDS("fixtures/lavaan-pml-reference.rds")
+ours <- lapply(lavaan_pml_cases, function(case) suppressWarnings(case(lavaan_pl_fitters)))
+ours_nested <- nested_tests(ours, lavTestLRT)
+
+#### Helpers ####
+cases_in <- function(group) names(ours)[startsWith(names(ours), paste0(group, "/"))]
+
+expect_matches_reference <- function(name, fit_measures = NULL, est_tolerance = 1e-4) {
+  fit <- ours[[name]]
+  ref <- reference$cases[[name]]
+  expect_equal(parameterEstimates(fit)$est, ref$estimates$est, tolerance = est_tolerance)
+  expect_equal(parameterEstimates(fit)$se, ref$estimates$se, tolerance = 1e-3)
+  expect_equal(fit@optim$logl, ref$logl, tolerance = 1e-6)
+  if (length(fit_measures)) {
+    expect_equal(unclass(fitMeasures(fit, fit_measures)), ref$fit_measures[fit_measures], tolerance = 1e-3)
+  }
+}
+
+expect_exact_a_difference <- function(fit_h1, fit_h0) {
+  m10 <- lavaan:::lav_test_diff_m10(m1 = fit_h1, m0 = fit_h0, test = FALSE)
+  inverse_information <- solve(lavaan::lavTech(m10, "information.observed"))
+  first_order <- lavaan::lavTech(m10, "first.order")
+  restriction <- lavaan:::lav_test_diff_a(m1 = fit_h1, m0 = fit_h0, method = "exact")
+  m <- (restriction %*% inverse_information %*% first_order %*% inverse_information %*% t(restriction)) %*%
+    solve(restriction %*% inverse_information %*% t(restriction))
+  difference <- lavTestLRT(fit_h1, fit_h0)
+  expect_equal(
+    difference[2, "Chisq diff"],
+    sum(diag(m)) / sum(diag(m %*% m)) * 2 * (fit_h1@optim$logl - fit_h0@optim$logl),
+    tolerance = 1e-4
   )
-)
+  expect_equal(difference[2, "Df diff"], sum(diag(m))^2 / sum(diag(m %*% m)), tolerance = 1e-4)
+}
 
-for (nm in names(grid)) {
-  g <- grid[[nm]]
-  pz <- if (is.null(g$parameterization)) "delta" else g$parameterization
-  ours <- cfa(g$model, g$data, std.lv = g$std.lv, parameterization = pz)
-  ref <- lavaan::cfa(g$model, g$data, std.lv = g$std.lv, estimator = "PML", parameterization = pz)
+fit_measures_full <- c("chisq", "df", "chisq.scaled", "df.scaled", "pvalue.scaled", "chisq.scaling.factor",
+                       "baseline.chisq", "baseline.df", "baseline.chisq.scaled", "cfi.scaled", "tli.scaled",
+                       "rmsea.scaled")
+fit_measures_short <- c("chisq", "chisq.scaled", "df.scaled", "baseline.chisq.scaled", "cfi.scaled")
 
+#### The references cover every case ####
+expect_identical(names(reference$cases), names(lavaan_pml_cases))
+
+#### Estimates, standard errors, covariance matrix and log-likelihood ####
+for (name in cases_in("grid")) {
   local({
-    expect_identical(as.character(class(ours)), "lavaan")
-    expect_true(lavaan::lavInspect(ours, "converged"))
-    pe <- parameterEstimates(ours)
-    pr <- parameterEstimates(ref)
-    expect_identical(pe[, 1:3], pr[, 1:3])
-    expect_equal(pe$est, pr$est, tolerance = 1e-4)
-    expect_equal(pe$se, pr$se, tolerance = 1e-3)
-    expect_equal(fitted(ours), fitted(ref), tolerance = 1e-4)
-    expect_equal(ours@optim$logl, ref@optim$logl, tolerance = 1e-6)
+    fit <- ours[[name]]
+    ref <- reference$cases[[name]]
+    expect_identical(as.character(class(fit)), "lavaan")
+    expect_true(lavaan::lavInspect(fit, "converged"))
+    expect_identical(parameterEstimates(fit)[, 1:3], ref$estimates[, 1:3])
+    expect_matches_reference(name)
+    expect_equal(unclass(vcov(fit)), ref$vcov, tolerance = 1e-4)
+    expect_equal(fitted(fit), ref$fitted, tolerance = 1e-4)
   })
 }
 
-# mean.var.adjusted test and fit measures match lavaan PML
+#### The inverse Hessian matches lavaan's observed information ####
 local({
-  fm <- c(
-    "chisq",
-    "df",
-    "chisq.scaled",
-    "df.scaled",
-    "pvalue.scaled",
-    "chisq.scaling.factor",
-    "baseline.chisq",
-    "baseline.df",
-    "baseline.chisq.scaled",
-    "cfi.scaled",
-    "tli.scaled",
-    "rmsea.scaled"
+  fit <- ours[["grid/binary, one factor"]]
+  observed_information <- lavaan:::lav_model_info_observed(
+    lavmodel = fit@Model,
+    lavsamplestats = fit@SampleStats,
+    lavdata = fit@Data,
+    lavoptions = fit@Options,
+    lavcache = fit@Cache
   )
-  for (nm in c(
-    "binary, one factor",
-    "ordinal, std.lv",
-    "ordinal, marker",
-    "cross-loading",
-    "equality constraints",
-    "theta, std.lv",
-    "theta, marker, residual covariance",
-    "latent mean"
-  )) {
-    g <- grid[[nm]]
-    pz <- if (is.null(g$parameterization)) "delta" else g$parameterization
-    ours <- cfa(g$model, g$data, std.lv = g$std.lv, parameterization = pz, test = "mean.var.adjusted")
-    ref <- lavaan::cfa(
-      g$model,
-      g$data,
-      std.lv = g$std.lv,
-      parameterization = pz,
-      estimator = "PML",
-      test = "mean.var.adjusted"
-    )
-    expect_equal(
-      ours@test[[1]][c("stat", "df")],
-      ref@test[[1]][c("stat", "df")],
-      tolerance = 1e-3
-    )
-    expect_equal(
-      ours@test[[2]][c("stat", "df", "pvalue", "scaling.factor")],
-      ref@test[[2]][c("stat", "df", "pvalue", "scaling.factor")],
-      tolerance = 1e-3
-    )
-    expect_equal(fitMeasures(ours, fm), fitMeasures(ref, fm), tolerance = 1e-3)
-  }
+  expect_equal(attr(fit@vcov$vcov, "E.inv"), solve(observed_information), tolerance = 1e-5)
 })
 
-# Nested test matches lavaan's PLRT
-local({
-  m1 <- "A =~ A1 + A2 + A3 + A4 + A5\nC =~ C1 + C2 + C3 + C4 + C5"
-  f1 <- cfa(m1, bfi, std.lv = TRUE, test = "mean.var.adjusted")
-  h0 <- list(
-    cfa(m1, bfi, std.lv = TRUE, orthogonal = TRUE, test = "mean.var.adjusted"),
-    cfa(
-      "A =~ A1 + a*A2 + a*A3 + A4 + A5\nC =~ C1 + b*C2 + b*C3 + C4 + C5",
-      bfi,
-      std.lv = TRUE,
-      test = "mean.var.adjusted"
-    )
-  )
-  for (f0 in h0) {
-    ours <- lavTestLRT(f1, f0)
-    expect_equal(lavaan.pl::anova(f1, f0), ours)
-    ref <- suppressWarnings(lavaan::lavTestLRT(f1, f0))
-    m10 <- lavaan:::lav_test_diff_m10(m1 = f1, m0 = f0, test = FALSE)
-    iH <- solve(lavaan::lavTech(m10, "information.observed"))
-    J <- lavaan::lavTech(m10, "first.order")
-    A <- lavaan:::lav_test_diff_a(m1 = f1, m0 = f0, method = "exact")
-    M <- (A %*% iH %*% J %*% iH %*% t(A)) %*% solve(A %*% iH %*% t(A))
-    plrt <- 2 * (f1@optim$logl - f0@optim$logl)
+#### Test statistics and fit measures ####
+for (name in cases_in("tests")) {
+  local({
+    fit <- ours[[name]]
+    ref <- reference$cases[[name]]
+    expect_equal(fit@test[[1]][c("stat", "df")], ref$test[[1]][c("stat", "df")], tolerance = 1e-3)
     expect_equal(
-      ours[2, "Chisq diff"],
-      sum(diag(M)) / sum(diag(M %*% M)) * plrt,
-      tolerance = 1e-4
-    )
-    expect_equal(
-      ours[2, "Df diff"],
-      sum(diag(M))^2 / sum(diag(M %*% M)),
-      tolerance = 1e-4
-    )
-    cols <- c("Df", "PL_AIC", "PL_BIC", "Chisq")
-    expect_equal(unlist(ours[, cols]), unlist(ref[, cols]), tolerance = 1e-6)
-  }
-})
-
-# Missing data match lavaan PML
-local({
-  cm <- build_constr_mat(12, 2, "simple")
-  L <- cm
-  L[is.na(L)] <- c(.4, .5, .6, .7, .8, .9, .4, .5, .6, .7, .8, .9)
-  Yc <- sim_data(
-    1000,
-    L,
-    c(-1.5, .5, 1.5),
-    matrix(c(1, .6, .6, 1), 2),
-    SEED = 4
-  )
-  Y <- Yl <- Yc
-  set.seed(5)
-  pm <- c(.119, .269, .269, .731)
-  for (j in 2:6) {
-    Y[runif(1000) < pm[Yc[, 1] + 1], j] <- NA
-  }
-  for (j in 8:12) {
-    Y[runif(1000) < pm[Yc[, 7] + 1], j] <- NA
-  }
-  Yl[, c(2, 8)] <- Y[, c(2, 8)]
-  colnames(Y) <- colnames(Yl) <- paste0("y", 1:12)
-  mod <- "f1 =~ y1 + y2 + y3 + y4 + y5 + y6\nf2 =~ y7 + y8 + y9 + y10 + y11 + y12"
-  fm <- c(
-    "chisq",
-    "chisq.scaled",
-    "df.scaled",
-    "pvalue.scaled",
-    "baseline.chisq.scaled",
-    "cfi.scaled",
-    "tli.scaled"
-  )
-  for (mi in c("listwise", "pairwise", "available.cases")) {
-    dat <- as.data.frame(lapply(
-      as.data.frame(if (mi == "listwise") Yl else Y),
-      ordered
-    ))
-    ours <- suppressWarnings(cfa(
-      mod,
-      dat,
-      std.lv = TRUE,
-      missing = mi,
-      test = "mean.var.adjusted"
-    ))
-    ref <- lavaan::cfa(
-      mod,
-      dat,
-      std.lv = TRUE,
-      estimator = "PML",
-      missing = mi,
-      test = "mean.var.adjusted"
-    )
-    pe <- parameterEstimates(ours)
-    pr <- parameterEstimates(ref)
-    expect_equal(
-      lavaan::lavInspect(ours, "nobs"),
-      lavaan::lavInspect(ref, "nobs")
-    )
-    expect_equal(pe$est, pr$est, tolerance = 1e-4)
-    expect_equal(pe$se, pr$se, tolerance = 1e-3)
-    expect_equal(ours@optim$logl, ref@optim$logl, tolerance = 1e-6)
-    expect_equal(fitMeasures(ours, fm), fitMeasures(ref, fm), tolerance = 1e-3)
-    if (mi == "listwise") {
-      next
-    }
-    f0 <- suppressWarnings(cfa(
-      mod,
-      dat,
-      std.lv = TRUE,
-      orthogonal = TRUE,
-      missing = mi,
-      test = "mean.var.adjusted"
-    ))
-    m10 <- lavaan:::lav_test_diff_m10(m1 = ours, m0 = f0, test = FALSE)
-    iH <- solve(lavaan::lavTech(m10, "information.observed"))
-    J <- lavaan::lavTech(m10, "first.order")
-    A <- lavaan:::lav_test_diff_a(m1 = ours, m0 = f0, method = "exact")
-    M <- (A %*% iH %*% J %*% iH %*% t(A)) %*% solve(A %*% iH %*% t(A))
-    expect_equal(
-      lavTestLRT(ours, f0)[2, "Chisq diff"],
-      sum(diag(M)) / sum(diag(M %*% M)) * 2 * (ours@optim$logl - f0@optim$logl),
-      tolerance = 1e-4
-    )
-  }
-  expect_error(cfa(
-    mod,
-    as.data.frame(lapply(as.data.frame(Y), ordered)),
-    std.lv = TRUE,
-    missing = "doubly.robust"
-  ))
-})
-
-# Sampling weights and clusters match lavaan PML
-local({
-  d <- as.data.frame(bfi)
-  items <- c("A1", "A2", "A3", "A4", "C1", "C2", "C3", "C4")
-  for (v in items) {
-    d[[v]] <- ordered(d[[v]])
-  }
-  set.seed(1)
-  d <- d[complete.cases(d[, items]), ][sample(2000, 400), ]
-  d$w <- runif(400, .2, 3)
-  d$cl <- rep(1:40, length.out = 400)
-  dm <- d
-  for (j in c("A2", "A3", "C2", "C3")) {
-    dm[[j]][runif(400) < .15] <- NA
-  }
-  mod <- "A =~ A1 + A2 + A3 + A4\nC =~ C1 + C2 + C3 + C4"
-  fm <- c(
-    "chisq",
-    "chisq.scaled",
-    "df.scaled",
-    "baseline.chisq.scaled",
-    "cfi.scaled"
-  )
-  cases <- list(
-    list(data = d, a = list(sampling.weights = "w")),
-    list(
-      data = d,
-      a = list(sampling.weights = "w", sampling.weights.type = "frequency")
-    ),
-    list(data = d, a = list(cluster = "cl")),
-    list(data = d, a = list(sampling.weights = "w", cluster = "cl")),
-    list(data = dm, a = list(sampling.weights = "w", missing = "pairwise"))
-  )
-  for (cs in cases) {
-    tst <- if (is.null(cs$a$cluster)) "mean.var.adjusted" else "none"
-    ours <- suppressWarnings(do.call(
-      cfa,
-      c(list(mod, cs$data, std.lv = TRUE, test = tst), cs$a)
-    ))
-    ref <- suppressWarnings(do.call(
-      lavaan::cfa,
-      c(list(mod, cs$data, std.lv = TRUE, estimator = "PML", test = tst), cs$a)
-    ))
-    expect_equal(
-      parameterEstimates(ours)$est,
-      parameterEstimates(ref)$est,
-      tolerance = 1e-4
-    )
-    expect_equal(
-      parameterEstimates(ours)$se,
-      parameterEstimates(ref)$se,
+      fit@test[[2]][c("stat", "df", "pvalue", "scaling.factor")],
+      ref$test[[2]][c("stat", "df", "pvalue", "scaling.factor")],
       tolerance = 1e-3
     )
-    expect_equal(ours@optim$logl, ref@optim$logl, tolerance = 1e-6)
-    if (tst != "none") {
-      expect_equal(
-        fitMeasures(ours, fm),
-        fitMeasures(ref, fm),
-        tolerance = 1e-3
-      )
-    }
-  }
-  expect_error(
-    cfa("A =~ A1 + a*A2 + A3\nC =~ C1 + C2 + C3\na > 2", d, std.lv = TRUE),
-    "Inequality constraints"
-  )
-  expect_error(
-    cfa("A =~ A1 + a*A2 + b*A3\nC =~ C1 + C2 + C3\na > b", d, std.lv = TRUE),
-    "Inequality constraints"
-  )
-  expect_error(cfa(mod, d, std.lv = TRUE, bounds = "standard"), "bounds")
-  expect_error(
-    cfa(
-      mod,
-      d,
-      std.lv = TRUE,
-      sampling.weights = "w",
-      sampling.weights.normalization = "none"
-    ),
-    "normalization"
-  )
-})
+    expect_equal(unclass(fitMeasures(fit, fit_measures_full)), ref$fit_measures[fit_measures_full], tolerance = 1e-3)
+  })
+}
 
-# Linear constraints match lavaan PML
+#### Nested tests match lavaan's information and its exact restriction ####
 local({
-  d <- as.data.frame(bfi)
-  items <- c("A1", "A2", "A3", "A4", "C1", "C2", "C3", "C4")
-  for (v in items) {
-    d[[v]] <- ordered(d[[v]])
+  for (comparison in c("orthogonal", "equal_loadings")) {
+    expect_equal(ours_nested[[comparison]], reference$nested[[comparison]], tolerance = 1e-6)
   }
-  set.seed(1)
-  d <- d[complete.cases(d[, items]), ][sample(2000, 600), ]
-  base <- "A =~ A1 + A2 + A3 + A4\nC =~ C1 + C2 + C3 + C4"
-  fm <- c(
-    "chisq",
-    "chisq.scaled",
-    "df.scaled",
-    "baseline.chisq.scaled",
-    "cfi.scaled"
-  )
-  cases <- list(
-    list(
-      m = "A =~ A1 + a*A2 + b*A3 + A4\nC =~ C1 + C2 + C3 + C4\na == 0.5*b + 0.1",
-      lv = TRUE
-    ),
-    list(m = paste(base, "\nA1 | -0.4*t1"), lv = TRUE),
-    list(m = paste(base, "\nA ~~ v*A\nC ~~ v*C"), lv = FALSE),
-    list(m = paste(base, "\nA ~~ v1*A\nC ~~ v2*C\nv1 == 2*v2"), lv = FALSE)
-  )
-  for (cs in cases) {
-    ours <- suppressWarnings(cfa(
-      cs$m,
-      d,
-      std.lv = cs$lv,
-      test = "mean.var.adjusted"
-    ))
-    ref <- suppressWarnings(lavaan::cfa(
-      cs$m,
-      d,
-      std.lv = cs$lv,
-      estimator = "PML",
-      test = "mean.var.adjusted"
-    ))
-    expect_equal(
-      parameterEstimates(ours)$est,
-      parameterEstimates(ref)$est,
-      tolerance = 1e-4
-    )
-    expect_equal(
-      parameterEstimates(ours)$se,
-      parameterEstimates(ref)$se,
-      tolerance = 1e-3
-    )
-    expect_equal(ours@optim$logl, ref@optim$logl, tolerance = 1e-6)
-    expect_equal(fitMeasures(ours, fm), fitMeasures(ref, fm), tolerance = 1e-3)
-  }
-  # Equal thresholds
-  f <- cfa(paste(base, "\nA3 | t*t3\nA4 | t*t3"), d, std.lv = TRUE)
-  g <- lavaan::lavTech(f, "gradient")
-  jc <- f@Model@ceq.JAC
-  N <- qr.Q(qr(t(jc)), complete = TRUE)[, -seq_len(nrow(jc)), drop = FALSE]
-  expect_true(max(abs(crossprod(N, g))) < 1e-4 * max(abs(g)))
-})
-
-# Fixed and constrained latent covariances match lavaan PML
-local({
-  d <- as.data.frame(bfi)
-  items <- c(paste0("A", 1:4), paste0("C", 1:4), paste0("E", 1:4))
-  for (v in items) {
-    d[[v]] <- ordered(d[[v]])
-  }
-  set.seed(1)
-  d <- d[complete.cases(d[, items]), ][sample(2000, 800), ]
-  three <- "A =~ A1 + A2 + A3 + A4\nC =~ C1 + C2 + C3 + C4\nE =~ E1 + E2 + E3 + E4"
-  fm <- c(
-    "chisq",
-    "chisq.scaled",
-    "df.scaled",
-    "baseline.chisq.scaled",
-    "cfi.scaled"
-  )
-  cases <- list(
-    list(m = paste(three, "\nA ~~ 0*E"), lv = TRUE),
-    list(m = paste(three, "\nA ~~ 0.3*C"), lv = TRUE),
-    list(m = paste(three, "\nA ~~ r*C\nA ~~ r*E"), lv = TRUE),
-    list(m = paste(three, "\nA ~~ 0.1*E"), lv = FALSE),
-    list(m = paste(three, "\nA ~~ r*C\nA ~~ r*E"), lv = FALSE)
-  )
-  for (cs in cases) {
-    ours <- suppressWarnings(cfa(
-      cs$m,
-      d,
-      std.lv = cs$lv,
-      test = "mean.var.adjusted"
-    ))
-    ref <- suppressWarnings(lavaan::cfa(
-      cs$m,
-      d,
-      std.lv = cs$lv,
-      estimator = "PML",
-      test = "mean.var.adjusted"
-    ))
-    expect_identical(ours@external$lavaan.pl$model$LATCOV, "direct")
-    expect_equal(
-      parameterEstimates(ours)$est,
-      parameterEstimates(ref)$est,
-      tolerance = 1e-4
-    )
-    expect_equal(
-      parameterEstimates(ours)$se,
-      parameterEstimates(ref)$se,
-      tolerance = 1e-3
-    )
-    expect_equal(ours@optim$logl, ref@optim$logl, tolerance = 1e-6)
-    expect_equal(fitMeasures(ours, fm), fitMeasures(ref, fm), tolerance = 1e-3)
-  }
-  # Bifactor
-  mb <- paste(
-    three,
-    "\nG =~ A1 + A2 + C1 + C2 + E1 + E2\nG ~~ 0*A\nG ~~ 0*C\nG ~~ 0*E"
-  )
-  ours <- suppressWarnings(cfa(mb, d, std.lv = TRUE))
-  ref <- suppressWarnings(lavaan::cfa(mb, d, std.lv = TRUE, estimator = "PML"))
-  expect_true(ours@optim$logl >= ref@optim$logl - 1e-6)
-  # Nested test across parametrisations
-  f1 <- cfa(three, d, std.lv = TRUE, test = "mean.var.adjusted")
-  f0 <- cfa(
-    paste(three, "\nA ~~ 0*E"),
-    d,
-    std.lv = TRUE,
-    test = "mean.var.adjusted"
-  )
-  m10 <- lavaan:::lav_test_diff_m10(m1 = f1, m0 = f0, test = FALSE)
-  iH <- solve(lavaan::lavTech(m10, "information.observed"))
-  J <- lavaan::lavTech(m10, "first.order")
-  A <- lavaan:::lav_test_diff_a(m1 = f1, m0 = f0, method = "exact")
-  M <- (A %*% iH %*% J %*% iH %*% t(A)) %*% solve(A %*% iH %*% t(A))
   expect_equal(
-    lavTestLRT(f1, f0)[2, "Chisq diff"],
-    sum(diag(M)) / sum(diag(M %*% M)) * 2 * (f1@optim$logl - f0@optim$logl),
-    tolerance = 1e-4
+    lavaan.pl::anova(ours[["nested/correlated"]], ours[["nested/orthogonal"]]),
+    lavTestLRT(ours[["nested/correlated"]], ours[["nested/orthogonal"]])
   )
+  expect_exact_a_difference(ours[["nested/correlated"]], ours[["nested/orthogonal"]])
+  expect_exact_a_difference(ours[["nested/correlated"]], ours[["nested/equal loadings"]])
 })
 
-# Residual covs, structural regres and higher-order factors match lavaan PML
+#### Missing data ####
 local({
-  d <- as.data.frame(bfi)
-  items <- c(paste0("A", 1:4), paste0("C", 1:4), paste0("E", 1:4))
-  for (v in items) {
-    d[[v]] <- ordered(d[[v]])
+  fit_measures <- c("chisq", "chisq.scaled", "df.scaled", "pvalue.scaled", "baseline.chisq.scaled", "cfi.scaled",
+                    "tli.scaled")
+  for (missing in c("listwise", "pairwise", "available.cases")) {
+    name <- paste0("missing/", missing)
+    expect_equal(lavaan::lavInspect(ours[[name]], "nobs"), reference$cases[[name]]$nobs)
+    expect_matches_reference(name, fit_measures)
   }
-  set.seed(1)
-  d <- d[complete.cases(d[, items]), ][sample(2000, 800), ]
-  three <- "A =~ A1 + A2 + A3 + A4\nC =~ C1 + C2 + C3 + C4\nE =~ E1 + E2 + E3 + E4"
-  fm <- c(
-    "chisq",
-    "chisq.scaled",
-    "df.scaled",
-    "baseline.chisq.scaled",
-    "cfi.scaled"
-  )
-  cases <- list(
-    list(m = paste(three, "\nA1 ~~ A2\nC1 ~~ E1"), lv = TRUE),
-    list(m = paste(three, "\nA1 ~~ A2\nC1 ~~ E1"), lv = FALSE),
-    list(m = paste(three, "\nC ~ A\nE ~ A + C"), lv = TRUE),
-    list(m = paste(three, "\nC ~ A\nE ~ A + C"), lv = FALSE),
-    list(m = paste(three, "\nE ~ A + C"), lv = FALSE),
-    list(m = paste(three, "\nE ~ b*A + b*C"), lv = TRUE),
-    list(m = paste(three, "\nC ~ A\nE ~ A + C\nA1 ~~ A2"), lv = TRUE),
-    list(m = paste(three, "\nG =~ A + C + E"), lv = FALSE)
-  )
-  for (cs in cases) {
-    ours <- suppressWarnings(sem(
-      cs$m,
-      d,
-      std.lv = cs$lv,
-      test = "mean.var.adjusted"
-    ))
-    ref <- suppressWarnings(lavaan::sem(
-      cs$m,
-      d,
-      std.lv = cs$lv,
-      estimator = "PML",
-      test = "mean.var.adjusted"
-    ))
-    expect_equal(
-      parameterEstimates(ours)$est,
-      parameterEstimates(ref)$est,
-      tolerance = 1e-4
+  for (missing in c("pairwise", "available.cases")) {
+    expect_exact_a_difference(ours[[paste0("missing/", missing)]], ours[[paste0("missing/", missing, ", orthogonal")]])
+  }
+})
+
+#### Sampling weights and clusters ####
+local({
+  for (name in cases_in("weights")) {
+    expect_matches_reference(name, fit_measures_short)
+  }
+  for (name in cases_in("clusters")) {
+    expect_matches_reference(name)
+  }
+})
+
+#### Linear equality constraints ####
+for (name in cases_in("constraints")) {
+  expect_matches_reference(name, fit_measures_short)
+}
+
+#### Equal thresholds give a stationary point of lavaan's objective ####
+local({
+  fit <- cfa(paste(two_factors_four_items, "\nA3 | t*t3\nA4 | t*t3"), bfi_600, std.lv = TRUE)
+  gradient <- lavaan::lavTech(fit, "gradient")
+  constraints_jacobian <- fit@Model@ceq.JAC
+  null_space <- qr.Q(qr(t(constraints_jacobian)), complete = TRUE)[, -seq_len(nrow(constraints_jacobian)), drop = FALSE]
+  expect_true(max(abs(crossprod(null_space, gradient))) < 1e-4 * max(abs(gradient)))
+})
+
+#### Fixed and constrained latent covariances ####
+for (name in setdiff(cases_in("latent covariances"), "latent covariances/free")) {
+  expect_identical(ours[[name]]@external$lavaan.pl$model$LATCOV, "direct")
+  expect_matches_reference(name, fit_measures_short)
+}
+
+#### A bifactor model reaches at least lavaan's log-likelihood ####
+expect_true(ours[["bifactor"]]@optim$logl >= reference$cases[["bifactor"]]$logl - 1e-6)
+
+#### Nested test of a zero latent covariance ####
+expect_exact_a_difference(ours[["latent covariances/free"]], ours[["latent covariances/zero"]])
+
+#### Residual covariances, structural regressions and higher-order factors ####
+for (name in cases_in("structural")) {
+  expect_matches_reference(name, fit_measures_short)
+}
+
+#### Nested test of equal regressions ####
+expect_exact_a_difference(ours[["structural/two regressions"]], ours[["structural/equal regressions"]])
+
+#### Multigroup models ####
+for (name in cases_in("multigroup")) {
+  local({
+    fit <- ours[[name]]
+    ref <- reference$cases[[name]]
+    fit_measures <- c("chisq", "df", "chisq.scaled", "df.scaled", "pvalue.scaled", "chisq.scaling.factor",
+                      "baseline.chisq.scaled", "cfi.scaled", "tli.scaled")
+    expect_identical(
+      parameterEstimates(fit)[, c("lhs", "op", "rhs", "group")],
+      ref$estimates[, c("lhs", "op", "rhs", "group")]
     )
+    expect_matches_reference(name, fit_measures, est_tolerance = 1e-3)
     expect_equal(
-      parameterEstimates(ours)$se,
-      parameterEstimates(ref)$se,
+      lapply(fit@test, function(x) x[c("stat", "stat.group", "df")]),
+      lapply(ref$test, function(x) x[c("stat", "stat.group", "df")]),
       tolerance = 1e-3
     )
-    expect_equal(ours@optim$logl, ref@optim$logl, tolerance = 1e-6)
-    expect_equal(fitMeasures(ours, fm), fitMeasures(ref, fm), tolerance = 1e-3)
-  }
-  # A just-identified higher-order factor reproduces the correlated-factor model
-  fc <- cfa(three, d, std.lv = TRUE, test = "mean.var.adjusted")
-  expect_equal(
-    sem(paste(three, "\nG =~ A + C + E"), d, std.lv = TRUE)@optim$logl,
-    fc@optim$logl,
-    tolerance = 1e-8
-  )
-  # Nested test of equal regressions,
-  f1 <- sem(
-    paste(three, "\nE ~ A + C"),
-    d,
-    std.lv = TRUE,
-    test = "mean.var.adjusted"
-  )
-  f0 <- sem(
-    paste(three, "\nE ~ b*A + b*C"),
-    d,
-    std.lv = TRUE,
-    test = "mean.var.adjusted"
-  )
-  m10 <- lavaan:::lav_test_diff_m10(m1 = f1, m0 = f0, test = FALSE)
-  iH <- solve(lavaan::lavTech(m10, "information.observed"))
-  J <- lavaan::lavTech(m10, "first.order")
-  A <- lavaan:::lav_test_diff_a(m1 = f1, m0 = f0, method = "exact")
-  M <- (A %*% iH %*% J %*% iH %*% t(A)) %*% solve(A %*% iH %*% t(A))
-  expect_equal(
-    lavTestLRT(f1, f0)[2, "Chisq diff"],
-    sum(diag(M)) / sum(diag(M %*% M)) * 2 * (f1@optim$logl - f0@optim$logl),
-    tolerance = 1e-4
-  )
-  # Residual covariances vs  model witht them
-  fr <- cfa(
-    paste(three, "\nA1 ~~ A2"),
-    d,
-    std.lv = TRUE,
-    test = "mean.var.adjusted"
-  )
-  expect_equal(lavTestLRT(fr, fc)[2, "Df diff"] > 0, TRUE)
-  expect_equal(lavTestLRT(fr, fc)[2, "Chisq diff"] > 0, TRUE)
-})
+  })
+}
 
-# Multigroup models and the invariance chain match lavaan PML
+#### The invariance chain ####
 local({
-  m <- "A =~ A1 + A2 + A3\nC =~ C1 + C2 + C3"
-  d <- bfi[1:1000, ]
-  fm <- c(
-    "chisq",
-    "df",
-    "chisq.scaled",
-    "df.scaled",
-    "pvalue.scaled",
-    "chisq.scaling.factor",
-    "baseline.chisq.scaled",
-    "cfi.scaled",
-    "tli.scaled"
-  )
-  ge <- list(
-    none = character(0),
-    load = "loadings",
-    thr = "thresholds",
-    tl = c("thresholds", "loadings"),
-    tli = c("thresholds", "loadings", "intercepts")
-  )
-  for (pz in c("delta", "theta")) {
-    sl <- pz == "delta"
-    ours <- refs <- list()
-    for (nm in names(ge)) {
-      ours[[nm]] <- cfa(m, d, group = "gender", group.equal = ge[[nm]], std.lv = sl, parameterization = pz,
-                        test = "mean.var.adjusted")
-      refs[[nm]] <- lavaan::cfa(m, d, group = "gender", group.equal = ge[[nm]], std.lv = sl, parameterization = pz,
-                                estimator = "PML", test = "mean.var.adjusted")
-      pe <- parameterEstimates(ours[[nm]])
-      pr <- parameterEstimates(refs[[nm]])
-      expect_identical(pe[, c("lhs", "op", "rhs", "group")], pr[, c("lhs", "op", "rhs", "group")])
-      expect_equal(pe$est, pr$est, tolerance = 1e-3)
-      expect_equal(pe$se, pr$se, tolerance = 1e-3)
-      expect_equal(ours[[nm]]@optim$logl, refs[[nm]]@optim$logl, tolerance = 1e-6)
-      expect_equal(
-        lapply(ours[[nm]]@test, function(x) x[c("stat", "stat.group", "df")]),
-        lapply(refs[[nm]]@test, function(x) x[c("stat", "stat.group", "df")]),
-        tolerance = 1e-3
-      )
-      expect_equal(fitMeasures(ours[[nm]], fm), fitMeasures(refs[[nm]], fm), tolerance = 1e-3)
-    }
-
-    lrt <- lavTestLRT(ours$none, ours$thr, ours$tl, ours$tli)
-    ref <- suppressWarnings(lavaan::lavTestLRT(refs$none, refs$thr, refs$tl, refs$tli))
-    cols <- c("Df", "PL_AIC", "PL_BIC", "Chisq")
-    expect_equal(unlist(lrt[, cols]), unlist(ref[, cols]), tolerance = 1e-6)
-    expect_true(all(lrt[-1, "Chisq diff"] > 0 & lrt[-1, "Df diff"] > 0))
-
-    expect_error(lavTestLRT(ours$load, ours$tl), "not nested")
-
-    if (!sl) {
-      m10 <- lavaan:::lav_test_diff_m10(m1 = ours$none, m0 = ours$load, test = FALSE)
-      iH <- solve(lavaan::lavTech(m10, "information.observed"))
-      J <- lavaan::lavTech(m10, "first.order")
-      A <- lavaan:::lav_test_diff_a(m1 = ours$none, m0 = ours$load, method = "exact")
-      M <- (A %*% iH %*% J %*% iH %*% t(A)) %*% solve(A %*% iH %*% t(A))
-      out <- lavTestLRT(ours$none, ours$load)
-      expect_equal(
-        out[2, "Chisq diff"],
-        sum(diag(M)) / sum(diag(M %*% M)) * 2 * (ours$none@optim$logl - ours$load@optim$logl),
-        tolerance = 1e-4
-      )
-      expect_equal(out[2, "Df diff"], sum(diag(M))^2 / sum(diag(M %*% M)), tolerance = 1e-4)
-    }
+  for (parameterization in c("delta", "theta")) {
+    level <- function(name) ours[[paste0("multigroup/", parameterization, "/", name)]]
+    chain <- lavTestLRT(level("configural"), level("thresholds"), level("thresholds_loadings"),
+                        level("thresholds_loadings_intercepts"))
+    comparison <- paste0("invariance_", parameterization)
+    expect_equal(ours_nested[[comparison]], reference$nested[[comparison]], tolerance = 1e-6)
+    expect_true(all(chain[-1, "Chisq diff"] > 0 & chain[-1, "Df diff"] > 0))
+    expect_error(lavTestLRT(level("loadings"), level("thresholds_loadings")), "not nested")
   }
-})
-
-# unsupported models are rejected
-local({
-  expect_error(
-    cfa(
-      "A =~ A1 + A2 + A3\nC =~ C1 + C2 + C3\nA ~~ v*A\nA ~~ c*C\nc == v",
-      bfi,
-      std.lv = FALSE
-    ),
-    "covariances and variances"
-  )
-  expect_error(
-    cfa(
-      "A =~ A1 + A2 + A3\nC =~ C1 + C2 + C3\nA ~~ v1*A\nC ~~ v2*C\nv1 == v2 + 0.5",
-      bfi,
-      std.lv = FALSE
-    ),
-    "variances"
-  )
-  expect_error(
-    cfa("A =~ A1 + a*A2 + A3\nA1 | t*t1\na == t", bfi, std.lv = TRUE),
-    "either thresholds"
-  )
-  expect_error(
-    sem("A =~ A1 + A2 + A3\nC =~ C1 + C2 + C3\nA1 ~ C", bfi, std.lv = TRUE),
-    "observed variables"
-  )
+  expect_exact_a_difference(ours[["multigroup/theta/configural"]], ours[["multigroup/theta/loadings"]])
 })

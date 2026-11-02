@@ -115,6 +115,14 @@ sem <- function(
   fit_lavaan_pml("sem", match.call(), model, data, std.lv, estimator, estimator.args, start, control, verbose, ...)
 }
 
+#' Fit a lavaan model with lavaan.pl
+#'
+#' @param LAVFUN Name of the lavaan function, `"cfa"` or `"sem"`.
+#' @param CALL Call to store in the output.
+#' @inheritParams cfa
+#' @return An object of class `lavaan`.
+#' @seealso [cfa()], [sem()], [spec_from_lavaan()], [as_lavaan()]
+#' @keywords internal
 fit_lavaan_pml <- function(LAVFUN, CALL, model, data, std.lv, estimator, estimator.args, start, control, verbose, ...) {
 
   # Validate arguments ---------------------------------------------------------
@@ -205,6 +213,15 @@ fit_lavaan_pml <- function(LAVFUN, CALL, model, data, std.lv, estimator, estimat
   out
 }
 
+#' lavaan.pl inputs from a lavaan model
+#'
+#' @param template Unfitted [lavaan::lavaan] object, created with `do.fit = FALSE`.
+#' @param start Starting values in lavaan's free-parameter order, or `NULL`.
+#' @param valdata Validation data passed to [set_latpl_data()] as `VALDATA`, or `NULL`.
+#' @return A list with the data object `DATA`, the model object `MODEL` and the starting values `THETA` for
+#'   [fit_latpl()].
+#' @seealso [fit_lavaan_pml()], [as_lavaan()]
+#' @keywords internal
 spec_from_lavaan <- function(template, start = NULL, valdata = NULL) {
   pt <- lavaan::parTable(template)
   lv <- lavaan::lavNames(template, "lv")

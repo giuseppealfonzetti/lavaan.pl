@@ -1,3 +1,11 @@
+#' Parameter blocks
+#'
+#' @param MODEL Model object from [set_latpl_model()] or [set_latpl_groups()].
+#' @param NTHR Number of thresholds in each group.
+#' @return A character vector with the block of each parameter, in the order used by [fit_latpl()]: `"tau"`,
+#'   `"lambda"`, `"corr"`, `"logsd"`, `"beta"`, `"rescov"`, `"nu"`, `"alpha"` or `"scale"`, group after group.
+#' @seealso [theta_names()], [latpl_dims()]
+#' @keywords internal
 theta_block <- function(MODEL, NTHR) {
   if (inherits(MODEL, "latpl_groups")) return(unlist(lapply(MODEL$MODELS, theta_block, NTHR)))
   q <- MODEL$q
@@ -7,6 +15,16 @@ theta_block <- function(MODEL, NTHR) {
         sum(is.na(MODEL$CONSTRMEAN)), sum(is.na(MODEL$CONSTRLOGSCALE))))
 }
 
+#' Dimensions of a fit
+#'
+#' @param DATA Data object from [set_latpl_data()].
+#' @param MODEL Model object from [set_latpl_model()] or [set_latpl_groups()].
+#' @return A list with the sample size `n`, the numbers of items `p` and latent variables `q`, the numbers of
+#'   categories `cat`, the number of groups `ngroups`, the number of pairs `pairs` over all groups, the size of each
+#'   parameter block summed over groups (`nthr`, `nload`, `ncorr`, `nvar`, `nreg`, `nres`, `nint`, `nmean`,
+#'   `nscale`) and the number of parameters `d`.
+#' @seealso [theta_block()], [fit_latpl()]
+#' @keywords internal
 latpl_dims <- function(DATA, MODEL) {
   models <- if (inherits(MODEL, "latpl_groups")) MODEL$MODELS else list(MODEL)
   stopifnot(all(vapply(models, function(x) x$q, numeric(1)) < DATA$p))
@@ -17,6 +35,12 @@ latpl_dims <- function(DATA, MODEL) {
        nint = nb[[7]], nmean = nb[[8]], nscale = nb[[9]], d = sum(nb))
 }
 
+#' Code of the latent covariance parameterisation
+#'
+#' @param MODEL Model object from [set_latpl_model()].
+#' @return `0` for orthogonal latent variables, `1` for LKJ correlations, `2` for direct covariances.
+#' @seealso [engine()], [lincon()]
+#' @keywords internal
 corrflag_code <- function(MODEL) {
   if (!MODEL$CORRFLAG) 0L else if (identical(MODEL$LATCOV, "direct")) 2L else 1L
 }
@@ -59,6 +83,13 @@ theta_names <- function(DATA, MODEL) {
   )
 }
 
+#' Cholesky factor from LKJ parameters
+#'
+#' @param H Unconstrained latent correlation parameters, one per pair of latent variables.
+#' @param Q Number of latent variables.
+#' @return The upper triangular Cholesky factor of the latent correlation matrix.
+#' @seealso [lkj_inv()], [theta2par()]
+#' @keywords internal
 lkj <- function(H, Q) {
   U <- diag(Q)
   z <- matrix(0, Q, Q)
@@ -70,6 +101,12 @@ lkj <- function(H, Q) {
   U
 }
 
+#' LKJ parameters from a correlation matrix
+#'
+#' @param R Latent correlation matrix.
+#' @return The unconstrained latent correlation parameters, one per pair of latent variables.
+#' @seealso [lkj()], [par2theta()]
+#' @keywords internal
 lkj_inv <- function(R) {
   U <- chol(R)
   z <- matrix(0, ncol(R), ncol(R))
@@ -155,6 +192,14 @@ par2theta <- function(MODEL, PAR) {
     })
 }
 
+#' Linear constraints on the parameters
+#'
+#' @param MODEL Model object from [set_latpl_model()] or [set_latpl_groups()].
+#' @param NTHR Number of thresholds in each group.
+#' @return A list with the matrix `K` and the vector `c` that map the free parameters to the full parameter
+#'   vector, and the positions `free_idx` of the free parameters in it.
+#' @seealso [fit_latpl()], [theta_names()]
+#' @keywords internal
 lincon <- function(MODEL, NTHR) {
   models <- if (inherits(MODEL, "latpl_groups")) MODEL$MODELS else list(MODEL)
   block <- theta_block(MODEL, NTHR)

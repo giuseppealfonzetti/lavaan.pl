@@ -36,6 +36,16 @@ compute_plrt.latpl_fit <- function(OBJ, VARS = compute_var(OBJ), H1 = NULL) {
   out
 }
 
+#' Mean and variance adjusted test
+#'
+#' @param STAT Test statistic, one per group.
+#' @param DF Degrees of freedom.
+#' @param E Mean of the statistic.
+#' @param V Variance of the statistic.
+#' @return A list with `stat`, `stat.group`, `df`, `stat.scaled`, `df.scaled`, `scaling.factor` and
+#'   `pvalue.scaled`.
+#' @seealso [compute_plrt()]
+#' @keywords internal
 plrt_adjust <- function(STAT, DF, E, V) {
   c1 <- E / (V / 2)
   list(
@@ -54,6 +64,13 @@ plrt_adjust <- function(STAT, DF, E, V) {
 }
 
 
+#' Test of nested models
+#'
+#' @param OBJ Object of class latpl_fit, nested in `H1`.
+#' @param H1 Object of class latpl_fit.
+#' @return The output of [plrt_adjust()] for `OBJ` against `H1`.
+#' @seealso [compute_plrt()], [lavTestLRT()]
+#' @keywords internal
 plrt_nested <- function(OBJ, H1) {
   stopifnot(inherits(H1, "latpl_fit"))
   if (
@@ -159,6 +176,14 @@ plrt_nested <- function(OBJ, H1) {
   )
 }
 
+#' Test against the saturated model
+#'
+#' @param OBJ Object of class latpl_fit.
+#' @param VARS Output of [compute_var()] for `OBJ`.
+#' @return A list with the tests of the model `model` and of the independence model `baseline` against the
+#'   saturated model, and the saturated and independence fits `saturated` and `independence`.
+#' @seealso [compute_plrt()], [plrt_adjust()]
+#' @keywords internal
 plrt_fit <- function(OBJ, VARS) {
   dims <- OBJ$dims
   n <- dims$n

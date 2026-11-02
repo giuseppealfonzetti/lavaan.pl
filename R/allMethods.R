@@ -185,6 +185,13 @@ compute_var.latpl_fit <- function(OBJ, NUMDERIV = FALSE, VERBOSE = FALSE) {
        optimisation_noise = opt_noise, noise = noise, RTime = as.numeric(difftime(Sys.time(), start_time, units = "secs")))
 }
 
+#' Trajectories of the estimates
+#'
+#' @param OBJ Object of class latpl_fit, or a lavaan object from [cfa()] or [sem()].
+#' @return For SA fits, the trajectories in long format, invisibly, after plotting them; the SA path when
+#'   tinyplot is not installed; `NULL` for ucminf fits.
+#' @seealso [fit_latpl()]
+#' @keywords internal
 plot_traj <- function(OBJ) UseMethod('plot_traj')
 #' @export
 plot_traj.latpl_fit <- function(OBJ){
