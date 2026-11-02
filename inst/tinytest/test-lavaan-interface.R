@@ -7,12 +7,17 @@ for (item in twelve_items) {
   bfi_sample[[item]] <- ordered(bfi_sample[[item]])
 }
 set.seed(1)
-bfi_sample <- bfi_sample[complete.cases(bfi_sample[, twelve_items]), ][sample(2000, 800), ]
+bfi_sample <- bfi_sample[complete.cases(bfi_sample[, twelve_items]), ][
+  sample(2000, 800),
+]
 three_factors_four_items <- "A =~ A1 + A2 + A3 + A4\nC =~ C1 + C2 + C3 + C4\nE =~ E1 + E2 + E3 + E4"
 
 #### cfa() returns a lavaan object for binary and ordinal items ####
 local({
-  for (fit in list(cfa(lsat_model, LSAT, std.lv = TRUE), cfa(three_factors, bfi, std.lv = TRUE))) {
+  for (fit in list(
+    cfa(lsat_model, LSAT, std.lv = TRUE),
+    cfa(three_factors, bfi, std.lv = TRUE)
+  )) {
     expect_identical(as.character(class(fit)), "lavaan")
     expect_inherits(coef(fit), "lavaan.vector")
     expect_false(is.null(fit@external$lavaan.pl))
@@ -28,13 +33,22 @@ local({
 local({
   fit_marker <- cfa(three_factors, bfi, std.lv = FALSE)
   fit_stdlv <- cfa(three_factors, bfi, std.lv = TRUE)
-  expect_equal(fit_marker@external$lavaan.pl$numFit$value, fit_stdlv@external$lavaan.pl$numFit$value)
+  expect_equal(
+    fit_marker@external$lavaan.pl$numFit$value,
+    fit_stdlv@external$lavaan.pl$numFit$value
+  )
   expect_equal(fitted(fit_marker), fitted(fit_stdlv), tolerance = 1e-3)
 })
 
 #### SA is selected through control ####
 local({
-  fit <- suppressWarnings(cfa(three_factors, bfi, std.lv = TRUE, control = set_sa_control(), se = "none"))
+  fit <- suppressWarnings(cfa(
+    three_factors,
+    bfi,
+    std.lv = TRUE,
+    control = set_sa_control(),
+    se = "none"
+  ))
   expect_identical(as.character(class(fit)), "lavaan")
   expect_identical(fit@external$lavaan.pl$method, "SA")
 })
@@ -66,62 +80,157 @@ local({
 #### Numerical and analytic standard errors agree ####
 local({
   fit_analytic <- cfa(lsat_model, LSAT, std.lv = TRUE)
-  fit_numeric <- cfa(lsat_model, LSAT, std.lv = TRUE, estimator.args = list(computevar_numderiv = TRUE))
-  expect_equal(attr(fit_analytic@vcov$vcov, "E.inv"), attr(fit_numeric@vcov$vcov, "E.inv"), tolerance = 1e-5)
+  fit_numeric <- cfa(
+    lsat_model,
+    LSAT,
+    std.lv = TRUE,
+    estimator.args = list(computevar_numderiv = TRUE)
+  )
+  expect_equal(
+    attr(fit_analytic@vcov$vcov, "E.inv"),
+    attr(fit_numeric@vcov$vcov, "E.inv"),
+    tolerance = 1e-5
+  )
 })
 
 #### cfa() validates the control arguments ####
 local({
-  expect_error(cfa(lsat_model, LSAT, std.lv = TRUE, control = list(ctrl = list(maxeval = 5))), "set_ucminf_control")
-  expect_error(cfa(lsat_model, LSAT, std.lv = TRUE, estimator.args = list(method = "SA")), "set_sa_control")
   expect_error(
-    cfa(lsat_model, LSAT, std.lv = TRUE, estimator.args = list(cpp_control_init = list(MAXE = 2))),
+    cfa(
+      lsat_model,
+      LSAT,
+      std.lv = TRUE,
+      control = list(ctrl = list(maxeval = 5))
+    ),
+    "set_ucminf_control"
+  )
+  expect_error(
+    cfa(lsat_model, LSAT, std.lv = TRUE, estimator.args = list(method = "SA")),
+    "set_sa_control"
+  )
+  expect_error(
+    cfa(
+      lsat_model,
+      LSAT,
+      std.lv = TRUE,
+      estimator.args = list(cpp_control_init = list(MAXE = 2))
+    ),
     "set_init"
   )
-  expect_error(cfa(lsat_model, LSAT, std.lv = TRUE, estimator.args = list(init_method = "standard")), "set_init")
   expect_error(
-    cfa(lsat_model, LSAT, std.lv = TRUE, estimator.args = list(init = set_init(THETA = rep(0, 10)))),
+    cfa(
+      lsat_model,
+      LSAT,
+      std.lv = TRUE,
+      estimator.args = list(init_method = "standard")
+    ),
+    "set_init"
+  )
+  expect_error(
+    cfa(
+      lsat_model,
+      LSAT,
+      std.lv = TRUE,
+      estimator.args = list(init = set_init(THETA = rep(0, 10)))
+    ),
     "start"
   )
-  fit <- cfa(lsat_model, LSAT, std.lv = TRUE, se = "none", control = set_ucminf_control(MAXEVAL = 5))
+  fit <- cfa(
+    lsat_model,
+    LSAT,
+    std.lv = TRUE,
+    se = "none",
+    control = set_ucminf_control(MAXEVAL = 5)
+  )
   expect_true(fit@external$lavaan.pl$numFit$info[["neval"]] <= 5)
 })
 
 #### Unsupported models are rejected ####
 local({
   bfi_weighted <- data.frame(bfi, w = 1)
-  expect_error(cfa("A =~ A1 + a*A2 + A3\nC =~ C1 + C2 + C3\na > 2", bfi, std.lv = TRUE), "Inequality constraints")
-  expect_error(cfa("A =~ A1 + a*A2 + b*A3\nC =~ C1 + C2 + C3\na > b", bfi, std.lv = TRUE), "Inequality constraints")
-  expect_error(cfa(three_factors, bfi, std.lv = TRUE, bounds = "standard"), "bounds")
-  expect_error(cfa(three_factors, bfi, std.lv = TRUE, missing = "doubly.robust"))
   expect_error(
-    cfa(three_factors, bfi_weighted, std.lv = TRUE, sampling.weights = "w", sampling.weights.normalization = "none"),
+    cfa("A =~ A1 + a*A2 + A3\nC =~ C1 + C2 + C3\na > 2", bfi, std.lv = TRUE),
+    "Inequality constraints"
+  )
+  expect_error(
+    cfa("A =~ A1 + a*A2 + b*A3\nC =~ C1 + C2 + C3\na > b", bfi, std.lv = TRUE),
+    "Inequality constraints"
+  )
+  expect_error(
+    cfa(three_factors, bfi, std.lv = TRUE, bounds = "standard"),
+    "bounds"
+  )
+  expect_error(cfa(
+    three_factors,
+    bfi,
+    std.lv = TRUE,
+    missing = "doubly.robust"
+  ))
+  expect_error(
+    cfa(
+      three_factors,
+      bfi_weighted,
+      std.lv = TRUE,
+      sampling.weights = "w",
+      sampling.weights.normalization = "none"
+    ),
     "normalization"
   )
   expect_error(
-    cfa("A =~ A1 + A2 + A3\nC =~ C1 + C2 + C3\nA ~~ v*A\nA ~~ c*C\nc == v", bfi, std.lv = FALSE),
+    cfa(
+      "A =~ A1 + A2 + A3\nC =~ C1 + C2 + C3\nA ~~ v*A\nA ~~ c*C\nc == v",
+      bfi,
+      std.lv = FALSE
+    ),
     "covariances and variances"
   )
   expect_error(
-    cfa("A =~ A1 + A2 + A3\nC =~ C1 + C2 + C3\nA ~~ v1*A\nC ~~ v2*C\nv1 == v2 + 0.5", bfi, std.lv = FALSE),
+    cfa(
+      "A =~ A1 + A2 + A3\nC =~ C1 + C2 + C3\nA ~~ v1*A\nC ~~ v2*C\nv1 == v2 + 0.5",
+      bfi,
+      std.lv = FALSE
+    ),
     "variances"
   )
-  expect_error(cfa("A =~ A1 + a*A2 + A3\nA1 | t*t1\na == t", bfi, std.lv = TRUE), "either thresholds")
-  expect_error(sem("A =~ A1 + A2 + A3\nC =~ C1 + C2 + C3\nA1 ~ C", bfi, std.lv = TRUE), "observed variables")
+  expect_error(
+    cfa("A =~ A1 + a*A2 + A3\nA1 | t*t1\na == t", bfi, std.lv = TRUE),
+    "either thresholds"
+  )
+  expect_error(
+    sem("A =~ A1 + A2 + A3\nC =~ C1 + C2 + C3\nA1 ~ C", bfi, std.lv = TRUE),
+    "observed variables"
+  )
 })
 
 #### A just-identified higher-order factor reproduces the correlated factors ####
 local({
   fit_correlated <- cfa(three_factors_four_items, bfi_sample, std.lv = TRUE)
-  fit_higher_order <- sem(paste(three_factors_four_items, "\nG =~ A + C + E"), bfi_sample, std.lv = TRUE)
-  expect_equal(fit_higher_order@optim$logl, fit_correlated@optim$logl, tolerance = 1e-8)
+  fit_higher_order <- sem(
+    paste(three_factors_four_items, "\nG =~ A + C + E"),
+    bfi_sample,
+    std.lv = TRUE
+  )
+  expect_equal(
+    fit_higher_order@optim$logl,
+    fit_correlated@optim$logl,
+    tolerance = 1e-8
+  )
 })
 
 #### A residual covariance improves the fit in a nested test ####
 local({
-  fit_correlated <- cfa(three_factors_four_items, bfi_sample, std.lv = TRUE, test = "mean.var.adjusted")
-  fit_residual <- cfa(paste(three_factors_four_items, "\nA1 ~~ A2"), bfi_sample, std.lv = TRUE,
-                      test = "mean.var.adjusted")
+  fit_correlated <- cfa(
+    three_factors_four_items,
+    bfi_sample,
+    std.lv = TRUE,
+    test = "mean.var.adjusted"
+  )
+  fit_residual <- cfa(
+    paste(three_factors_four_items, "\nA1 ~~ A2"),
+    bfi_sample,
+    std.lv = TRUE,
+    test = "mean.var.adjusted"
+  )
   difference <- lavTestLRT(fit_residual, fit_correlated)
   expect_true(difference[2, "Df diff"] > 0)
   expect_true(difference[2, "Chisq diff"] > 0)

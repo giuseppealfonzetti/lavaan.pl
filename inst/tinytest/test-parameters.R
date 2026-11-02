@@ -42,9 +42,27 @@ for (latent_form in c("orthogonal", "lkj", "direct")) {
 #### theta_names() names covariances, regressions and log standard deviations ####
 local({
   expect_equal(
-    tail(theta_names(data, set_latpl_model(three_factors, LATCOV = "direct", REGMAT = regressions,
-                                           RESCOV = residual_covariances)), 7),
-    c("psi[1,2]", "psi[1,3]", "psi[2,3]", "beta[2,1]", "beta[3,1]", "beta[3,2]", "theta[1,2]")
+    tail(
+      theta_names(
+        data,
+        set_latpl_model(
+          three_factors,
+          LATCOV = "direct",
+          REGMAT = regressions,
+          RESCOV = residual_covariances
+        )
+      ),
+      7
+    ),
+    c(
+      "psi[1,2]",
+      "psi[1,3]",
+      "psi[2,3]",
+      "beta[2,1]",
+      "beta[3,1]",
+      "beta[3,2]",
+      "theta[1,2]"
+    )
   )
   expect_equal(
     tail(theta_names(data, set_latpl_model(three_factors, STDLV = FALSE)), 4),
@@ -58,7 +76,10 @@ local({
   data_two_groups <- set_latpl_data(items, GROUP = rep(c("b", "a"), each = 300))
   model_two_groups <- set_latpl_groups(list(model, model))
   names_one_group <- theta_names(data_two_groups, model)
-  expect_identical(theta_names(data_two_groups, model_two_groups), c(names_one_group, paste0(names_one_group, ".g2")))
+  expect_identical(
+    theta_names(data_two_groups, model_two_groups),
+    c(names_one_group, paste0(names_one_group, ".g2"))
+  )
   set.seed(1)
   theta <- runif(2 * length(names_one_group), -0.3, 0.3)
   par <- theta2par(model_two_groups, theta)
@@ -70,17 +91,31 @@ local({
 #### get_par() returns the raw, listed and transformed parameters ####
 local({
   bfi_items <- as.matrix(data.frame(lapply(bfi[, 1:6], as.numeric))) - 1
-  fit <- fit_latpl(set_latpl_data(bfi_items), set_latpl_model(build_constr_mat(6, 2, "simple"), STDLV = FALSE))
+  fit <- fit_latpl(
+    set_latpl_data(bfi_items),
+    set_latpl_model(build_constr_mat(6, 2, "simple"), STDLV = FALSE)
+  )
   expect_identical(get_par(fit, OPTION = "raw"), fit$theta)
   par <- get_par(fit)
   expect_identical(
     names(par),
-    c("thresholds", "loadings", "latent_correlations", "regressions", "residual_covariances", "intercepts", "means",
-      "scales")
+    c(
+      "thresholds",
+      "loadings",
+      "latent_correlations",
+      "regressions",
+      "residual_covariances",
+      "intercepts",
+      "means",
+      "scales"
+    )
   )
   expect_equal(par, theta2par(fit$model, fit$theta))
   transformed <- get_par(fit, OPTION = "transformed")
-  expect_equal(transformed[length(transformed) - 2], cov2cor(par$latent_correlations)[1, 2])
+  expect_equal(
+    transformed[length(transformed) - 2],
+    cov2cor(par$latent_correlations)[1, 2]
+  )
   expect_equal(tail(transformed, 2), sqrt(diag(par$latent_correlations)))
   expect_stdout(print(fit), "Free parameters")
 })
@@ -89,13 +124,28 @@ local({
 for (stdlv in c(TRUE, FALSE)) {
   local({
     fit_lkj <- fit_latpl(data, set_latpl_model(three_factors, STDLV = stdlv))
-    fit_direct <- fit_latpl(data, set_latpl_model(three_factors, STDLV = stdlv, LATCOV = "direct"))
+    fit_direct <- fit_latpl(
+      data,
+      set_latpl_model(three_factors, STDLV = stdlv, LATCOV = "direct")
+    )
     vars_lkj <- compute_var(fit_lkj)
     vars_direct <- compute_var(fit_direct)
     test_columns <- c("stat", "df", "stat.scaled", "df.scaled")
-    expect_equal(fit_direct$numFit$value, fit_lkj$numFit$value, tolerance = 1e-8)
-    expect_equal(get_par(fit_direct, OPTION = "transformed"), get_par(fit_lkj, OPTION = "transformed"), tolerance = 1e-4)
-    expect_equal(vars_direct$asymptotic_variance, vars_lkj$asymptotic_variance, tolerance = 1e-3)
+    expect_equal(
+      fit_direct$numFit$value,
+      fit_lkj$numFit$value,
+      tolerance = 1e-8
+    )
+    expect_equal(
+      get_par(fit_direct, OPTION = "transformed"),
+      get_par(fit_lkj, OPTION = "transformed"),
+      tolerance = 1e-4
+    )
+    expect_equal(
+      vars_direct$asymptotic_variance,
+      vars_lkj$asymptotic_variance,
+      tolerance = 1e-3
+    )
     expect_equal(
       compute_plrt(fit_direct, vars_direct)$model[test_columns],
       compute_plrt(fit_lkj, vars_lkj)$model[test_columns],
@@ -113,7 +163,17 @@ local({
     set_latpl_model(
       three_factors,
       LATCOV = "direct",
-      CONSTRAINTS = list(A = matrix(replace(numeric(length(names_direct)), match("psi[1,3]", names_direct), 1), 1), b = 0)
+      CONSTRAINTS = list(
+        A = matrix(
+          replace(
+            numeric(length(names_direct)),
+            match("psi[1,3]", names_direct),
+            1
+          ),
+          1
+        ),
+        b = 0
+      )
     )
   )
   expect_equal(get_par(fit, OPTION = "list")$latent_correlations[1, 3], 0)
@@ -121,21 +181,45 @@ local({
 
 #### A saturated structural model is equivalent to correlated factors ####
 local({
-  fit_correlated <- fit_latpl(data, set_latpl_model(three_factors, STDLV = FALSE))
-  fit_saturated <- fit_latpl(data, set_latpl_model(three_factors, STDLV = FALSE, CORRFLAG = FALSE, REGMAT = regressions))
+  fit_correlated <- fit_latpl(
+    data,
+    set_latpl_model(three_factors, STDLV = FALSE)
+  )
+  fit_saturated <- fit_latpl(
+    data,
+    set_latpl_model(
+      three_factors,
+      STDLV = FALSE,
+      CORRFLAG = FALSE,
+      REGMAT = regressions
+    )
+  )
   fit_restricted <- fit_latpl(
     data,
-    set_latpl_model(three_factors, STDLV = FALSE, CORRFLAG = FALSE, REGMAT = replace(regressions, 3, 0))
+    set_latpl_model(
+      three_factors,
+      STDLV = FALSE,
+      CORRFLAG = FALSE,
+      REGMAT = replace(regressions, 3, 0)
+    )
   )
   par_saturated <- get_par(fit_saturated, OPTION = "list")
   total_effects <- solve(diag(3) - par_saturated$regressions)
-  expect_equal(fit_saturated$numFit$value, fit_correlated$numFit$value, tolerance = 1e-6)
+  expect_equal(
+    fit_saturated$numFit$value,
+    fit_correlated$numFit$value,
+    tolerance = 1e-6
+  )
   expect_equal(
     total_effects %*% par_saturated$latent_correlations %*% t(total_effects),
     get_par(fit_correlated, OPTION = "list")$latent_correlations,
     tolerance = 1e-3
   )
-  expect_equal(compute_plrt(fit_saturated)$model$stat, compute_plrt(fit_correlated)$model$stat, tolerance = 1e-4)
+  expect_equal(
+    compute_plrt(fit_saturated)$model$stat,
+    compute_plrt(fit_correlated)$model$stat,
+    tolerance = 1e-4
+  )
   expect_equal(
     compute_plrt(fit_restricted, H1 = fit_correlated)$model[c("stat", "df")],
     compute_plrt(fit_restricted, H1 = fit_saturated)$model[c("stat", "df")],
@@ -148,6 +232,13 @@ local({
   fixed_and_free <- matrix(0, 9, 9)
   fixed_and_free[1, 2] <- fixed_and_free[2, 1] <- 0.1
   fixed_and_free[4, 7] <- fixed_and_free[7, 4] <- NA
-  fit <- fit_latpl(data, set_latpl_model(three_factors, REGMAT = regressions, RESCOV = fixed_and_free))
+  fit <- fit_latpl(
+    data,
+    set_latpl_model(
+      three_factors,
+      REGMAT = regressions,
+      RESCOV = fixed_and_free
+    )
+  )
   expect_equal(get_par(fit, OPTION = "list")$residual_covariances[2, 1], 0.1)
 })

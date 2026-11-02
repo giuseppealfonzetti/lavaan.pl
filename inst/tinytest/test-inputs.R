@@ -51,7 +51,9 @@ local({
   expect_equal(unname(data$cat), rep(6, 6))
   expect_equal(data$freq, pairs_freq(bfi_items, data$cat))
   expect_null(data$valfreq)
-  expect_false(is.null(set_latpl_data(bfi_items, VALDATA = bfi_items[1:100, ])$valfreq))
+  expect_false(is.null(
+    set_latpl_data(bfi_items, VALDATA = bfi_items[1:100, ])$valfreq
+  ))
   expect_stdout(print(data), "<latpl_data>")
   expect_error(set_latpl_data(bfi_items, MISSING = "complete"))
   expect_error(set_latpl_data(bfi_items, VALDATA = bfi_items[, 1:5]))
@@ -63,7 +65,10 @@ local({
   items_missing <- bfi_items
   set.seed(4)
   items_missing[sample(length(items_missing), 150)] <- NA
-  expect_message(data <- set_latpl_data(items_missing), "incomplete observations removed")
+  expect_message(
+    data <- set_latpl_data(items_missing),
+    "incomplete observations removed"
+  )
   expect_equal(data$n, sum(stats::complete.cases(items_missing)))
 })
 
@@ -74,14 +79,27 @@ local({
   items_missing[sample(length(items_missing), 150)] <- NA
   data <- set_latpl_data(items_missing, MISSING = "available.cases")
   missing_per_row <- rowSums(is.na(items_missing))
-  expect_equal(sum(data$ufreq), sum(missing_per_row * (ncol(items_missing) - missing_per_row)))
+  expect_equal(
+    sum(data$ufreq),
+    sum(missing_per_row * (ncol(items_missing) - missing_per_row))
+  )
 })
 
 #### set_latpl_data() rejects validation data and clusters with several groups ####
 local({
   group <- rep(1:2, length.out = nrow(bfi_items))
-  expect_error(set_latpl_data(bfi_items, GROUP = group, VALDATA = bfi_items), "VALDATA")
-  expect_error(set_latpl_data(bfi_items, GROUP = group, CLUSTER = rep(1:30, length.out = nrow(bfi_items))), "CLUSTER")
+  expect_error(
+    set_latpl_data(bfi_items, GROUP = group, VALDATA = bfi_items),
+    "VALDATA"
+  )
+  expect_error(
+    set_latpl_data(
+      bfi_items,
+      GROUP = group,
+      CLUSTER = rep(1:30, length.out = nrow(bfi_items))
+    ),
+    "CLUSTER"
+  )
 })
 
 #### set_latpl_model() builds the model and validates it ####
@@ -93,10 +111,16 @@ local({
   expect_stdout(print(model), "<latpl_model>")
   expect_inherits(set_latpl_model(matrix(NA, 6, 1)), "latpl_model")
   expect_inherits(
-    set_latpl_model(two_factors, CONSTRAINTS = list(A = matrix(c(1, -1), 1, 2), b = 0)),
+    set_latpl_model(
+      two_factors,
+      CONSTRAINTS = list(A = matrix(c(1, -1), 1, 2), b = 0)
+    ),
     "latpl_model"
   )
-  expect_error(set_latpl_model(two_factors, CONSTRAINTS = list(A = matrix(1, 1, 2), b = c(0, 1))))
+  expect_error(set_latpl_model(
+    two_factors,
+    CONSTRAINTS = list(A = matrix(1, 1, 2), b = c(0, 1))
+  ))
   expect_error(set_latpl_model(two_factors, CONSTRAINTS = list(A = 1, b = 0)))
 })
 
@@ -112,9 +136,18 @@ local({
   three_factors <- build_constr_mat(9, 3, "simple")
   residual_covariances <- matrix(0, 9, 9)
   residual_covariances[1, 2] <- residual_covariances[2, 1] <- NA
-  expect_error(set_latpl_model(three_factors, CORRFLAG = FALSE, LATCOV = "direct"), "CORRFLAG")
+  expect_error(
+    set_latpl_model(three_factors, CORRFLAG = FALSE, LATCOV = "direct"),
+    "CORRFLAG"
+  )
   expect_error(set_latpl_model(three_factors, REGMAT = diag(3)), "diagonal")
-  expect_error(set_latpl_model(three_factors, RESCOV = replace(residual_covariances, 2, 0.2)), "symmetric")
+  expect_error(
+    set_latpl_model(
+      three_factors,
+      RESCOV = replace(residual_covariances, 2, 0.2)
+    ),
+    "symmetric"
+  )
 })
 
 #### pairs_freq() counts every pair once and skips missing responses ####
@@ -139,10 +172,20 @@ local({
 local({
   p <- 10
   q <- 2
-  free_triangular <- is.na(build_constr_mat(P = p, Q = q, STRUCT = "triangular"))
+  free_triangular <- is.na(build_constr_mat(
+    P = p,
+    Q = q,
+    STRUCT = "triangular"
+  ))
   expect_equal(sum(free_triangular), (p * q) - (q * (q - 1) / 2))
-  expect_equal(sum(free_triangular[lower.tri(free_triangular, diag = TRUE)]), (p * q) - (q * (q - 1) / 2))
-  expect_equal(sum(free_triangular[upper.tri(free_triangular, diag = FALSE)]), 0)
+  expect_equal(
+    sum(free_triangular[lower.tri(free_triangular, diag = TRUE)]),
+    (p * q) - (q * (q - 1) / 2)
+  )
+  expect_equal(
+    sum(free_triangular[upper.tri(free_triangular, diag = FALSE)]),
+    0
+  )
   expect_equal(sum(free_triangular %in% c(0, 1)), p * q)
   free_simple <- is.na(build_constr_mat(P = p, Q = q, STRUCT = "simple"))
   expect_equal(sum(free_simple), p)
