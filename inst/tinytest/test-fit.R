@@ -340,3 +340,39 @@ local({
   )
   expect_equal(fit_weighted$theta, fit_replicated$theta, tolerance = 1e-6)
 })
+
+#### Weights normalised within groups do not depend on the scale of each group's weights ####
+local({
+  group <- rep(1:2, each = 150)
+  set.seed(3)
+  weights <- runif(300, .2, 3)
+  rescaled <- weights * ifelse(group == 2, 5, 1)
+  model_two_groups <- set_latpl_groups(list(two_factors, two_factors))
+  names_free <- theta_names(
+    set_latpl_data(items_two_factors, GROUP = group),
+    model_two_groups
+  )
+  equal_loadings <- matrix(0, 1, length(names_free))
+  equal_loadings[
+    1,
+    match(c("lambda[1,1]", "lambda[1,1].g2"), names_free)
+  ] <- c(1, -1)
+  model_equal <- set_latpl_groups(
+    list(two_factors, two_factors),
+    list(A = equal_loadings, b = 0)
+  )
+  estimates <- function(weights, normalization) {
+    data <- set_latpl_data(
+      items_two_factors,
+      WEIGHTS = weights,
+      GROUP = group,
+      WEIGHTS_NORMALIZATION = normalization
+    )
+    fit_latpl(data, model_equal)$theta
+  }
+  expect_equal(estimates(rescaled, "group"), estimates(weights, "group"))
+  expect_false(isTRUE(all.equal(
+    estimates(rescaled, "total"),
+    estimates(weights, "total")
+  )))
+})

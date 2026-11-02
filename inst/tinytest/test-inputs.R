@@ -85,20 +85,77 @@ local({
   )
 })
 
-#### set_latpl_data() rejects validation data and clusters with several groups ####
+#### set_latpl_data() stacks the validation frequencies of each group ####
 local({
-  group <- rep(1:2, length.out = nrow(bfi_items))
+  group <- rep(c("b", "a"), length.out = nrow(bfi_items))
+  validation <- bfi_items[1:200, ]
+  validation_group <- rep(c("a", "b"), each = 100)
+  data <- set_latpl_data(
+    bfi_items,
+    GROUP = group,
+    VALDATA = validation,
+    VALGROUP = validation_group
+  )
+  expect_equal(
+    data$valfreq,
+    c(
+      pairs_freq(validation[validation_group == "b", ], data$cat),
+      pairs_freq(validation[validation_group == "a", ], data$cat)
+    )
+  )
   expect_error(
-    set_latpl_data(bfi_items, GROUP = group, VALDATA = bfi_items),
-    "VALDATA"
+    set_latpl_data(bfi_items, GROUP = group, VALDATA = validation),
+    "VALGROUP"
   )
   expect_error(
     set_latpl_data(
       bfi_items,
       GROUP = group,
-      CLUSTER = rep(1:30, length.out = nrow(bfi_items))
+      VALDATA = validation,
+      VALGROUP = rep("c", 200)
     ),
-    "CLUSTER"
+    "labels of GROUP"
+  )
+  expect_error(set_latpl_data(
+    bfi_items,
+    GROUP = group,
+    VALDATA = validation,
+    VALGROUP = validation_group[-1]
+  ))
+})
+
+#### set_latpl_data() normalises the weights within groups ####
+local({
+  group <- rep(1:2, c(1000, nrow(bfi_items) - 1000))
+  set.seed(1)
+  weights <- runif(nrow(bfi_items), .2, 3)
+  within_groups <- set_latpl_data(
+    bfi_items,
+    WEIGHTS = weights,
+    GROUP = group,
+    WEIGHTS_NORMALIZATION = "group"
+  )
+  total <- set_latpl_data(bfi_items, WEIGHTS = weights, GROUP = group)
+  expect_equal(
+    as.vector(tapply(within_groups$weights, group, sum)),
+    as.vector(table(group))
+  )
+  expect_equal(sum(total$weights), nrow(bfi_items))
+})
+
+#### set_latpl_data() numbers clusters within groups ####
+local({
+  group <- rep(1:2, each = 100)
+  clusters <- rep(1:10, length.out = 200)
+  data <- set_latpl_data(bfi_items[1:200, ], CLUSTER = clusters, GROUP = group)
+  expect_equal(length(unique(data$cluster)), 20)
+  expect_error(
+    set_latpl_data(
+      bfi_items[1:200, ],
+      CLUSTER = rep(1:2, each = 100),
+      GROUP = group
+    ),
+    "two clusters"
   )
 })
 

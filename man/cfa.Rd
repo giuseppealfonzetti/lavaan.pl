@@ -54,6 +54,7 @@ for more details. Possible options are:
 \item{\code{init}}{Starting values object from \code{\link[=set_init]{set_init()}}, by default \code{set_init(METHOD = "SA")}. Its \code{THETA} is taken from \code{start} or from the lavaan starting values.}
 \item{\code{ncores}}{The number of cores to use for parallel computation.}
 \item{\code{valdata}}{Validation data.}
+\item{\code{valgroup}}{Group of each row of \code{valdata}, with the values of the \code{group} variable. Required with \code{valdata} and several groups.}
 \item{\code{computevar_numderiv}}{If \code{TRUE}, the asymptotic variance-covariance matrix is computed using numerical derivatives.}
 }}
 

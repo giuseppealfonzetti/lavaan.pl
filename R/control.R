@@ -15,6 +15,10 @@
 #'  `NULL`, observations are independent.
 #'@param GROUP Group membership, one per observation, for multigroup models (see
 #'  [set_latpl_groups()]). Groups are numbered in order of appearance. If `NULL`, a single group.
+#'@param VALGROUP Group membership of each row of `VALDATA`, with the labels of `GROUP`. Required
+#'  with `VALDATA` and several groups.
+#'@param WEIGHTS_NORMALIZATION Normalisation of the sampling weights, as in lavaan: to the total
+#'  number of observations (`"total"`) or to the number of observations of each group (`"group"`).
 #'
 #' @return An object of class `latpl_data` with the data matrix `Y`, its dimensions `n` and `p`,
 #'   the number of categories of each item `cat`, the pairwise frequency tables `freq` and
@@ -22,13 +26,16 @@
 #'   univariate frequencies `ufreq` of the available-cases term, the normalised sampling weights
 #'   `weights` and their factors on the scores `jweights`, the cluster indices `cluster`, the group
 #'   indices `group` (from zero) and their number `ngroups`, and the time spent computing the
-#'   frequencies `freqTime`. With several groups, `freq` and `ufreq` stack the tables of each group.
+#'   frequencies `freqTime`. With several groups, `freq`, `ufreq` and `valfreq` stack the tables of
+#'   each group.
 #'
 #' @export
 set_latpl_data <- function(DATA, VALDATA = NULL, MISSING = c("listwise", "pairwise", "available.cases"),
-                          WEIGHTS = NULL, WEIGHTS_TYPE = c("design", "frequency"), CLUSTER = NULL, GROUP = NULL) {
+                          WEIGHTS = NULL, WEIGHTS_TYPE = c("design", "frequency"), CLUSTER = NULL, GROUP = NULL,
+                          VALGROUP = NULL, WEIGHTS_NORMALIZATION = c("total", "group")) {
   MISSING <- match.arg(MISSING)
   WEIGHTS_TYPE <- match.arg(WEIGHTS_TYPE)
+  WEIGHTS_NORMALIZATION <- match.arg(WEIGHTS_NORMALIZATION)
   stopifnot(is.matrix(DATA), is.numeric(DATA), all(is.finite(DATA) | is.na(DATA)), min(DATA, na.rm = TRUE) == 0)
   Y <- round(DATA)
   stopifnot(
@@ -38,8 +45,7 @@ set_latpl_data <- function(DATA, VALDATA = NULL, MISSING = c("listwise", "pairwi
   )
   group <- if (is.null(GROUP)) rep(0, nrow(Y)) else match(GROUP, unique(GROUP)) - 1
   G <- max(group) + 1
-  if (G > 1 && !is.null(VALDATA)) stop("VALDATA is not supported with several groups.")
-  if (G > 1 && !is.null(CLUSTER)) stop("CLUSTER is not supported with several groups.")
+  if (G > 1 && !is.null(VALDATA) && is.null(VALGROUP)) stop("VALGROUP is required with VALDATA and several groups.")
   if (MISSING == "listwise" && anyNA(Y)) {
     keep <- stats::complete.cases(Y)
     message(sum(!keep), " incomplete observations removed (MISSING = \"listwise\").")
@@ -53,12 +59,16 @@ set_latpl_data <- function(DATA, VALDATA = NULL, MISSING = c("listwise", "pairwi
   stopifnot(cat > 1)
   weights <- jweights <- cluster <- numeric(0)
   if (!is.null(WEIGHTS)) {
-    weights <- WEIGHTS / sum(WEIGHTS) * nrow(Y)
+    weights <- if (WEIGHTS_NORMALIZATION == "group") {
+      WEIGHTS / stats::ave(WEIGHTS, group, FUN = sum) * stats::ave(WEIGHTS, group, FUN = length)
+    } else {
+      WEIGHTS / sum(WEIGHTS) * nrow(Y)
+    }
     jweights <- if (WEIGHTS_TYPE == "design") weights else sqrt(weights)
   }
   if (!is.null(CLUSTER)) {
-    cluster <- as.numeric(match(CLUSTER, unique(CLUSTER)) - 1)
-    stopifnot(length(unique(cluster)) > 1)
+    cluster <- as.numeric(match(paste(group, CLUSTER), unique(paste(group, CLUSTER))) - 1)
+    if (any(tapply(cluster, group, function(x) length(unique(x))) < 2)) stop("Every group needs at least two clusters.")
   }
   freq_start_time <- Sys.time()
   uweights <- if (MISSING == "available.cases") rowSums(is.na(Y)) else rep(0, nrow(Y))
@@ -77,9 +87,12 @@ set_latpl_data <- function(DATA, VALDATA = NULL, MISSING = c("listwise", "pairwi
       all(is.finite(VALDATA)),
       ncol(VALDATA) == ncol(Y),
       all(VALDATA >= 0),
-      all(t(VALDATA) <= cat - 1)
+      all(t(VALDATA) <= cat - 1),
+      is.null(VALGROUP) || length(VALGROUP) == nrow(VALDATA)
     )
-    valfreq <- pairs_freq(round(VALDATA), cat)
+    valgroup <- if (is.null(VALGROUP)) rep(0, nrow(VALDATA)) else match(VALGROUP, unique(GROUP)) - 1
+    if (anyNA(valgroup)) stop("VALGROUP must use the labels of GROUP.")
+    valfreq <- unlist(lapply(seq_len(G) - 1, function(g) pairs_freq(round(VALDATA[valgroup == g, , drop = FALSE]), cat)))
   }
   out <- list(
     Y = Y,

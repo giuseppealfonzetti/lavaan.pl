@@ -5,8 +5,8 @@ cpp_pl <- function(THETA, MODEL, DATA, ORDER = 0L) {
     .Call(`_lavaan_pl_cpp_pl`, THETA, MODEL, DATA, ORDER)
 }
 
-cpp_HJ <- function(THETA, MODEL, DATA) {
-    .Call(`_lavaan_pl_cpp_HJ`, THETA, MODEL, DATA)
+cpp_HJ <- function(THETA, MODEL, DATA, PAIRVAR = FALSE) {
+    .Call(`_lavaan_pl_cpp_HJ`, THETA, MODEL, DATA, PAIRVAR)
 }
 
 cpp_rho <- function(THETA, MODEL, DATA) {

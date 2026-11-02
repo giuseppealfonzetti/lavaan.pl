@@ -291,6 +291,18 @@ for (name in cases_in("multigroup")) {
   })
 }
 
+#### Other equality constraints across groups, partial invariance, clusters and weights within groups ####
+for (name in cases_in("multigroup-extra")) {
+  local({
+    with_test <- !is.null(reference$cases[[name]]$fit_measures)
+    expect_matches_reference(
+      name,
+      if (with_test) fit_measures_short,
+      est_tolerance = 1e-3
+    )
+  })
+}
+
 #### The invariance chain ####
 local({
   for (parameterization in c("delta", "theta")) {

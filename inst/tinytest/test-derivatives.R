@@ -45,6 +45,46 @@ unit_scores <- function(fit, theta) {
   ))
 }
 
+pair_gradients <- function(fit, theta) {
+  data <- fit$data
+  first_item <- unlist(lapply(2:data$p, function(k) rep(k, k - 1)))
+  second_item <- unlist(lapply(2:data$p, function(k) seq_len(k - 1)))
+  pair_offsets <- cumsum(c(0, data$cat[first_item] * data$cat[second_item]))
+  item_offsets <- cumsum(c(0, data$cat))
+  Reduce(
+    cbind,
+    lapply(seq_along(fit$engine$data), function(group) {
+      group_data <- fit$engine$data[[group]]
+      gradient <- function(freq, ufreq) {
+        engine_data <- lapply(fit$engine$data, function(x) {
+          x$FREQ[] <- 0
+          x$UFREQ[] <- 0
+          x
+        })
+        engine_data[[group]]$FREQ <- freq
+        engine_data[[group]]$UFREQ <- ufreq
+        lavaan.pl:::cpp_pl(theta, fit$engine$model, engine_data, 1L)$gradient
+      }
+      univariate <- sapply(seq_len(data$p), function(j) {
+        cells <- item_offsets[j] + seq_len(data$cat[j])
+        gradient(
+          0 * group_data$FREQ,
+          replace(0 * group_data$UFREQ, cells, group_data$UFREQ[cells])
+        )
+      })
+      sapply(seq_along(first_item), function(r) {
+        cells <- (pair_offsets[r] + 1):pair_offsets[r + 1]
+        gradient(
+          replace(0 * group_data$FREQ, cells, group_data$FREQ[cells]),
+          0 * group_data$UFREQ
+        ) +
+          (univariate[, first_item[r]] + univariate[, second_item[r]]) /
+            (data$p - 1)
+      })
+    })
+  )
+}
+
 expect_derivatives <- function(fit) {
   block <- lavaan.pl:::theta_block(fit$model, sum(fit$data$cat - 1))
   size <- function(name) sum(block == name)
@@ -87,6 +127,12 @@ expect_derivatives <- function(fit) {
   expect_equal(hj$gradient, gradient)
   expect_equal(colSums(scores), gradient)
   expect_equal(hj$J, crossprod(scores) / fit$dims$n)
+  per_pair <- pair_gradients(fit, theta)
+  expect_equal(rowSums(per_pair), gradient)
+  expect_equal(
+    lavaan.pl:::cpp_HJ(theta, fit$engine$model, fit$engine$data, TRUE)$pairvar,
+    tcrossprod(per_pair)
+  )
   expect_equal(
     rho(theta)$jacobian,
     numDeriv::jacobian(function(x) rho(x)$rho, theta),
@@ -236,6 +282,36 @@ local({
   cluster_totals <- sweep(cluster_totals, 2, colMeans(cluster_totals))
   expect_equal(hj$J, 30 / 29 * crossprod(cluster_totals) / nrow(items_complete))
   expect_equal(hj$gradient, colSums(weighted_scores))
+})
+
+#### J with clusters in two groups sums the unit scores within the clusters of each group ####
+local({
+  items_complete <- items[, 4:9]
+  model <- set_latpl_model(build_constr_mat(6, 2, "simple"))
+  model_two_groups <- set_latpl_groups(list(model, model))
+  group <- rep(1:2, each = 150)
+  clusters <- rep(1:15, length.out = 300)
+  fit_unclustered <- fit_latpl(
+    set_latpl_data(items_complete, GROUP = group),
+    model_two_groups
+  )
+  fit_clustered <- fit_latpl(
+    set_latpl_data(items_complete, CLUSTER = clusters, GROUP = group),
+    model_two_groups
+  )
+  theta <- fit_unclustered$theta + 0.05
+  hj <- lavaan.pl:::cpp_HJ(
+    theta,
+    fit_clustered$engine$model,
+    fit_clustered$engine$data
+  )
+  scores <- unit_scores(fit_unclustered, theta)
+  within_group <- lapply(1:2, function(g) {
+    cluster_totals <- rowsum(scores[group == g, ], clusters[group == g])
+    cluster_totals <- sweep(cluster_totals, 2, colMeans(cluster_totals))
+    15 / 14 * crossprod(cluster_totals)
+  })
+  expect_equal(hj$J, (within_group[[1]] + within_group[[2]]) / 300)
 })
 
 #### Gradient and blocks of the Hessian of the saturated model ####

@@ -14,7 +14,9 @@ set_latpl_data(
   WEIGHTS = NULL,
   WEIGHTS_TYPE = c("design", "frequency"),
   CLUSTER = NULL,
-  GROUP = NULL
+  GROUP = NULL,
+  VALGROUP = NULL,
+  WEIGHTS_NORMALIZATION = c("total", "group")
 )
 }
 \arguments{
@@ -43,6 +45,12 @@ observations. If \code{NULL}, unit weights.}
 
 \item{GROUP}{Group membership, one per observation, for multigroup models (see
 \code{\link[=set_latpl_groups]{set_latpl_groups()}}). Groups are numbered in order of appearance. If \code{NULL}, a single group.}
+
+\item{VALGROUP}{Group membership of each row of \code{VALDATA}, with the labels of \code{GROUP}. Required
+with \code{VALDATA} and several groups.}
+
+\item{WEIGHTS_NORMALIZATION}{Normalisation of the sampling weights, as in lavaan: to the total
+number of observations (\code{"total"}) or to the number of observations of each group (\code{"group"}).}
 }
 \value{
 An object of class \code{latpl_data} with the data matrix \code{Y}, its dimensions \code{n} and \code{p},
@@ -51,7 +59,8 @@ the number of categories of each item \code{cat}, the pairwise frequency tables 
 univariate frequencies \code{ufreq} of the available-cases term, the normalised sampling weights
 \code{weights} and their factors on the scores \code{jweights}, the cluster indices \code{cluster}, the group
 indices \code{group} (from zero) and their number \code{ngroups}, and the time spent computing the
-frequencies \code{freqTime}. With several groups, \code{freq} and \code{ufreq} stack the tables of each group.
+frequencies \code{freqTime}. With several groups, \code{freq}, \code{ufreq} and \code{valfreq} stack the tables of
+each group.
 }
 \description{
 Print method for \code{latpl_data} objects

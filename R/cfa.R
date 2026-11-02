@@ -37,6 +37,7 @@
 #'     \item{\code{init}}{Starting values object from [set_init()], by default `set_init(METHOD = "SA")`. Its `THETA` is taken from `start` or from the lavaan starting values.}
 #'     \item{\code{ncores}}{The number of cores to use for parallel computation.}
 #'     \item{\code{valdata}}{Validation data.}
+#'     \item{\code{valgroup}}{Group of each row of `valdata`, with the values of the `group` variable. Required with `valdata` and several groups.}
 #'     \item{\code{computevar_numderiv}}{If `TRUE`, the asymptotic variance-covariance matrix is computed using numerical derivatives.}
 #'   }
 #' @param control Control object of the estimation algorithm: [set_ucminf_control()]
@@ -147,6 +148,7 @@ fit_lavaan_pml <- function(LAVFUN, CALL, model, data, std.lv, estimator, estimat
   ncores <- estimator.args$ncores
   if (is.null(ncores)) ncores <- 1
   valdata <- estimator.args$valdata
+  valgroup <- estimator.args$valgroup
   computevar_numderiv <- estimator.args$computevar_numderiv
   if (is.null(computevar_numderiv)) computevar_numderiv <- FALSE
 
@@ -185,7 +187,7 @@ fit_lavaan_pml <- function(LAVFUN, CALL, model, data, std.lv, estimator, estimat
   }
 
   # Fit lavaan.pl -------------------------------------------------------------------
-  spec <- spec_from_lavaan(template, start, valdata)
+  spec <- spec_from_lavaan(template, start, valdata, valgroup)
   init$THETA <- spec$THETA
   # Send to lavaan.pl
   fit <- fit_latpl(
@@ -218,11 +220,12 @@ fit_lavaan_pml <- function(LAVFUN, CALL, model, data, std.lv, estimator, estimat
 #' @param template Unfitted [lavaan::lavaan] object, created with `do.fit = FALSE`.
 #' @param start Starting values in lavaan's free-parameter order, or `NULL`.
 #' @param valdata Validation data passed to [set_latpl_data()] as `VALDATA`, or `NULL`.
+#' @param valgroup Group of each row of `valdata`, passed to [set_latpl_data()] as `VALGROUP`, or `NULL`.
 #' @return A list with the data object `DATA`, the model object `MODEL` and the starting values `THETA` for
 #'   [fit_latpl()].
 #' @seealso [fit_lavaan_pml()], [as_lavaan()]
 #' @keywords internal
-spec_from_lavaan <- function(template, start = NULL, valdata = NULL) {
+spec_from_lavaan <- function(template, start = NULL, valdata = NULL, valgroup = NULL) {
   pt <- lavaan::parTable(template)
   lv <- lavaan::lavNames(template, "lv")
 
@@ -423,17 +426,19 @@ spec_from_lavaan <- function(template, start = NULL, valdata = NULL) {
   model <- if (G == 1L) models[[1]] else set_latpl_groups(models, con)
 
   weights <- NULL
+  normalization <- template@Options$sampling.weights.normalization
   if (length(template@Data@sampling.weights) > 0L) {
-    norm <- template@Options$sampling.weights.normalization
-    if (norm == "none" || (norm == "group" && G > 1L)) {
-      stop("sampling.weights.normalization = \"", norm, "\" is not currently supported.", call. = FALSE)
+    if (normalization == "none") {
+      stop("sampling.weights.normalization = \"none\" is not currently supported.", call. = FALSE)
     }
     weights <- unlist(template@Data@weights)
   }
   cluster <- if (isTRUE(template@Options$.clustered)) unlist(lapply(template@Data@Lp, function(x) x$cluster.idx[[2]]))
   data_spec <- set_latpl_data(Reduce(rbind, X), valdata, MISSING = missing, WEIGHTS = weights,
                               WEIGHTS_TYPE = template@Options$sampling.weights.type, CLUSTER = cluster,
-                              GROUP = rep(seq_len(G), vapply(X, nrow, numeric(1))))
+                              GROUP = if (G > 1L) rep(template@Data@group.label, vapply(X, nrow, numeric(1))),
+                              VALGROUP = valgroup,
+                              WEIGHTS_NORMALIZATION = if (normalization == "group") "group" else "total")
 
   # Note: the values in lavaan.pl are always in the order of thresholds, loadings, latent
   # correlations, latent variances, regressions, then residual covariances.

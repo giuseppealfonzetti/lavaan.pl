@@ -159,7 +159,7 @@ compute_var.latpl_fit <- function(OBJ, NUMDERIV = FALSE, VERBOSE = FALSE) {
   trJacob <- trJacob %*% lc$K
   RcppParallel::setThreadOptions(numThreads = OBJ$cores)
   on.exit(RcppParallel::setThreadOptions(numThreads = 1))
-  HJ <- cpp_HJ(OBJ$theta, OBJ$engine$model, OBJ$engine$data)
+  HJ <- cpp_HJ(OBJ$theta, OBJ$engine$model, OBJ$engine$data, OBJ$method == "SA")
   H <- crossprod(lc$K, HJ$H %*% lc$K)
   J <- crossprod(lc$K, HJ$J %*% lc$K)
   if (NUMDERIV) {
@@ -174,11 +174,10 @@ compute_var.latpl_fit <- function(OBJ, NUMDERIV = FALSE, VERBOSE = FALSE) {
   if (OBJ$method == "SA") {
     P <- OBJ$dims$pairs
     ppi <- OBJ$control$PAIRS_PER_ITERATION
-    a1 <- P * (P - ppi) / (ppi * (P - 1))
-    a2 <- (P - ppi) / (ppi * (P - 1))
-    noise <- invH %*% (a1 * H - a2 * J) %*% invH / (OBJ$dims$n * OBJ$stoFit$averaged)
-    eig <- eigen((noise + t(noise)) / 2, symmetric = TRUE)
-    noise <- eig$vectors %*% (pmax(eig$values, 0) * t(eig$vectors))
+    n <- OBJ$dims$n
+    G <- crossprod(lc$K, HJ$gradient) / n
+    V <- (P - ppi) / (ppi * (P - 1)) * (P * crossprod(lc$K, HJ$pairvar %*% lc$K) / n^2 - tcrossprod(G))
+    noise <- invH %*% V %*% invH / OBJ$stoFit$averaged
     opt_noise <- diag(trJacob %*% noise %*% t(trJacob))
   }
   list(trJacob = trJacob, H = H, invH = trJacob %*% invH, J = J, vcov = vcov, asymptotic_variance = diag(vcov),

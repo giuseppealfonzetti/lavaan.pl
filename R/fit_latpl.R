@@ -260,17 +260,18 @@ engine <- function(DATA, MODEL) {
       id <- match(key, key[first])
       WM <- matrix(0, 0, 0)
       if (length(DATA$cluster)) {
-        G <- length(unique(DATA$cluster))
+        clusters <- factor(DATA$cluster[rows])
+        C <- nlevels(clusters)
         A <- tapply(
           gw[rows],
           list(
             factor(id, seq_len(sum(first))),
-            factor(DATA$cluster[rows], seq_len(G) - 1)
+            clusters
           ),
           sum,
           default = 0
         )
-        WM <- (A - rowMeans(A)) * sqrt(G / (G - 1))
+        WM <- (A - rowMeans(A)) * sqrt(C / (C - 1))
       }
       list(
         N = length(rows),

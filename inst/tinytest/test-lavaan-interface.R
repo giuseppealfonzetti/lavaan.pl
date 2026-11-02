@@ -53,6 +53,52 @@ local({
   expect_identical(fit@external$lavaan.pl$method, "SA")
 })
 
+#### SA with several groups takes validation data by group ####
+local({
+  six_items <- c("A1", "A2", "A3", "C1", "C2", "C3")
+  two_factors <- "A =~ A1 + A2 + A3\nC =~ C1 + C2 + C3"
+  validation <- as.matrix(data.frame(lapply(
+    bfi[1001:1400, six_items],
+    as.numeric
+  ))) -
+    1
+  fit <- suppressWarnings(cfa(
+    two_factors,
+    bfi[1:1000, ],
+    group = "gender",
+    std.lv = TRUE,
+    se = "none",
+    control = set_sa_control(),
+    estimator.args = list(
+      valdata = validation,
+      valgroup = bfi$gender[1001:1400]
+    )
+  ))
+  validation_group <- bfi$gender[1001:1400]
+  group_labels <- lavaan::lavInspect(fit, "group.label")
+  expect_identical(fit@external$lavaan.pl$method, "SA")
+  expect_equal(
+    fit@external$lavaan.pl$data$valfreq,
+    unlist(lapply(group_labels, function(label) {
+      pairs_freq(
+        validation[validation_group == label, ],
+        fit@external$lavaan.pl$data$cat
+      )
+    }))
+  )
+  expect_error(
+    cfa(
+      two_factors,
+      bfi[1:1000, ],
+      group = "gender",
+      std.lv = TRUE,
+      control = set_sa_control(),
+      estimator.args = list(valdata = validation, valgroup = rep(3, 400))
+    ),
+    "labels of GROUP"
+  )
+})
+
 #### Fixed loadings and equality constraints are honoured ####
 local({
   fit <- cfa(

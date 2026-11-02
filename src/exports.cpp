@@ -27,10 +27,11 @@ Rcpp::List cpp_pl(const Eigen::Map<Eigen::VectorXd> THETA, const Rcpp::List MODE
 }
 
 // [[Rcpp::export]]
-Rcpp::List cpp_HJ(const Eigen::Map<Eigen::VectorXd> THETA, const Rcpp::List MODEL, const Rcpp::List DATA){
+Rcpp::List cpp_HJ(const Eigen::Map<Eigen::VectorXd> THETA, const Rcpp::List MODEL, const Rcpp::List DATA, const bool PAIRVAR = false){
   const model::Groups GS(MODEL, DATA);
   const std::vector<model::Setup> ST = GS.setup(THETA);
   Eigen::MatrixXd H = Eigen::MatrixXd::Zero(GS.d, GS.d), J = Eigen::MatrixXd::Zero(GS.d, GS.d);
+  Eigen::MatrixXd pairvar = PAIRVAR ? Eigen::MatrixXd::Zero(GS.d, GS.d) : Eigen::MatrixXd();
   Eigen::VectorXd gradient = Eigen::VectorXd::Zero(GS.d);
   for(int g = 0; g < GS.G; g++){
     const model::Spec &S = GS.S[g];
@@ -53,8 +54,29 @@ Rcpp::List cpp_HJ(const Eigen::Map<Eigen::VectorXd> THETA, const Rcpp::List MODE
     H.block(GS.off[g], GS.off[g], S.d, S.d) = hw.hessian / GS.n;
     J.block(GS.off[g], GS.off[g], S.d, S.d) = sc * sc.transpose() / GS.n;
     gradient.segment(GS.off[g], S.d) = hw.gradient;
+    if(PAIRVAR){
+      Eigen::MatrixXd U(S.d, S.p), pair_items = Eigen::MatrixXd::Zero(S.d, S.p), pv = Eigen::MatrixXd::Zero(S.d, S.d);
+      for(int k = 0, uk = 0; k < S.p; uk += S.L.cat(k), k++){
+        U.col(k) = uscore.middleCols(uk, S.L.cat(k)) * ufreq.segment(uk, S.L.cat(k));
+      }
+      for(int r = 0; r < S.L.P; r++){
+        const std::vector<int> &I = sidx[r];
+        const Eigen::VectorXd s = score[r] * freq.segment(S.L.off[r], score[r].cols());
+        for(std::size_t a = 0; a < I.size(); a++){
+          pair_items(I[a], S.L.pk[r]) += s(a);
+          pair_items(I[a], S.L.pl[r]) += s(a);
+          for(std::size_t b = 0; b < I.size(); b++) pv(I[a], I[b]) += s(a) * s(b);
+        }
+      }
+      const Eigen::MatrixXd cross = pair_items * U.transpose();
+      const Eigen::VectorXd u = U.rowwise().sum();
+      const double m = S.p - 1.0;
+      pv += (cross + cross.transpose()) / m + ((S.p - 2.0) * U * U.transpose() + u * u.transpose()) / (m * m);
+      pairvar.block(GS.off[g], GS.off[g], S.d, S.d) = pv;
+    }
   }
-  return Rcpp::List::create(Rcpp::Named("H") = H, Rcpp::Named("J") = J, Rcpp::Named("gradient") = gradient);
+  return Rcpp::List::create(Rcpp::Named("H") = H, Rcpp::Named("J") = J, Rcpp::Named("gradient") = gradient,
+                            Rcpp::Named("pairvar") = pairvar);
 }
 
 // [[Rcpp::export]]

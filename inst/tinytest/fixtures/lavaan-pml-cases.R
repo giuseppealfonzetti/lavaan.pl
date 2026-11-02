@@ -76,7 +76,13 @@ simulated_listwise <- as.data.frame(lapply(
   ordered
 ))
 
+bfi_groups <- bfi[1:1000, ]
+set.seed(3)
+bfi_groups$w <- runif(1000, .2, 3)
+bfi_groups$cl <- rep(1:40, length.out = 1000)
+
 #### Models ####
+two_factors_three_items <- "A =~ A1 + A2 + A3\nC =~ C1 + C2 + C3"
 two_factors_four_items <- "A =~ A1 + A2 + A3 + A4\nC =~ C1 + C2 + C3 + C4"
 two_factors_five_items <- "A =~ A1 + A2 + A3 + A4 + A5\nC =~ C1 + C2 + C3 + C4 + C5"
 three_factors_four_items <- "A =~ A1 + A2 + A3 + A4\nC =~ C1 + C2 + C3 + C4\nE =~ E1 + E2 + E3 + E4"
@@ -193,6 +199,28 @@ grid_test_case <- function(case) {
       std.lv = case$std.lv,
       parameterization = parameterization,
       test = "mean.var.adjusted"
+    )
+  }
+}
+
+multigroup_extra_case <- function(
+  model,
+  group_equal,
+  ...,
+  std.lv = TRUE,
+  parameterization = "delta",
+  test = "mean.var.adjusted"
+) {
+  function(fit) {
+    fit$sem(
+      model,
+      bfi_groups,
+      group = "gender",
+      group.equal = group_equal,
+      std.lv = std.lv,
+      parameterization = parameterization,
+      test = test,
+      ...
     )
   }
 }
@@ -507,7 +535,62 @@ lavaan_pml_cases <- c(
     }
   ),
   multigroup_cases("delta"),
-  multigroup_cases("theta")
+  multigroup_cases("theta"),
+  list(
+    "multigroup-extra/latent variances" = multigroup_extra_case(
+      two_factors_three_items,
+      c("loadings", "lv.variances")
+    ),
+    "multigroup-extra/latent covariances" = multigroup_extra_case(
+      two_factors_three_items,
+      c("loadings", "lv.covariances")
+    ),
+    "multigroup-extra/latent variances and covariances, marker" = multigroup_extra_case(
+      two_factors_three_items,
+      c("loadings", "lv.variances", "lv.covariances"),
+      std.lv = FALSE
+    ),
+    "multigroup-extra/means" = multigroup_extra_case(
+      two_factors_three_items,
+      c("thresholds", "loadings", "intercepts", "means")
+    ),
+    "multigroup-extra/residuals" = multigroup_extra_case(
+      two_factors_three_items,
+      c("thresholds", "loadings", "residuals")
+    ),
+    "multigroup-extra/residuals, theta" = multigroup_extra_case(
+      two_factors_three_items,
+      c("thresholds", "loadings", "residuals"),
+      parameterization = "theta"
+    ),
+    "multigroup-extra/residual covariances, theta" = multigroup_extra_case(
+      paste(two_factors_three_items, "\nA1 ~~ A2"),
+      c("thresholds", "loadings", "residuals", "residual.covariances"),
+      parameterization = "theta"
+    ),
+    "multigroup-extra/regressions" = multigroup_extra_case(
+      paste(two_factors_three_items, "\nC ~ A"),
+      c("loadings", "regressions")
+    ),
+    "multigroup-extra/partial invariance" = multigroup_extra_case(
+      two_factors_three_items,
+      c("thresholds", "loadings"),
+      group.partial = "A =~ A2"
+    ),
+    "multigroup-extra/clusters" = multigroup_extra_case(
+      two_factors_three_items,
+      "loadings",
+      cluster = "cl",
+      test = "none"
+    ),
+    "multigroup-extra/weights normalised within groups" = multigroup_extra_case(
+      two_factors_three_items,
+      c("thresholds", "loadings"),
+      sampling.weights = "w",
+      sampling.weights.normalization = "group",
+      test = "none"
+    )
+  )
 )
 
 #### Summaries ####

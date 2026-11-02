@@ -92,32 +92,58 @@ local({
   expect_equal(tail(fit_sa$stoFit$path$phase, 1), 3)
 })
 
-#### The optimisation noise uses the number of averaged iterations ####
+#### The optimisation noise is the pair-selection covariance over the averaged iterations ####
 local({
   vars <- compute_var(fit_sa)
   pairs <- fit_sa$dims$pairs
   pairs_per_iteration <- fit_sa$control$PAIRS_PER_ITERATION
-  hessian_weight <- pairs *
-    (pairs - pairs_per_iteration) /
-    (pairs_per_iteration * (pairs - 1))
-  variability_weight <- (pairs - pairs_per_iteration) /
-    (pairs_per_iteration * (pairs - 1))
+  hj <- lavaan.pl:::cpp_HJ(
+    fit_sa$theta,
+    fit_sa$engine$model,
+    fit_sa$engine$data,
+    TRUE
+  )
+  pair_selection <- (pairs - pairs_per_iteration) /
+    (pairs_per_iteration * (pairs - 1)) *
+    (pairs * hj$pairvar / n^2 - tcrossprod(hj$gradient / n))
   inverse_hessian <- solve(vars$H)
-  noise <- inverse_hessian %*%
-    (hessian_weight * vars$H - variability_weight * vars$J) %*%
-    inverse_hessian /
-    (n * fit_sa$stoFit$averaged)
-  eigen_noise <- eigen((noise + t(noise)) / 2, symmetric = TRUE)
   expect_equal(
     vars$noise,
-    eigen_noise$vectors %*%
-      (pmax(eigen_noise$values, 0) * t(eigen_noise$vectors))
+    inverse_hessian %*%
+      pair_selection %*%
+      inverse_hessian /
+      fit_sa$stoFit$averaged
   )
+  expect_true(all(
+    eigen(vars$noise, symmetric = TRUE, only.values = TRUE)$values > -1e-12
+  ))
   expect_equal(
     vars$optimisation_noise,
     diag(vars$trJacob %*% vars$noise %*% t(vars$trJacob))
   )
   expect_null(compute_var(fit_pml)$noise)
+})
+
+#### The optimisation noise matches the spread of SA estimates across seeds in two groups ####
+local({
+  data_two_groups <- set_latpl_data(items, GROUP = rep(1:2, each = n / 2))
+  model_two_groups <- set_latpl_groups(list(model, model))
+  optimum <- fit_latpl(data_two_groups, model_two_groups)$theta
+  fits <- lapply(1:10, function(seed) {
+    fit_latpl(
+      data_two_groups,
+      model_two_groups,
+      CONTROL = set_sa_control(SEED = seed)
+    )
+  })
+  deviations <- t(vapply(
+    fits,
+    function(fit) fit$theta - optimum,
+    numeric(length(optimum))
+  ))
+  trace_ratio <- sum(colMeans(deviations^2)) /
+    sum(diag(compute_var(fits[[1]])$noise))
+  expect_true(trace_ratio > 0.6 && trace_ratio < 1.5)
 })
 
 #### Linear constraints hold exactly ####
@@ -178,6 +204,40 @@ local({
   model_two_groups <- set_latpl_groups(list(
     set_latpl_model(loadings_structure),
     set_latpl_model(loadings_structure, PARAMETERIZATION = "theta")
+  ))
+  fit_two_groups <- fit_latpl(
+    data_two_groups,
+    model_two_groups,
+    CONTROL = set_sa_control()
+  )
+  expect_true(fit_two_groups$stoFit$converged)
+  expect_true(
+    distance_in_se(
+      fit_two_groups,
+      fit_latpl(data_two_groups, model_two_groups)
+    ) <
+      1
+  )
+})
+
+#### Two groups with validation data are within one standard error ####
+local({
+  validation <- sim_data(
+    400,
+    gen_loadings(loadings_structure, SEED = 1, LB = .4, UB = .8),
+    c(-1.2, 0, 1.2),
+    latent_correlations,
+    SEED = 9
+  )
+  data_two_groups <- set_latpl_data(
+    items,
+    GROUP = rep(1:2, each = n / 2),
+    VALDATA = validation,
+    VALGROUP = rep(1:2, each = 200)
+  )
+  model_two_groups <- set_latpl_groups(list(
+    set_latpl_model(loadings_structure),
+    set_latpl_model(loadings_structure)
   ))
   fit_two_groups <- fit_latpl(
     data_two_groups,
