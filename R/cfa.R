@@ -13,7 +13,8 @@
 #'   \item{\code{se}}{The standard error method to use. Only `"robust.huber.white"` is currently supported.}
 #'   \item{\code{test}}{Default `"none"`. `"standard"` and `"mean.var.adjusted"` are computed by [compute_plrt()].}
 #'   \item{\code{missing}}{Default `"listwise"`. `"pairwise"` and `"available.cases"` use the complete pairs and the available cases of Katsikatsou et al. (2022).}
-#'   \item{\code{sampling.weights}, \code{cluster}}{Sampling weights, of type `"design"` or `"frequency"`, and cluster-robust standard errors, as in lavaan.}
+#'   \item{\code{sampling.weights}, \code{cluster}}{Sampling weights, of type `"design"` or `"frequency"`, and cluster-robust standard errors, as in lavaan. With covariates, the weights are honoured, unlike in lavaan.}
+#'   \item{\code{conditional.x}}{Regressions on observed covariates condition on them, as `conditional.x = TRUE`, the only supported option. Covariates need no declaration: they are handled by their distinct rows, so that discrete covariates keep the data reduction.}
 #' }
 #'
 #' @param model A description of the user-specified model. Typically, the model
@@ -21,7 +22,7 @@
 #'   for more information. Alternatively, a parameter table (eg. the output of
 #'   the [`lavaan::lavaanify()`] function) is also accepted.
 #' @param data A data frame containing the observed variables used in the model.
-#'   Variables must be declared as ordered factors.
+#'   Ordinal items must be declared as ordered factors; other items are numeric.
 #' @param std.lv If `TRUE`, the metric of each latent variable is determined by
 #'   fixing their (residual) variances to 1.0. If `FALSE`, the metric of each
 #'   latent variable is determined by fixing the factor loading of the first
@@ -38,6 +39,7 @@
 #'     \item{\code{ncores}}{The number of cores to use for parallel computation.}
 #'     \item{\code{valdata}}{Validation data.}
 #'     \item{\code{valgroup}}{Group of each row of `valdata`, with the values of the `group` variable. Required with `valdata` and several groups.}
+#'     \item{\code{valx}}{Covariates of `valdata`. Required with `valdata` and covariates.}
 #'     \item{\code{computevar_numderiv}}{If `TRUE`, the asymptotic variance-covariance matrix is computed using numerical derivatives.}
 #'   }
 #' @param control Control object of the estimation algorithm: [set_ucminf_control()]
@@ -149,6 +151,7 @@ fit_lavaan_pml <- function(LAVFUN, CALL, model, data, std.lv, estimator, estimat
   if (is.null(ncores)) ncores <- 1
   valdata <- estimator.args$valdata
   valgroup <- estimator.args$valgroup
+  valx <- estimator.args$valx
   computevar_numderiv <- estimator.args$computevar_numderiv
   if (is.null(computevar_numderiv)) computevar_numderiv <- FALSE
 
@@ -187,7 +190,7 @@ fit_lavaan_pml <- function(LAVFUN, CALL, model, data, std.lv, estimator, estimat
   }
 
   # Fit lavaan.pl -------------------------------------------------------------------
-  spec <- spec_from_lavaan(template, start, valdata, valgroup)
+  spec <- spec_from_lavaan(template, start, valdata, valgroup, valx)
   init$THETA <- spec$THETA
   # Send to lavaan.pl
   fit <- fit_latpl(
@@ -221,32 +224,38 @@ fit_lavaan_pml <- function(LAVFUN, CALL, model, data, std.lv, estimator, estimat
 #' @param start Starting values in lavaan's free-parameter order, or `NULL`.
 #' @param valdata Validation data passed to [set_latpl_data()] as `VALDATA`, or `NULL`.
 #' @param valgroup Group of each row of `valdata`, passed to [set_latpl_data()] as `VALGROUP`, or `NULL`.
+#' @param valx Covariates of `valdata`, passed to [set_latpl_data()] as `VALX`, or `NULL`.
 #' @return A list with the data object `DATA`, the model object `MODEL` and the starting values `THETA` for
 #'   [fit_latpl()].
 #' @seealso [fit_lavaan_pml()], [as_lavaan()]
 #' @keywords internal
-spec_from_lavaan <- function(template, start = NULL, valdata = NULL, valgroup = NULL) {
+spec_from_lavaan <- function(template, start = NULL, valdata = NULL, valgroup = NULL, valx = NULL) {
   pt <- lavaan::parTable(template)
   lv <- lavaan::lavNames(template, "lv")
+  ovx <- lavaan::lavNames(template, "ov.x")
 
   if (template@Data@nlevels > 1L) {
     stop("Multilevel models are not currently supported.", call. = FALSE)
   }
   # Check any ordinal data or not?
-  if (!all(template@Data@ov$type == "ordered")) {
-    stop("All measurement items must be declared as ordered factors.", call. = FALSE)
+  if (length(ovx) && !isTRUE(template@Options$conditional.x)) {
+    stop("conditional.x = FALSE is not currently supported.", call. = FALSE)
   }
+  if (length(ovx) && !isTRUE(template@Options$fixed.x)) {
+    stop("fixed.x = FALSE is not currently supported.", call. = FALSE)
+  }
+  numeric_items <- template@Data@ov$type[match(template@Data@ov.names[[1]], template@Data@ov$name)] != "ordered"
   if (any(pt$op == "<~")) {
     stop("Composites (`<~`) are not currently supported.", call. = FALSE)
   }
-  if (any(pt$op == "~" & !(pt$lhs %in% lv & pt$rhs %in% lv))) {
-    stop("Regressions involving observed variables are not currently supported.", call. = FALSE)
+  if (any(pt$op == "~" & !(pt$rhs %in% ovx | (pt$lhs %in% lv & pt$rhs %in% lv)))) {
+    stop("Regressions involving observed variables other than exogenous covariates are not currently supported.", call. = FALSE)
   }
   if (nrow(template@Model@cin.JAC) > 0L || any(is.finite(c(pt$lower[pt$free > 0], pt$upper[pt$free > 0])))) {
     stop("Inequality constraints and parameter bounds are not currently supported.", call. = FALSE)
   }
   thetapar <- template@Options$parameterization == "theta"
-  if (!thetapar && any(pt$free > 0 & pt$op == "~~" & pt$lhs == pt$rhs & !(pt$lhs %in% lv))) {
+  if (!thetapar && any(pt$free > 0 & pt$op == "~~" & pt$lhs == pt$rhs & pt$lhs %in% template@Data@ov.names[[1]][!numeric_items])) {
     stop("Free residual variances require parameterization = \"theta\".", call. = FALSE)
   }
   other <- pt$free > 0 & !(pt$op %in% c("=~", "~~", "|", "~", "~1", "~*~"))
@@ -254,14 +263,17 @@ spec_from_lavaan <- function(template, start = NULL, valdata = NULL, valgroup = 
     stop(paste0("Free `", paste(unique(pt$op[other]), collapse = "`, `"), "` parameters are not currently supported."), call. = FALSE)
   }
 
-  X <- lapply(template@Data@X, function(x) x - 1)
+  X <- lapply(template@Data@X, function(x) {
+    x[, !numeric_items] <- x[, !numeric_items] - 1
+    x
+  })
   G <- length(X)
   missing <- template@Options$missing
   if (!missing %in% c("listwise", "pairwise", "available.cases")) {
     stop("missing = \"", missing, "\" is not currently supported; use \"listwise\", \"pairwise\" or \"available.cases\".", call. = FALSE)
   }
   nlev <- template@Data@ov$nlev[match(template@Data@ov.names[[1]], template@Data@ov$name)]
-  if (any(vapply(X, function(x) any(apply(x, 2, max, na.rm = TRUE) + 1 != nlev), logical(1)))) {
+  if (any(vapply(X, function(x) any((apply(x, 2, max, na.rm = TRUE) + 1 != nlev)[!numeric_items]), logical(1)))) {
     stop("Every category of every item must be observed at least once in every group.", call. = FALSE)
   }
   if (isTRUE(template@Model@ceq.simple.only)) {
@@ -271,8 +283,8 @@ spec_from_lavaan <- function(template, start = NULL, valdata = NULL, valgroup = 
     stop("Nonlinear equality constraints are not currently supported.", call. = FALSE)
   }
 
-  frees <- lapply(lavaan::lavInspect(template, "free", drop.list.single.group = FALSE), function(x) lapply(x, unclass))
-  ests <- lapply(lavaan::lavInspect(template, "est", drop.list.single.group = FALSE), function(x) lapply(x, unclass))
+  frees <- lavaan_matrices(template, "free")
+  ests <- lavaan_matrices(template, "est")
   pos <- type <- rep(NA, template@Model@nx.free)
   fix <- fixval <- numeric(0)
   specs <- vector("list", G)
@@ -315,9 +327,9 @@ spec_from_lavaan <- function(template, start = NULL, valdata = NULL, valgroup = 
     means <- as.vector(est$alpha)
     means[free$alpha > 0] <- NA
     scales <- NULL
-    sfree <- if (thetapar) diag(free$theta) else as.vector(free$delta)
+    sfree <- if (thetapar) diag(free$theta) else ifelse(numeric_items, diag(free$theta), as.vector(free$delta))
     if (!thetapar) {
-      scales <- as.vector(est$delta)
+      scales <- ifelse(numeric_items, sqrt(pmax(diag(est$theta), 0)), as.vector(est$delta))
       scales[sfree > 0] <- NA
     }
 
@@ -332,6 +344,17 @@ spec_from_lavaan <- function(template, start = NULL, valdata = NULL, valgroup = 
     afree <- free$alpha[free$alpha > 0]
     scfree <- sfree[sfree > 0]
     d1 <- d0 + length(bfree) + length(tfree)
+    d2 <- d1 + length(nufree) + length(afree) + length(scfree)
+    gamma <- est$gamma
+    kappa <- est$kappa
+    gamma[free$gamma > 0] <- NA
+    kappa[free$kappa > 0] <- NA
+    gfree <- free$gamma[free$gamma > 0]
+    kfree <- free$kappa[free$kappa > 0]
+    pos[gfree] <- shift + d2 + seq_along(gfree)
+    type[gfree] <- "gamma"
+    pos[kfree] <- shift + d2 + length(gfree) + seq_along(kfree)
+    type[kfree] <- "kappa"
     pos[free$tau[free$tau > 0]] <- shift + which(free$tau > 0)
     type[free$tau[free$tau > 0]] <- "tau"
     pos[free$lambda[free$lambda > 0]] <- shift + nthr + seq_len(nload)
@@ -348,7 +371,7 @@ spec_from_lavaan <- function(template, start = NULL, valdata = NULL, valgroup = 
     pos[afree] <- shift + d1 + length(nufree) + seq_along(afree)
     type[afree] <- "alpha"
     pos[scfree] <- shift + d1 + length(nufree) + length(afree) + seq_along(scfree)
-    type[scfree] <- if (thetapar) "resvar" else "delta"
+    type[scfree] <- if (thetapar) "resvar" else ifelse(numeric_items[sfree > 0], "resvar", "delta")
     cpos <- matrix(NA, q, q)
     if (corrflag) {
       cpos[upper.tri(cpos)] <- shift + nthr + nload + seq_len(ncorr)
@@ -362,8 +385,9 @@ spec_from_lavaan <- function(template, start = NULL, valdata = NULL, valgroup = 
       fixval <- c(fixval, est$psi[off & free$psi == 0])
     }
     specs[[g]] <- list(constrmat = constrmat, constrvar = constrvar, corrflag = corrflag, latcov = latcov,
-                       regmat = regmat, rescov = rescov, intercepts = intercepts, means = means, scales = scales)
-    shift <- shift + d1 + length(nufree) + length(afree) + length(scfree)
+                       regmat = regmat, rescov = rescov, intercepts = intercepts, means = means, scales = scales,
+                       gamma = gamma, kappa = kappa)
+    shift <- shift + d2 + length(gfree) + length(kfree)
   }
 
   # Linear equality constraints A theta = b, in lavaan.pl's parameter order
@@ -416,7 +440,10 @@ spec_from_lavaan <- function(template, start = NULL, valdata = NULL, valgroup = 
       PARAMETERIZATION = template@Options$parameterization,
       INTERCEPTS = s$intercepts,
       MEANS = s$means,
-      SCALES = s$scales
+      SCALES = s$scales,
+      GAMMA = if (ncol(s$gamma)) unname(s$gamma),
+      KAPPA = if (ncol(s$kappa)) unname(s$kappa),
+      NUMERIC = numeric_items
     )
     if (!identical(is.na(m$CONSTRMAT), is.na(s$constrmat))) {
       stop("This identification of the latent variables is not currently supported.", call. = FALSE)
@@ -438,34 +465,86 @@ spec_from_lavaan <- function(template, start = NULL, valdata = NULL, valgroup = 
                               WEIGHTS_TYPE = template@Options$sampling.weights.type, CLUSTER = cluster,
                               GROUP = if (G > 1L) rep(template@Data@group.label, vapply(X, nrow, numeric(1))),
                               VALGROUP = valgroup,
-                              WEIGHTS_NORMALIZATION = if (normalization == "group") "group" else "total")
+                              WEIGHTS_NORMALIZATION = if (normalization == "group") "group" else "total",
+                              X = if (length(ovx)) unname(Reduce(rbind, template@Data@eXo)), VALX = valx,
+                              NUMERIC = numeric_items)
 
   # Note: the values in lavaan.pl are always in the order of thresholds, loadings, latent
   # correlations, latent variances, regressions, then residual covariances.
   if (is.null(start) && G > 1L) {
     init <- init_theta(set_init(), data_spec, latpl_dims(data_spec, model), model, FALSE)
-    sgn <- unlist(Map(function(s, f) s$lambda[f$lambda > 0], lavaan::lavInspect(template, "start"), frees))
+    sgn <- unlist(Map(function(s, f) s$lambda[f$lambda > 0], lavaan_matrices(template, "start"), frees))
     lam <- theta_block(model, sum(data_spec$cat - 1)) == "lambda"
     init[lam] <- ifelse(sgn < 0, -1, 1) * init[lam]
   } else {
     if (is.null(start)) {
-      starts <- list(lapply(lavaan::lavInspect(template, "start"), unclass))
-      starts[[1]]$tau[] <- unlist(lapply(seq_len(ncol(X[[1]])), function(j) {
+      starts <- lavaan_matrices(template, "start")
+      starts[[1]]$tau[] <- unlist(lapply(which(!numeric_items), function(j) {
         stats::qnorm(cumsum(tabulate(X[[1]][, j] + 1, nlev[j]))[-nlev[j]] / sum(!is.na(X[[1]][, j])))
       }))
     } else {
       glist <- lavaan::lav_model_set_parameters(template@Model, as.numeric(start))@GLIST
-      starts <- unname(split(glist, rep(seq_len(G), template@Model@nmat)))
+      starts <- lavaan_matrices(template, unname(split(glist, rep(seq_len(G), template@Model@nmat))))
     }
     pars <- lapply(starts, function(s) {
       list(thresholds = as.numeric(s$tau), loadings = s$lambda, latent_correlations = s$psi, regressions = s$beta,
            residual_covariances = s$theta, intercepts = as.vector(s$nu), means = as.vector(s$alpha),
-           scales = as.vector(s$delta))
+           scales = as.vector(s$delta), gamma = s$gamma, kappa = s$kappa)
     })
     init <- par2theta(model, if (G == 1L) pars[[1]] else pars)
   }
 
   list(DATA = data_spec, MODEL = model, THETA = init)
+}
+
+#' Model matrices of a lavaan model, for lavaan.pl
+#'
+#' lavaan represents the regression of an item on a covariate with a phantom latent variable named after the item.
+#' Here the phantom is removed: its row of `gamma` is the row of the item in `kappa`, its row of `beta` that of the
+#' item in `lambda`, its variance the residual variance of the item and its mean the intercept of the item.
+#'
+#' @param template Unfitted [lavaan::lavaan] object.
+#' @param WHAT `"free"`, `"est"` or `"start"` for [lavaan::lavInspect()], or a list of the model matrices of each group.
+#' @return A list with the matrices of each group, including `gamma` (latent variables on covariates) and `kappa`
+#'   (items on covariates).
+#' @seealso [spec_from_lavaan()], [as_lavaan()]
+#' @keywords internal
+lavaan_matrices <- function(template, WHAT) {
+  groups <- if (is.character(WHAT)) lavaan::lavInspect(template, WHAT, drop.list.single.group = FALSE) else WHAT
+  items <- template@Data@ov.names[[1]]
+  lv <- colnames(lavaan::lavInspect(template, "free", drop.list.single.group = FALSE)[[1]]$lambda)
+  ph <- which(lv %in% items)
+  keep <- setdiff(seq_along(lv), ph)
+  nx <- NCOL(template@Data@eXo[[1]])
+  if (is.null(template@Data@eXo[[1]])) nx <- 0
+  lapply(groups, function(x) {
+    m <- lapply(x, unclass)
+    if (is.null(m$gamma)) m$gamma <- matrix(0, length(lv), nx)
+    m$kappa <- matrix(0, length(items), nx)
+    for (j in ph) {
+      i <- match(lv[j], items)
+      if (
+        any(m$beta[keep, j] != 0) ||
+          any(m$beta[ph, j] != 0) ||
+          any(m$beta[j, ph] != 0) ||
+          any(m$psi[j, -j] != 0)
+      ) {
+        stop("Regressions involving observed variables other than exogenous covariates are not currently supported.", call. = FALSE)
+      }
+      m$lambda[i, keep] <- m$beta[j, keep]
+      m$kappa[i, ] <- m$gamma[j, ]
+      m$theta[i, i] <- m$psi[j, j]
+      m$nu[i] <- m$nu[i] + m$alpha[j]
+    }
+    if (length(ph)) {
+      m$lambda <- m$lambda[, keep, drop = FALSE]
+      m$psi <- m$psi[keep, keep, drop = FALSE]
+      m$beta <- m$beta[keep, keep, drop = FALSE]
+      m$alpha <- m$alpha[keep, , drop = FALSE]
+      m$gamma <- m$gamma[keep, , drop = FALSE]
+    }
+    m
+  })
 }
 
 #' Convert a lavaan.pl fit into a lavaan object
@@ -476,7 +555,7 @@ spec_from_lavaan <- function(template, start = NULL, valdata = NULL, valgroup = 
 #' @return A [lavaan::lavaan] object.
 #' @export
 as_lavaan <- function(fit, vars = NULL, template) {
-  frees <- lapply(lavaan::lavInspect(template, "free", drop.list.single.group = FALSE), function(x) lapply(x, unclass))
+  frees <- lavaan_matrices(template, "free")
   par_lav <- function(theta) {
     fit$theta <- theta
     pars <- get_par(fit, OPTION = "list")
@@ -493,6 +572,10 @@ as_lavaan <- function(fit, vars = NULL, template) {
       x[free$nu[free$nu > 0]] <- par$intercepts[free$nu > 0]
       x[free$alpha[free$alpha > 0]] <- par$means[free$alpha > 0]
       if (!is.null(par$scales)) x[free$delta[free$delta > 0]] <- par$scales[free$delta > 0]
+      if (!is.null(par$gamma)) {
+        x[free$gamma[free$gamma > 0]] <- par$gamma[free$gamma > 0]
+        x[free$kappa[free$kappa > 0]] <- par$kappa[free$kappa > 0]
+      }
     }
     x
   }
@@ -511,6 +594,10 @@ as_lavaan <- function(fit, vars = NULL, template) {
     slot_cache = template@Cache,
     sloth1 = template@h1
   )
+  if (!isTRUE(is.finite(out@optim$logl))) {
+    out@optim$logl <- cpp_pl(fit$theta, fit$engine$model, fit$engine$data)$pl
+    out@optim$fx <- -out@optim$logl / fit$dims$n
+  }
   out@Options[c("optim.method", "se", "test", "baseline")] <-
     list(if (fit$method == "SA") "SA" else "ucminf", template@Options$se, template@Options$test, template@Options$baseline)
 

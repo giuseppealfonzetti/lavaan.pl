@@ -13,13 +13,13 @@ Rcpp::List cpp_pl(const Eigen::Map<Eigen::VectorXd> THETA, const Rcpp::List MODE
   Eigen::VectorXd gradient = Eigen::VectorXd::Zero(GS.d);
   for(int g = 0; g < GS.G; g++){
     const Rcpp::List Dg = DATA[g];
-    const Eigen::VectorXd freq = get<Eigen::VectorXd>(Dg, "FREQ"), ufreq = get<Eigen::VectorXd>(Dg, "UFREQ");
+    const pairs::Data D(Dg);
     std::vector<int> rs(GS.S[g].L.P);
     std::iota(rs.begin(), rs.end(), 0);
-    workers::PL w(ST[g], freq, rs, ORDER);
+    workers::PL w(ST[g], D, rs, ORDER);
     RcppParallel::parallelReduce(0, rs.size(), w);
     Eigen::MatrixXd hd, ud;
-    pairs::univariate(ST[g], ufreq, ORDER, w.ll, w.gradient, hd, ud);
+    pairs::univariate(ST[g], D, ORDER, w.ll, w.gradient, hd, ud);
     ll += w.ll;
     if(ORDER > 0) gradient.segment(GS.off[g], GS.S[g].d) = w.gradient;
   }
@@ -36,32 +36,36 @@ Rcpp::List cpp_HJ(const Eigen::Map<Eigen::VectorXd> THETA, const Rcpp::List MODE
   for(int g = 0; g < GS.G; g++){
     const model::Spec &S = GS.S[g];
     const Rcpp::List Dg = DATA[g];
-    const Eigen::VectorXd freq = get<Eigen::VectorXd>(Dg, "FREQ"), ufreq = get<Eigen::VectorXd>(Dg, "UFREQ");
+    const pairs::Data D(Dg);
     std::vector<Eigen::MatrixXd> score(S.L.P);
     std::vector<std::vector<int>> sidx(S.L.P);
-    workers::Hess hw(ST[g], freq, score, sidx);
+    std::vector<Eigen::VectorXd> pgrad(S.L.P);
+    workers::Hess hw(ST[g], D, score, sidx, pgrad);
     RcppParallel::parallelReduce(0, S.L.P, hw);
     double ll = 0;
-    Eigen::MatrixXd uscore = Eigen::MatrixXd::Zero(S.d, ufreq.size());
-    pairs::univariate(ST[g], ufreq, 2, ll, hw.gradient, hw.hessian, uscore);
+    Eigen::MatrixXd uscore = Eigen::MatrixXd::Zero(S.d, D.ufreq.size());
+    pairs::univariate(ST[g], D, 2, ll, hw.gradient, hw.hessian, uscore);
 
-    const Eigen::MatrixXd y = get<Eigen::MatrixXd>(Dg, "Y"), wm = get<Eigen::MatrixXd>(Dg, "WM");
+    const Eigen::MatrixXd wm = get<Eigen::MatrixXd>(Dg, "WM");
     const Eigen::VectorXd uw = get<Eigen::VectorXd>(Dg, "UW"), wv = get<Eigen::VectorXd>(Dg, "WV");
-    Eigen::MatrixXd cases(S.d, y.rows());
-    workers::Cases cw(S.L, y, score, sidx, uscore, uw, cases);
-    RcppParallel::parallelFor(0, y.rows(), cw);
+    Eigen::MatrixXd cases = Eigen::MatrixXd::Zero(S.d, D.y.rows());
+    workers::Cases cw(ST[g], D, score, sidx, uscore, uw, cases);
+    RcppParallel::parallelFor(0, D.y.rows(), cw, 256);
     const Eigen::MatrixXd sc = wm.size() > 0 ? Eigen::MatrixXd(cases * wm) : Eigen::MatrixXd(cases * wv.asDiagonal());
     H.block(GS.off[g], GS.off[g], S.d, S.d) = hw.hessian / GS.n;
     J.block(GS.off[g], GS.off[g], S.d, S.d) = sc * sc.transpose() / GS.n;
     gradient.segment(GS.off[g], S.d) = hw.gradient;
     if(PAIRVAR){
-      Eigen::MatrixXd U(S.d, S.p), pair_items = Eigen::MatrixXd::Zero(S.d, S.p), pv = Eigen::MatrixXd::Zero(S.d, S.d);
-      for(int k = 0, uk = 0; k < S.p; uk += S.L.cat(k), k++){
-        U.col(k) = uscore.middleCols(uk, S.L.cat(k)) * ufreq.segment(uk, S.L.cat(k));
+      Eigen::MatrixXd U = Eigen::MatrixXd::Zero(S.d, S.p), pair_items = Eigen::MatrixXd::Zero(S.d, S.p), pv = Eigen::MatrixXd::Zero(S.d, S.d);
+      const int uc = S.L.cat.sum();
+      for(int t = 0; t < D.x.cols() && D.ufreq.size() > 0; t++){
+        for(int k = 0, uk = 0; k < S.p; uk += S.L.cat(k), k++){
+          U.col(k) += uscore.middleCols(t * uc + uk, S.L.cat(k)) * D.ufreq.segment(t * uc + uk, S.L.cat(k));
+        }
       }
       for(int r = 0; r < S.L.P; r++){
         const std::vector<int> &I = sidx[r];
-        const Eigen::VectorXd s = score[r] * freq.segment(S.L.off[r], score[r].cols());
+        const Eigen::VectorXd &s = pgrad[r];
         for(std::size_t a = 0; a < I.size(); a++){
           pair_items(I[a], S.L.pk[r]) += s(a);
           pair_items(I[a], S.L.pl[r]) += s(a);
@@ -83,26 +87,38 @@ Rcpp::List cpp_HJ(const Eigen::Map<Eigen::VectorXd> THETA, const Rcpp::List MODE
 Rcpp::List cpp_rho(const Eigen::Map<Eigen::VectorXd> THETA, const Rcpp::List MODEL, const Rcpp::List DATA){
   const model::Groups GS(MODEL, DATA);
   const std::vector<model::Setup> ST = GS.setup(THETA);
-  int nthr = 0;
-  for(int g = 0; g < GS.G; g++) nthr += GS.S[g].L.nthr;
-  Eigen::VectorXd rho(GS.P), tau(nthr);
-  Eigen::MatrixXd jac = Eigen::MatrixXd::Zero(GS.P, GS.d), tjac = Eigen::MatrixXd::Zero(nthr, GS.d);
+  int ni = 0;
+  for(int g = 0; g < GS.G; g++) ni += GS.S[g].L.nthr + GS.S[g].p * GS.S[g].nx + 2 * GS.S[g].L.nnum;
+  Eigen::VectorXd rho(GS.P), tau(ni);
+  Eigen::MatrixXd jac = Eigen::MatrixXd::Zero(GS.P, GS.d), tjac = Eigen::MatrixXd::Zero(ni, GS.d);
   auto put = [](const pairs::Pair &PR, const int ROW, const int OFF, const int E, Eigen::MatrixXd &OUT){
     const std::vector<int> I = PR.local();
-    const Eigen::VectorXd v = PR.lift(Eigen::VectorXd::Unit(PR.mt + 1, E));
+    const Eigen::VectorXd v = PR.lift(Eigen::VectorXd::Unit(PR.m, E));
     for(std::size_t a = 0; a < I.size(); a++) OUT(ROW, OFF + I[a]) += v(a);
   };
-  for(int g = 0, ot = 0; g < GS.G; ot += GS.S[g].L.nthr, g++){
+  for(int g = 0, ot = 0; g < GS.G; ot += GS.S[g].L.nthr + GS.S[g].p * GS.S[g].nx + 2 * GS.S[g].L.nnum, g++){
     const model::Spec &S = GS.S[g];
     tau.segment(ot, S.L.nthr) = ST[g].taus;
     for(int r = 0; r < S.L.P; r++){
       const pairs::Pair PR(ST[g], r, true);
       rho(GS.poff[g] + r) = PR.rho;
-      put(PR, GS.poff[g] + r, GS.off[g], PR.mt, jac);
+      put(PR, GS.poff[g] + r, GS.off[g], PR.ml, jac);
     }
     for(int k = 0; k < S.p; k++){
       const pairs::Pair PR(ST[g], -1, true, k);
       for(int a = 0; a < PR.ck - 1; a++) put(PR, ot + S.L.tk(k) + a, GS.off[g], a, tjac);
+      for(int c = 0; c < S.nx; c++){
+        const int row = ot + S.L.nthr + c * S.p + k;
+        tau(row) = ST[g].pis(k, c);
+        put(PR, row, GS.off[g], PR.ml + 1 + c, tjac);
+      }
+      if(PR.numk){
+        const int row = ot + S.L.nthr + S.nx * S.p + S.L.inum(k);
+        tau(row) = ST[g].loc(k);
+        tau(row + S.L.nnum) = ST[g].s(k);
+        put(PR, row, GS.off[g], 0, tjac);
+        put(PR, row + S.L.nnum, GS.off[g], PR.ml + 1 + S.nx, tjac);
+      }
     }
   }
   return Rcpp::List::create(Rcpp::Named("rho") = rho, Rcpp::Named("jacobian") = jac, Rcpp::Named("tau") = tau,
@@ -110,19 +126,59 @@ Rcpp::List cpp_rho(const Eigen::Map<Eigen::VectorXd> THETA, const Rcpp::List MOD
 }
 
 // [[Rcpp::export]]
-Rcpp::List cpp_saturated(const Eigen::Map<Eigen::VectorXd> TAU, const Eigen::Map<Eigen::VectorXd> RHO, const Rcpp::List DATA,
+Rcpp::List cpp_saturated(const Eigen::Map<Eigen::VectorXd> ITEMS, const Eigen::Map<Eigen::VectorXd> RHO, const Rcpp::List DATA,
                          const int ORDER, const bool SCORES){
   const model::Layout L(get<Eigen::VectorXd>(DATA, "C_VEC"));
-  const Eigen::VectorXd freq = get<Eigen::VectorXd>(DATA, "FREQ"), ufreq = get<Eigen::VectorXd>(DATA, "UFREQ");
-  const int order = SCORES ? std::max(ORDER, 1) : ORDER;
+  const pairs::Data D(DATA);
+  const int order = SCORES ? std::max(ORDER, 1) : ORDER, nx = D.x.rows(), nthr = L.nthr, ni = ITEMS.size(), uc = L.cat.sum();
+  const Eigen::VectorXd tau = ITEMS.head(nthr);
+  const Eigen::MatrixXd pis = Eigen::Map<const Eigen::MatrixXd>(ITEMS.data() + nthr, L.p, nx);
+  Eigen::VectorXd loc = Eigen::VectorXd::Zero(L.p), scale = Eigen::VectorXd::Ones(L.p);
+  for(int k = 0; k < L.p; k++){
+    if(L.inum(k) < 0) continue;
+    loc(k) = ITEMS(nthr + nx * L.p + L.inum(k));
+    scale(k) = ITEMS(nthr + nx * L.p + L.nnum + L.inum(k));
+  }
+  const pairs::Reduced reduced(tau, pis, loc, scale);
 
-  Eigen::MatrixXd patscore = Eigen::MatrixXd::Zero(SCORES ? 2 * L.cat.maxCoeff() - 1 : 0, SCORES ? L.ncell : 0);
-  workers::Saturated sat(L, TAU, RHO, freq, order, SCORES, patscore);
+  Eigen::MatrixXd patscore = Eigen::MatrixXd::Zero(SCORES && D.tables ? 2 * L.cat.maxCoeff() - 1 : 0, SCORES && D.tables ? D.x.cols() * L.ncell : 0);
+  workers::Saturated sat(L, D, reduced, RHO, ni, order, SCORES, patscore);
   RcppParallel::parallelReduce(0, L.P, sat);
-  Eigen::MatrixXd uscore = Eigen::MatrixXd::Zero(SCORES ? L.nthr : 0, SCORES ? ufreq.size() : 0);
-  const Eigen::MatrixXd htt_pairs = sat.htt;
-  pairs::univariate_contribution(TAU, L, ufreq, order, sat.ll, sat.gradient, sat.htt, uscore);
-  sat.hschur += sat.htt - htt_pairs;
+  Eigen::MatrixXd uscore = Eigen::MatrixXd::Zero(SCORES ? ni : 0, SCORES ? D.ufreq.size() : 0);
+  for(int t = 0; t < D.x.cols() && D.ufreq.size() > 0; t++){
+    const auto xt = D.x.col(t);
+    const Eigen::VectorXd shift = pis * xt;
+    Eigen::VectorXd taut = tau;
+    for(int k = 0; k < L.p; k++) taut.segment(L.tk(k), L.cat(k) - 1).array() -= shift(k);
+    Eigen::VectorXd gu = Eigen::VectorXd::Zero(nthr);
+    Eigen::MatrixXd hu = Eigen::MatrixXd::Zero(order == 2 ? nthr : 0, order == 2 ? nthr : 0);
+    Eigen::MatrixXd us = Eigen::MatrixXd::Zero(SCORES ? nthr : 0, SCORES ? uc : 0);
+    pairs::univariate_contribution(taut, L, D.ufreq.segment(t * uc, uc), order, sat.ll, gu, hu, us);
+    if(order == 0) continue;
+    for(int k = 0, uk = 0; k < L.p; uk += L.cat(k), k++){
+      const int m = L.cat(k) - 1, tk = L.tk(k);
+      std::vector<int> idx(m + nx);
+      for(int a = 0; a < m; a++) idx[a] = tk + a;
+      for(int c = 0; c < nx; c++) idx[m + c] = nthr + c * L.p + k;
+      Eigen::MatrixXd Jk = Eigen::MatrixXd::Zero(m, m + nx);
+      Jk.leftCols(m).setIdentity();
+      Jk.rightCols(nx).rowwise() = -xt.transpose();
+      const Eigen::VectorXd gl = Jk.transpose() * gu.segment(tk, m);
+      for(int a = 0; a < m + nx; a++) sat.gradient(idx[a]) += gl(a);
+      for(int c = 0; c < L.cat(k) && SCORES; c++){
+        const Eigen::VectorXd sl = Jk.transpose() * us.block(tk, uk + c, m, 1);
+        for(int a = 0; a < m + nx; a++) uscore(idx[a], t * uc + uk + c) += sl(a);
+      }
+      if(order < 2) continue;
+      const Eigen::MatrixXd HL = Jk.transpose() * hu.block(tk, tk, m, m) * Jk;
+      for(int a = 0; a < m + nx; a++){
+        for(int b = 0; b < m + nx; b++){
+          sat.htt(idx[a], idx[b]) += HL(a, b);
+          sat.hschur(idx[a], idx[b]) += HL(a, b);
+        }
+      }
+    }
+  }
 
   Rcpp::List out = Rcpp::List::create(
     Rcpp::Named("ll") = sat.ll, Rcpp::Named("gradient") = sat.gradient,
@@ -130,11 +186,10 @@ Rcpp::List cpp_saturated(const Eigen::Map<Eigen::VectorXd> TAU, const Eigen::Map
     Rcpp::Named("hschur") = sat.hschur
   );
   if(SCORES){
-    const Eigen::MatrixXd y = get<Eigen::MatrixXd>(DATA, "Y");
     const Eigen::VectorXd uw = get<Eigen::VectorXd>(DATA, "UW");
-    Eigen::MatrixXd st = Eigen::MatrixXd::Zero(L.nthr, y.rows()), sr = Eigen::MatrixXd::Zero(L.P, y.rows());
-    workers::SaturatedCases cases(L, y, patscore, uscore, uw, st, sr);
-    RcppParallel::parallelFor(0, y.rows(), cases);
+    Eigen::MatrixXd st = Eigen::MatrixXd::Zero(ni, D.y.rows()), sr = Eigen::MatrixXd::Zero(L.P, D.y.rows());
+    workers::SaturatedCases cases(L, D, reduced, RHO, patscore, uscore, uw, st, sr);
+    RcppParallel::parallelFor(0, D.y.rows(), cases, 256);
     out["st"] = st;
     out["sr"] = sr;
   }
@@ -178,21 +233,27 @@ Eigen::VectorXd cpp_saturated_traces(
 //'   missing responses.
 //' @param C_VEC Number of categories of each item.
 //' @param WEIGHTS Optional vector of unit weights; empty for unit weights.
+//' @param STRATA Optional vector with the stratum of each row, from zero; empty for a single stratum.
 //'
 //' @return The (weighted) frequencies of the bivariate response patterns: pairs \eqn{(k, l)},
 //'   \eqn{l < k}, ordered by \eqn{k}, and within each pair the categories of \eqn{k} then \eqn{l}.
+//'   With `STRATA`, the tables of each stratum one after the other.
 //' @export
 // [[Rcpp::export]]
 Eigen::VectorXd pairs_freq(const Eigen::Map<Eigen::MatrixXd> Y, const Eigen::Map<Eigen::VectorXd> C_VEC,
-                           const Rcpp::NumericVector WEIGHTS = Rcpp::NumericVector::create()){
+                           const Rcpp::NumericVector WEIGHTS = Rcpp::NumericVector::create(),
+                           const Rcpp::NumericVector STRATA = Rcpp::NumericVector::create()){
   const model::Layout L(C_VEC);
   const Eigen::VectorXd w = WEIGHTS.size() > 0 ? Rcpp::as<Eigen::VectorXd>(WEIGHTS) : Eigen::VectorXd::Ones(Y.rows());
-  Eigen::VectorXd freq = Eigen::VectorXd::Zero(L.ncell);
+  const int ns = STRATA.size() > 0 ? Rcpp::max(STRATA) + 1 : 1;
+  Eigen::VectorXd freq = Eigen::VectorXd::Zero(ns * L.ncell);
   for(int r = 0; r < L.P; r++){
     const int k = L.pk[r], l = L.pl[r];
+    if(L.cat(k) == 1 || L.cat(l) == 1) continue;
     for(int i = 0; i < Y.rows(); i++){
       if(std::isnan(Y(i, k)) || std::isnan(Y(i, l))) continue;
-      freq(L.off[r] + (int)Y(i, k) * L.cat(l) + (int)Y(i, l)) += w(i);
+      const int o = STRATA.size() > 0 ? STRATA[i] * L.ncell : 0;
+      freq(o + L.off[r] + (int)Y(i, k) * L.cat(l) + (int)Y(i, l)) += w(i);
     }
   }
   return freq;

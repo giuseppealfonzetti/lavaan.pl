@@ -3,16 +3,17 @@
 #' @param MODEL Model object from [set_latpl_model()] or [set_latpl_groups()].
 #' @param NTHR Number of thresholds in each group.
 #' @return A character vector with the block of each parameter, in the order used by [fit_latpl()]: `"tau"`,
-#'   `"lambda"`, `"corr"`, `"logsd"`, `"beta"`, `"rescov"`, `"nu"`, `"alpha"` or `"scale"`, group after group.
+#'   `"lambda"`, `"corr"`, `"logsd"`, `"beta"`, `"rescov"`, `"nu"`, `"alpha"`, `"scale"`, `"gamma"` or `"kappa"`, group
+#'   after group.
 #' @seealso [theta_names()], [latpl_dims()]
 #' @keywords internal
 theta_block <- function(MODEL, NTHR) {
   if (inherits(MODEL, "latpl_groups")) return(unlist(lapply(MODEL$MODELS, theta_block, NTHR)))
   q <- MODEL$q
-  rep(c("tau", "lambda", "corr", "logsd", "beta", "rescov", "nu", "alpha", "scale"),
+  rep(c("tau", "lambda", "corr", "logsd", "beta", "rescov", "nu", "alpha", "scale", "gamma", "kappa"),
       c(NTHR, sum(is.na(MODEL$CONSTRMAT)), if (MODEL$CORRFLAG) q * (q - 1) / 2 else 0, sum(is.na(MODEL$CONSTRLOGSD)),
         sum(is.na(MODEL$REGMAT)), sum(is.na(MODEL$RESCOV[upper.tri(MODEL$RESCOV)])), sum(is.na(MODEL$CONSTRINT)),
-        sum(is.na(MODEL$CONSTRMEAN)), sum(is.na(MODEL$CONSTRLOGSCALE))))
+        sum(is.na(MODEL$CONSTRMEAN)), sum(is.na(MODEL$CONSTRLOGSCALE)), sum(is.na(MODEL$GAMMA)), sum(is.na(MODEL$KAPPA))))
 }
 
 #' Dimensions of a fit
@@ -22,17 +23,20 @@ theta_block <- function(MODEL, NTHR) {
 #' @return A list with the sample size `n`, the numbers of items `p` and latent variables `q`, the numbers of
 #'   categories `cat`, the number of groups `ngroups`, the number of pairs `pairs` over all groups, the size of each
 #'   parameter block summed over groups (`nthr`, `nload`, `ncorr`, `nvar`, `nreg`, `nres`, `nint`, `nmean`,
-#'   `nscale`) and the number of parameters `d`.
+#'   `nscale`, `ngam`, `nkap`), the number of covariates `nx` and the number of parameters `d`.
 #' @seealso [theta_block()], [fit_latpl()]
 #' @keywords internal
 latpl_dims <- function(DATA, MODEL) {
   models <- if (inherits(MODEL, "latpl_groups")) MODEL$MODELS else list(MODEL)
   stopifnot(all(vapply(models, function(x) x$q, numeric(1)) < DATA$p))
-  nb <- table(factor(theta_block(MODEL, sum(DATA$cat - 1)), c("tau", "lambda", "corr", "logsd", "beta", "rescov", "nu", "alpha", "scale")))
+  for (m in models) {
+    if (ncol(m$GAMMA) > 0 && ncol(m$GAMMA) != ncol(DATA$X)) stop("GAMMA and KAPPA must have one column per covariate of DATA.")
+  }
+  nb <- table(factor(theta_block(MODEL, sum(DATA$cat - 1)), c("tau", "lambda", "corr", "logsd", "beta", "rescov", "nu", "alpha", "scale", "gamma", "kappa")))
   list(n = DATA$n, p = DATA$p, q = models[[1]]$q, cat = DATA$cat, ngroups = DATA$ngroups,
        pairs = DATA$ngroups * DATA$p * (DATA$p - 1) / 2,
        nthr = nb[[1]], nload = nb[[2]], ncorr = nb[[3]], nvar = nb[[4]], nreg = nb[[5]], nres = nb[[6]],
-       nint = nb[[7]], nmean = nb[[8]], nscale = nb[[9]], d = sum(nb))
+       nint = nb[[7]], nmean = nb[[8]], nscale = nb[[9]], ngam = nb[[10]], nkap = nb[[11]], nx = ncol(DATA$X), d = sum(nb))
 }
 
 #' Code of the latent covariance parameterisation
@@ -55,7 +59,8 @@ corrflag_code <- function(MODEL) {
 #'   free latent log standard deviations `logsd[h]`, free regression coefficients `beta[i,j]`, free
 #'   residual covariances `theta[k,l]`, free intercepts `nu[j]`, free latent means `alpha[h]`, and free
 #'   log scale factors `logdelta[j]` or, with `PARAMETERIZATION = "theta"`, free log residual standard
-#'   deviations `logrsd[j]`. With [set_latpl_groups()], the names of group 2 onwards end in `.g2`,
+#'   deviations `logrsd[j]`, free regressions on the covariates `gamma[h,c]` and free direct effects of
+#'   the covariates `kappa[j,c]`. With [set_latpl_groups()], the names of group 2 onwards end in `.g2`,
 #'   `.g3`, and so on.
 #' @export
 theta_names <- function(DATA, MODEL) {
@@ -79,7 +84,9 @@ theta_names <- function(DATA, MODEL) {
             col(MODEL$RESCOV)[is.na(MODEL$RESCOV) & upper.tri(MODEL$RESCOV)]),
     sprintf("nu[%d]", which(is.na(MODEL$CONSTRINT))),
     sprintf("alpha[%d]", which(is.na(MODEL$CONSTRMEAN))),
-    sprintf(if (MODEL$PARAMETERIZATION == "theta") "logrsd[%d]" else "logdelta[%d]", which(is.na(MODEL$CONSTRLOGSCALE)))
+    sprintf(ifelse(MODEL$PARAMETERIZATION == "theta" | MODEL$NUMERIC, "logrsd[%d]", "logdelta[%d]")[is.na(MODEL$CONSTRLOGSCALE)], which(is.na(MODEL$CONSTRLOGSCALE))),
+    sprintf("gamma[%d,%d]", row(MODEL$GAMMA)[is.na(MODEL$GAMMA)], col(MODEL$GAMMA)[is.na(MODEL$GAMMA)]),
+    sprintf("kappa[%d,%d]", row(MODEL$KAPPA)[is.na(MODEL$KAPPA)], col(MODEL$KAPPA)[is.na(MODEL$KAPPA)])
   )
 }
 
@@ -123,8 +130,9 @@ lkj_inv <- function(R) {
 #' @param PAR List with the thresholds `thresholds`, the loading matrix `loadings`, the latent
 #'   (disturbance) covariance matrix `latent_correlations`, the regression matrix `regressions`, the
 #'   residual covariance matrix `residual_covariances` (with the residual variances on the diagonal
-#'   when `PARAMETERIZATION = "theta"`), the intercepts `intercepts`, the latent means `means` and,
-#'   with `PARAMETERIZATION = "delta"`, the scale factors `scales`.
+#'   when `PARAMETERIZATION = "theta"`), the intercepts `intercepts`, the latent means `means`,
+#'   with `PARAMETERIZATION = "delta"`, the scale factors `scales` and, with covariates, their effects
+#'   `gamma` and `kappa`.
 #' @return `theta2par()` returns the list `PAR`, or with [set_latpl_groups()] a list of them, one
 #'   per group; `par2theta()` returns the parameter vector.
 #' @export
@@ -169,8 +177,15 @@ theta2par <- function(MODEL, THETA) {
   ls[is.na(ls)] <- THETA[b == "scale"]
   theta <- MODEL$PARAMETERIZATION == "theta"
   if (theta) diag(R) <- exp(2 * ls)
+  diag(R)[MODEL$NUMERIC] <- exp(2 * ls[MODEL$NUMERIC])
+  scales <- exp(ls)
+  scales[MODEL$NUMERIC] <- 1
+  Ga <- MODEL$GAMMA
+  Ga[is.na(Ga)] <- THETA[b == "gamma"]
+  Ka <- MODEL$KAPPA
+  Ka[is.na(Ka)] <- THETA[b == "kappa"]
   c(list(thresholds = THETA[b == "tau"], loadings = L, latent_correlations = Psi, regressions = B, residual_covariances = R,
-         intercepts = nu, means = al), if (!theta) list(scales = exp(ls)))
+         intercepts = nu, means = al), if (!theta) list(scales = scales), if (ncol(Ga) > 0) list(gamma = Ga, kappa = Ka))
 }
 
 #' @rdname theta2par
@@ -188,8 +203,11 @@ par2theta <- function(MODEL, PAR) {
     PAR$intercepts[is.na(MODEL$CONSTRINT)],
     PAR$means[is.na(MODEL$CONSTRMEAN)],
     if (anyNA(MODEL$CONSTRLOGSCALE)) {
-      log(if (MODEL$PARAMETERIZATION == "theta") sqrt(diag(PAR$residual_covariances)) else PAR$scales)[is.na(MODEL$CONSTRLOGSCALE)]
-    })
+      rsd <- MODEL$PARAMETERIZATION == "theta" | MODEL$NUMERIC
+      log(ifelse(rsd, sqrt(diag(PAR$residual_covariances)), if (is.null(PAR$scales)) 1 else PAR$scales))[is.na(MODEL$CONSTRLOGSCALE)]
+    },
+    PAR$gamma[is.na(MODEL$GAMMA)],
+    PAR$kappa[is.na(MODEL$KAPPA)])
 }
 
 #' Linear constraints on the parameters
@@ -224,7 +242,7 @@ lincon <- function(MODEL, NTHR) {
   for (r in seq_len(nrow(A))) {
     blk <- unique(block[A[r, ] != 0])
     if (any(blk == "corr" & !direct[A[r, ] != 0])) stop("Constraints on the latent correlations require LATCOV = \"direct\".")
-    if (length(blk) > 1) stop("Each constraint must involve either thresholds, loadings, latent covariances, latent log standard deviations, regressions, residual covariances, intercepts, latent means or log scales.")
+    if (length(blk) > 1) stop("Each constraint must involve either thresholds, loadings, latent covariances, latent log standard deviations, regressions, residual covariances, intercepts, latent means, log scales, or effects of the covariates.")
   }
   piv <- integer(0)
   for (j in seq_len(d)) {

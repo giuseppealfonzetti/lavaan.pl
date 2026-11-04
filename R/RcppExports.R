@@ -13,8 +13,8 @@ cpp_rho <- function(THETA, MODEL, DATA) {
     .Call(`_lavaan_pl_cpp_rho`, THETA, MODEL, DATA)
 }
 
-cpp_saturated <- function(TAU, RHO, DATA, ORDER, SCORES) {
-    .Call(`_lavaan_pl_cpp_saturated`, TAU, RHO, DATA, ORDER, SCORES)
+cpp_saturated <- function(ITEMS, RHO, DATA, ORDER, SCORES) {
+    .Call(`_lavaan_pl_cpp_saturated`, ITEMS, RHO, DATA, ORDER, SCORES)
 }
 
 cpp_saturated_traces <- function(HTT, HTR, D, B, ST, SR, N, FULL = FALSE) {
@@ -27,15 +27,17 @@ cpp_saturated_traces <- function(HTT, HTR, D, B, ST, SR, N, FULL = FALSE) {
 #'   missing responses.
 #' @param C_VEC Number of categories of each item.
 #' @param WEIGHTS Optional vector of unit weights; empty for unit weights.
+#' @param STRATA Optional vector with the stratum of each row, from zero; empty for a single stratum.
 #'
 #' @return The (weighted) frequencies of the bivariate response patterns: pairs \eqn{(k, l)},
 #'   \eqn{l < k}, ordered by \eqn{k}, and within each pair the categories of \eqn{k} then \eqn{l}.
+#'   With `STRATA`, the tables of each stratum one after the other.
 #' @export
-pairs_freq <- function(Y, C_VEC, WEIGHTS = as.numeric( c())) {
-    .Call(`_lavaan_pl_pairs_freq`, Y, C_VEC, WEIGHTS)
+pairs_freq <- function(Y, C_VEC, WEIGHTS = as.numeric( c()), STRATA = as.numeric( c())) {
+    .Call(`_lavaan_pl_pairs_freq`, Y, C_VEC, WEIGHTS, STRATA)
 }
 
-cpp_sa <- function(STARTS, K, C, MODEL, DATA, VALFREQ, VALUFREQ, PAIRS_PER_ITERATION, ALPHA, ADAM_EPOCHS, BURN_EPOCHS, EPOCHS, TOL, DECAY, AVG_FROM, GAIN, SEED, ADAM_ONLY = FALSE, VERBOSE = FALSE) {
-    .Call(`_lavaan_pl_cpp_sa`, STARTS, K, C, MODEL, DATA, VALFREQ, VALUFREQ, PAIRS_PER_ITERATION, ALPHA, ADAM_EPOCHS, BURN_EPOCHS, EPOCHS, TOL, DECAY, AVG_FROM, GAIN, SEED, ADAM_ONLY, VERBOSE)
+cpp_sa <- function(STARTS, K, C, MODEL, DATA, VALDATA, PAIRS_PER_ITERATION, ALPHA, ADAM_EPOCHS, BURN_EPOCHS, EPOCHS, TOL, DECAY, AVG_FROM, GAIN, SEED, ADAM_ONLY = FALSE, VERBOSE = FALSE) {
+    .Call(`_lavaan_pl_cpp_sa`, STARTS, K, C, MODEL, DATA, VALDATA, PAIRS_PER_ITERATION, ALPHA, ADAM_EPOCHS, BURN_EPOCHS, EPOCHS, TOL, DECAY, AVG_FROM, GAIN, SEED, ADAM_ONLY, VERBOSE)
 }
 

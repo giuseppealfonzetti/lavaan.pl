@@ -38,7 +38,7 @@ for more information. Alternatively, a parameter table (eg. the output of
 the \code{\link[lavaan:lavaanify]{lavaan::lavaanify()}} function) is also accepted.}
 
 \item{data}{A data frame containing the observed variables used in the model.
-Variables must be declared as ordered factors.}
+Ordinal items must be declared as ordered factors; other items are numeric.}
 
 \item{std.lv}{If \code{TRUE}, the metric of each latent variable is determined by
 fixing their (residual) variances to 1.0. If \code{FALSE}, the metric of each
@@ -55,6 +55,7 @@ for more details. Possible options are:
 \item{\code{ncores}}{The number of cores to use for parallel computation.}
 \item{\code{valdata}}{Validation data.}
 \item{\code{valgroup}}{Group of each row of \code{valdata}, with the values of the \code{group} variable. Required with \code{valdata} and several groups.}
+\item{\code{valx}}{Covariates of \code{valdata}. Required with \code{valdata} and covariates.}
 \item{\code{computevar_numderiv}}{If \code{TRUE}, the asymptotic variance-covariance matrix is computed using numerical derivatives.}
 }}
 
@@ -92,7 +93,8 @@ interest are:
 \item{\code{se}}{The standard error method to use. Only \code{"robust.huber.white"} is currently supported.}
 \item{\code{test}}{Default \code{"none"}. \code{"standard"} and \code{"mean.var.adjusted"} are computed by \code{\link[=compute_plrt]{compute_plrt()}}.}
 \item{\code{missing}}{Default \code{"listwise"}. \code{"pairwise"} and \code{"available.cases"} use the complete pairs and the available cases of Katsikatsou et al. (2022).}
-\item{\code{sampling.weights}, \code{cluster}}{Sampling weights, of type \code{"design"} or \code{"frequency"}, and cluster-robust standard errors, as in lavaan.}
+\item{\code{sampling.weights}, \code{cluster}}{Sampling weights, of type \code{"design"} or \code{"frequency"}, and cluster-robust standard errors, as in lavaan. With covariates, the weights are honoured, unlike in lavaan.}
+\item{\code{conditional.x}}{Regressions on observed covariates condition on them, as \code{conditional.x = TRUE}, the only supported option. Covariates need no declaration: they are handled by their distinct rows, so that discrete covariates keep the data reduction.}
 }
 }
 \examples{

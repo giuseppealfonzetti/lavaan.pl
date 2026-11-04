@@ -9,8 +9,7 @@ Rcpp::List cpp_sa(
     const Eigen::Map<Eigen::VectorXd> C,
     const Rcpp::List MODEL,
     const Rcpp::List DATA,
-    const Eigen::Map<Eigen::VectorXd> VALFREQ,
-    const Eigen::Map<Eigen::VectorXd> VALUFREQ,
+    const Rcpp::List VALDATA,
     const int PAIRS_PER_ITERATION,
     const double ALPHA,
     const int ADAM_EPOCHS,
@@ -29,16 +28,10 @@ Rcpp::List cpp_sa(
 
   const model::Groups GS(MODEL, DATA);
   const int G = GS.G;
-  std::vector<Eigen::VectorXd> freq(G), ufreq(G), valfreq(G), valufreq(G);
-  for(int g = 0, oc = 0, ou = 0; g < G; g++){
-    const Rcpp::List Dg = DATA[g];
-    const model::Layout &L = GS.S[g].L;
-    freq[g] = Rcpp::as<Eigen::VectorXd>(Dg["FREQ"]);
-    ufreq[g] = Rcpp::as<Eigen::VectorXd>(Dg["UFREQ"]);
-    valfreq[g] = VALFREQ.segment(oc, L.ncell);
-    valufreq[g] = VALUFREQ.size() > 0 ? Eigen::VectorXd(VALUFREQ.segment(ou, L.cat.sum())) : Eigen::VectorXd();
-    oc += L.ncell;
-    ou += L.cat.sum();
+  std::vector<pairs::Data> data, val;
+  for(int g = 0; g < G; g++){
+    data.emplace_back(Rcpp::as<Rcpp::List>(DATA[g]));
+    val.emplace_back(Rcpp::as<Rcpp::List>(VALDATA[g]));
   }
   const double n = GS.n;
   const int P = GS.P, nu = std::min(PAIRS_PER_ITERATION, P), E = (P + nu - 1) / nu, df = STARTS.rows();
@@ -109,11 +102,11 @@ Rcpp::List cpp_sa(
     Eigen::VectorXd grad = Eigen::VectorXd::Zero(GS.d);
     for(int g = 0; g < G; g++){
       const model::Spec &S = GS.S[g];
-      workers::PL w(STS[g], freq[g], dg[g], 1);
+      workers::PL w(STS[g], data[g], dg[g], 1);
       RcppParallel::parallelReduce(0, dg[g].size(), w, 4);
       w.ll *= static_cast<double>(P) / nu;
       w.gradient *= static_cast<double>(P) / nu;
-      if(ufreq[g].size() > 0){
+      if(data[g].ufreq.size() > 0){
         Eigen::VectorXd itemw = Eigen::VectorXd::Zero(S.p);
         for(const int r : dg[g]){
           itemw(S.L.pk[r]) += 1;
@@ -121,7 +114,7 @@ Rcpp::List cpp_sa(
         }
         itemw *= static_cast<double>(P) / (nu * (S.p - 1));
         Eigen::MatrixXd hd, ud;
-        pairs::univariate(STS[g], ufreq[g], 1, w.ll, w.gradient, hd, ud, itemw);
+        pairs::univariate(STS[g], data[g], 1, w.ll, w.gradient, hd, ud, itemw);
       }
       ll += w.ll;
       grad.segment(GS.off[g], S.d) = w.gradient;
@@ -136,11 +129,11 @@ Rcpp::List cpp_sa(
     double ll = 0;
     for(int g = 0; g < G; g++){
       if(GS.S[g].direct && STS[g].Sig.llt().info() != Eigen::Success) return R_PosInf;
-      workers::PL w(STS[g], valfreq[g], all[g], 0);
+      workers::PL w(STS[g], val[g], all[g], 0);
       RcppParallel::parallelReduce(0, all[g].size(), w);
       Eigen::VectorXd gd;
       Eigen::MatrixXd hd, ud;
-      pairs::univariate(STS[g], valufreq[g], 0, w.ll, gd, hd, ud);
+      pairs::univariate(STS[g], val[g], 0, w.ll, gd, hd, ud);
       ll += w.ll;
     }
     return std::isfinite(ll) ? -ll / n : R_PosInf;
@@ -152,11 +145,12 @@ Rcpp::List cpp_sa(
     for(int g = 0; g < G; g++){
       std::vector<Eigen::MatrixXd> sc;
       std::vector<std::vector<int>> si;
-      workers::Hess hw(STS[g], freq[g], sc, si);
+      std::vector<Eigen::VectorXd> pg;
+      workers::Hess hw(STS[g], data[g], sc, si, pg);
       RcppParallel::parallelReduce(0, GS.S[g].L.P, hw);
       double ll = 0;
       Eigen::MatrixXd ud;
-      pairs::univariate(STS[g], ufreq[g], 2, ll, hw.gradient, hw.hessian, ud);
+      pairs::univariate(STS[g], data[g], 2, ll, hw.gradient, hw.hessian, ud);
       H.block(GS.off[g], GS.off[g], GS.S[g].d, GS.S[g].d) = hw.hessian / n;
     }
     if(constrained) H = Ks.transpose() * H * Ks;

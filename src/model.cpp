@@ -1,18 +1,20 @@
 #include "model.h"
 
-model::Layout::Layout(const Eigen::Ref<const Eigen::VectorXd> C_VEC): p(C_VEC.size()), P(0), nthr(0), ncell(0){
+model::Layout::Layout(const Eigen::Ref<const Eigen::VectorXd> C_VEC): p(C_VEC.size()), P(0), nthr(0), ncell(0), nnum(0){
   cat = C_VEC.cast<int>();
   tk.resize(p);
+  inum = Eigen::VectorXi::Constant(p, -1);
   for(int k = 0; k < p; k++){
     tk(k) = nthr;
     nthr += cat(k) - 1;
+    if(cat(k) == 1) inum(k) = nnum++;
   }
   for(int k = 1; k < p; k++){
     for(int l = 0; l < k; l++){
       pk.push_back(k);
       pl.push_back(l);
       off.push_back(ncell);
-      ncell += cat(k) * cat(l);
+      if(cat(k) > 1 && cat(l) > 1) ncell += cat(k) * cat(l);
       P++;
     }
   }
@@ -26,6 +28,8 @@ model::Spec::Spec(const Rcpp::List MODEL, const Eigen::Ref<const Eigen::VectorXd
   constrint = Rcpp::as<Eigen::VectorXd>(MODEL["CONSTRINT"]);
   constrmean = Rcpp::as<Eigen::VectorXd>(MODEL["CONSTRMEAN"]);
   constrlogscale = Rcpp::as<Eigen::VectorXd>(MODEL["CONSTRLOGSCALE"]);
+  gamma = Rcpp::as<Eigen::MatrixXd>(MODEL["GAMMA"]);
+  kappa = Rcpp::as<Eigen::MatrixXd>(MODEL["KAPPA"]);
   thetapar = Rcpp::as<bool>(MODEL["THETAPAR"]);
   corrflag = Rcpp::as<int>(MODEL["CORRFLAG"]);
   direct = corrflag == 2;
@@ -92,9 +96,34 @@ model::Spec::Spec(const Rcpp::List MODEL, const Eigen::Ref<const Eigen::VectorXd
   scidx.assign(p, -1);
   nscale = 0;
   for(int j = 0; j < p; j++) if(!std::isfinite(constrlogscale(j))) scidx[j] = os + nscale++;
-  d = os + nscale;
-  plain = !thetapar && nint + nmean + nscale == 0 && (constrint.array() == 0).all() && (constrmean.array() == 0).all() &&
-    (constrlogscale.array() == 0).all();
+  og = os + nscale;
+  nx = gamma.cols();
+  for(int c = 0; c < nx; c++){
+    for(int h = 0; h < q; h++){
+      if(!std::isfinite(gamma(h, c))){
+        gfac.push_back(h);
+        gcov.push_back(c);
+      }
+    }
+  }
+  ngam = gfac.size();
+  ok = og + ngam;
+  kidx.assign(p, std::vector<int>());
+  kcov.assign(p, std::vector<int>());
+  nkap = 0;
+  for(int c = 0; c < nx; c++){
+    for(int j = 0; j < p; j++){
+      if(!std::isfinite(kappa(j, c))){
+        kidx[j].push_back(ok + nkap++);
+        kcov[j].push_back(c);
+      }
+    }
+  }
+  d = ok + nkap;
+  thitem.assign(p, thetapar);
+  for(int j = 0; j < p; j++) if(L.cat(j) == 1) thitem[j] = true;
+  plain = !thetapar && L.nnum == 0 && nx == 0 && nint + nmean + nscale == 0 && (constrint.array() == 0).all() &&
+    (constrmean.array() == 0).all() && (constrlogscale.array() == 0).all();
 }
 
 model::Setup::Setup(const Eigen::Ref<const Eigen::VectorXd> THETA, const Spec &SPEC): S(SPEC){
@@ -146,6 +175,7 @@ model::Setup::Setup(const Eigen::Ref<const Eigen::VectorXd> THETA, const Spec &S
   }
 
   taus = tau;
+  pis.resize(p, S.nx);
   if(!S.plain){
     Eigen::VectorXd nu = S.constrint, ls = S.constrlogscale;
     kappa = S.constrmean;
@@ -157,15 +187,21 @@ model::Setup::Setup(const Eigen::Ref<const Eigen::VectorXd> THETA, const Spec &S
     mu = nu + Lt * kappa;
     const Eigen::MatrixXd Psi = S.direct ? Sig : Eigen::MatrixXd(sd.asDiagonal() * U.transpose() * U * sd.asDiagonal());
     v = (Lt * Psi).cwiseProduct(Lt).rowwise().sum();
-    if(S.thetapar){
-      th = (2 * ls).array().exp();
-      s = (v + th).array().rsqrt();
-    }else{
-      s = ls.array().exp();
-    }
+    th = (2 * ls).array().exp();
+    s = ls.array().exp();
+    for(int j = 0; j < p; j++) if(S.thitem[j]) s(j) = 1 / std::sqrt(v(j) + th(j));
+    loc = -s.cwiseProduct(mu);
     for(int j = 0; j < p; j++){
       for(int c = 0; c < S.L.cat(j) - 1; c++) taus(S.L.tk(j) + c) = s(j) * (tau(S.L.tk(j) + c) - mu(j));
     }
+    Gam = S.gamma;
+    Eigen::MatrixXd Kap = S.kappa;
+    for(int a = 0; a < S.ngam; a++) Gam(S.gfac[a], S.gcov[a]) = THETA(S.og + a);
+    for(int j = 0; j < p; j++){
+      for(std::size_t a = 0; a < S.kidx[j].size(); a++) Kap(j, S.kcov[j][a]) = THETA(S.kidx[j][a]);
+    }
+    Pi = Lt * Gam + Kap;
+    pis = s.asDiagonal() * Pi;
   }
 
   J.resize(p);

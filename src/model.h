@@ -5,28 +5,29 @@
 namespace model{
 
   struct Layout{
-    int p, P, nthr, ncell;
-    Eigen::VectorXi cat, tk;
+    int p, P, nthr, ncell, nnum;
+    Eigen::VectorXi cat, tk, inum;
     std::vector<int> pk, pl, off;
     Layout(const Eigen::Ref<const Eigen::VectorXd> C_VEC);
   };
 
   struct Spec{
     Layout L;
-    int p, q, corrflag, nload, ncorr, nvar, nreg, nres, nint, nmean, nscale, d, ol, oc, ov, ob, orc, on, oa, os;
+    int p, q, corrflag, nload, ncorr, nvar, nreg, nres, nint, nmean, nscale, nx, ngam, nkap, d, ol, oc, ov, ob, orc, on, oa, os, og, ok;
     bool direct, thetapar, plain;
-    Eigen::MatrixXd constrmat, regmat, rescov;
+    std::vector<bool> thitem;
+    Eigen::MatrixXd constrmat, regmat, rescov, gamma, kappa;
     Eigen::VectorXd constrlogsd, constrint, constrmean, constrlogscale;
-    std::vector<std::vector<int>> lidx, lfac;
-    std::vector<int> ra, ca, sfree, bi, bj, nidx, mfree, scidx;
+    std::vector<std::vector<int>> lidx, lfac, kidx, kcov;
+    std::vector<int> ra, ca, sfree, bi, bj, nidx, mfree, scidx, gfac, gcov;
     Eigen::MatrixXi resid;
     Spec(const Rcpp::List MODEL, const Eigen::Ref<const Eigen::VectorXd> C_VEC);
   };
 
   struct Setup{
     const Spec &S;
-    Eigen::VectorXd tau, sd, kappa, mu, v, th, s, taus;
-    Eigen::MatrixXd Lam, Z, C, P, U, alpha, Sig, A, Lt, res;
+    Eigen::VectorXd tau, sd, kappa, mu, v, th, s, taus, loc;
+    Eigen::MatrixXd Lam, Z, C, P, U, alpha, Sig, A, Lt, res, Gam, Pi, pis;
     std::vector<Eigen::MatrixXd> J;
     Setup(const Eigen::Ref<const Eigen::VectorXd> THETA, const Spec &SPEC);
     double rc(const int K, const int L) const { return res.size() > 0 ? res(K, L) : 0; }

@@ -17,7 +17,8 @@ free loadings \code{lambda[j,h]}, latent correlation parameters \code{eta[r,c]} 
 free latent log standard deviations \code{logsd[h]}, free regression coefficients \code{beta[i,j]}, free
 residual covariances \code{theta[k,l]}, free intercepts \code{nu[j]}, free latent means \code{alpha[h]}, and free
 log scale factors \code{logdelta[j]} or, with \code{PARAMETERIZATION = "theta"}, free log residual standard
-deviations \code{logrsd[j]}. With \code{\link[=set_latpl_groups]{set_latpl_groups()}}, the names of group 2 onwards end in \code{.g2},
+deviations \code{logrsd[j]}, free regressions on the covariates \code{gamma[h,c]} and free direct effects of
+the covariates \code{kappa[j,c]}. With \code{\link[=set_latpl_groups]{set_latpl_groups()}}, the names of group 2 onwards end in \code{.g2},
 \code{.g3}, and so on.
 }
 \description{

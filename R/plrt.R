@@ -75,6 +75,8 @@ plrt_nested <- function(OBJ, H1) {
   stopifnot(inherits(H1, "latpl_fit"))
   if (
     !identical(OBJ$data$freq, H1$data$freq) ||
+      !identical(OBJ$data$Y, H1$data$Y) ||
+      !identical(OBJ$data$X, H1$data$X) ||
       !identical(OBJ$data$ufreq, H1$data$ufreq) ||
       !identical(OBJ$data$weights, H1$data$weights) ||
       !identical(OBJ$data$cluster, H1$data$cluster) ||
@@ -99,6 +101,11 @@ plrt_nested <- function(OBJ, H1) {
       function(par, m) {
         q <- ncol(par$loadings)
         Lt <- par$loadings %*% solve(diag(q) - par$regressions)
+        nx <- OBJ$dims$nx
+        if (is.null(par$gamma) && nx > 0) {
+          par$gamma <- matrix(0, q, nx)
+          par$kappa <- matrix(0, nrow(par$loadings), nx)
+        }
         theta <- m$PARAMETERIZATION == "theta"
         if (
           all(m$CONSTRINT %in% 0) &&
@@ -118,6 +125,7 @@ plrt_nested <- function(OBJ, H1) {
             (par$thresholds -
               rep(as.vector(par$intercepts + Lt %*% par$means), k))
           par$loadings <- s * par$loadings
+          if (nx > 0) par$kappa <- s * par$kappa
           par$residual_covariances <- s * R * rep(s, each = length(s))
           par$intercepts[] <- 0
           par$means[] <- 0
@@ -146,6 +154,7 @@ plrt_nested <- function(OBJ, H1) {
           par$loadings <- par$loadings %*% diag(sc, q)
           par$latent_correlations <- S / tcrossprod(sc)
           par$means <- par$means / sc
+          if (nx > 0) par$gamma <- (A %*% par$gamma) / sc
         }
         par
       },
@@ -187,7 +196,8 @@ plrt_nested <- function(OBJ, H1) {
 plrt_fit <- function(OBJ, VARS) {
   dims <- OBJ$dims
   n <- dims$n
-  nthr <- sum(dims$cat - 1)
+  nnum <- sum(dims$cat == 1)
+  nthr <- sum(dims$cat - 1) + dims$p * dims$nx + 2 * nnum
   P <- dims$p * (dims$p - 1) / 2
   eng <- OBJ$engine$data
   sat <- function(g, tau, rho, order, scores = FALSE) {
@@ -207,6 +217,31 @@ plrt_fit <- function(OBJ, VARS) {
       )
       stats::qnorm(cumsum(pj)[-dims$cat[j]] / sum(pj))
     }))
+    numeric_items <- which(dims$cat == 1)
+    centre <- vapply(numeric_items, function(j) {
+      seen <- rows & !is.na(Y[, j])
+      sum(v[seen] * Y[seen, j]) / sum(v[seen])
+    }, numeric(1))
+    spread <- vapply(seq_along(numeric_items), function(a) {
+      seen <- rows & !is.na(Y[, numeric_items[a]])
+      sqrt(sum(v[seen] * (Y[seen, numeric_items[a]] - centre[a])^2) / sum(v[seen]))
+    }, numeric(1))
+    tau_ind <- c(tau_ind, rep(0, dims$p * dims$nx), -centre / spread, 1 / spread)
+    for (iter in seq_len(if (dims$nx > 0 || nnum > 0) 100 else 0)) {
+      o <- sat(g, tau_ind, rep(0, P), 2)
+      if (max(abs(o$gradient[1:nthr])) / n < 1e-8) {
+        break
+      }
+      dt <- as.vector(solve(o$htt, o$gradient[1:nthr]))
+      step <- 1
+      repeat {
+        o_new <- sat(g, tau_ind + step * dt, rep(0, P), 0)
+        if (isTRUE(o_new$ll >= o$ll - 1e-12 * abs(o$ll))) break
+        step <- step / 2
+        if (step < 1e-10) stop('Independence model fit failed.')
+      }
+      tau_ind <- tau_ind + step * dt
+    }
     tau <- tau_ind
     rho <- rep(0, P)
     o <- sat(g, tau, rho, 2)
@@ -293,7 +328,7 @@ plrt_fit <- function(OBJ, VARS) {
   jac <- if (ncol(lc$K) < nrow(lc$K)) r$jacobian %*% lc$K else r$jacobian
   invH <- solve(VARS$H)
   tpos <- which(theta_block(OBJ$model, nthr) == "tau")
-  if (all(tpos %in% lc$free_idx)) {
+  if (dims$nx == 0 && nnum == 0 && all(tpos %in% lc$free_idx)) {
     psi <- which(!(lc$free_idx %in% tpos))
     G <- (invH %*% VARS$J %*% invH)[psi, psi, drop = FALSE]
     P0 <- solve(invH[psi, psi, drop = FALSE], G)
@@ -311,7 +346,7 @@ plrt_fit <- function(OBJ, VARS) {
   }
   model <- plrt_adjust(
     STAT = 2 * (ll_sat - tz$ll),
-    DF = dims$nthr + dims$pairs - dims$npar,
+    DF = dims$nthr + dims$ngroups * (dims$p * dims$nx + 2 * nnum) + dims$pairs - dims$npar,
     E = tz$e - sum(diag(P0)),
     V = tz$v + 2 * sum(P0 * t(P0)) - 4 * cv
   )

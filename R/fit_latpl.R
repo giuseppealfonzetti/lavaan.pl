@@ -38,6 +38,9 @@ fit_latpl <- function(
   )
   grouped <- inherits(MODEL, "latpl_groups")
   models <- if (grouped) MODEL$MODELS else list(MODEL)
+  if (!all(vapply(models, function(x) identical(x$NUMERIC, unname(DATA$numeric)), logical(1)))) {
+    stop("DATA and MODEL must declare the same numeric items.")
+  }
   if (DATA$ngroups != length(models)) {
     stop("DATA has ", DATA$ngroups, " groups, MODEL has ", length(models), ".")
   }
@@ -65,19 +68,21 @@ fit_latpl <- function(
     class = "latpl_fit"
   )
   fit$init <- init_theta(INIT, DATA, dims, MODEL, VERBOSE)
+  std <- standardise_covariates(DATA, MODEL, lc, nthr)
+  eng_std <- if (is.null(std$model)) eng else engine(std$data, std$model)
   if (METHOD == "ucminf" && INIT$METHOD == "SA") {
     if (VERBOSE) {
       message("- Initialising with the SA Adam phase...")
     }
-    fit$init <- run_sa(
-      list(fit$init),
-      DATA,
-      eng,
+    fit$init <- std$from(run_sa(
+      list(std$to(fit$init)),
+      std$data,
+      eng_std,
       lc,
       INIT$CONTROL,
       TRUE,
       FALSE
-    )$theta
+    )$theta)
   }
   full <- function(x) as.vector(lc$K %*% x + lc$c)
   nll <- function(theta) -cpp_pl(theta, eng$model, eng$data)$pl / dims$n
@@ -164,7 +169,7 @@ fit_latpl <- function(
     }
     fn <- function(x) {
       theta <- full(x)
-      val <- if (pd(theta)) nll(theta) else Inf
+      val <- if (pd(theta)) -cpp_pl(theta, eng_std$model, eng_std$data)$pl / dims$n else Inf
       if (is.finite(val)) val else Inf
     }
     gr <- function(x) {
@@ -172,7 +177,7 @@ fit_latpl <- function(
       g <- if (pd(theta)) {
         -as.vector(crossprod(
           lc$K,
-          cpp_pl(theta, eng$model, eng$data, 1L)$gradient
+          cpp_pl(theta, eng_std$model, eng_std$data, 1L)$gradient
         )) /
           dims$n
       } else {
@@ -181,7 +186,7 @@ fit_latpl <- function(
       if (all(is.finite(g))) g else 0 * x
     }
     fit$numFit <- ucminf::ucminf(
-      fit$init[lc$free_idx],
+      std$to(fit$init)[lc$free_idx],
       fn,
       gr,
       hessian = 0,
@@ -192,12 +197,23 @@ fit_latpl <- function(
         maxeval = CONTROL$MAXEVAL
       )
     )
-    fit$theta <- full(fit$numFit$par)
+    fit$theta <- std$from(full(fit$numFit$par))
+    fit$numFit$par <- fit$theta[lc$free_idx]
+    if (!fit$numFit$convergence %in% 1:2 && fit$numFit$info[["maxgradient"]] > 1e-3) {
+      warning(
+        "ucminf stopped with a gradient of ",
+        signif(fit$numFit$info[["maxgradient"]], 3),
+        " per observation: the estimates may not be at an optimum.",
+        call. = FALSE
+      )
+    }
   } else {
     if (VERBOSE) {
       message("- Optimising via pairwise stochastic approximation...")
     }
-    opt <- run_sa(list(fit$init), DATA, eng, lc, CONTROL, FALSE, VERBOSE)
+    opt <- run_sa(list(std$to(fit$init)), std$data, eng_std, lc, CONTROL, FALSE, VERBOSE)
+    opt[c("theta", "theta_last", "theta_burn")] <- lapply(opt[c("theta", "theta_last", "theta_burn")], std$from)
+    opt$path$theta <- lapply(opt$path$theta, std$from)
     if (!opt$plateau) {
       warning(
         "The SA burn-in did not reach a plateau of the pairwise likelihood: increase BURN_EPOCHS, or check the estimates against set_ucminf_control().",
@@ -225,20 +241,97 @@ fit_latpl <- function(
 }
 
 
+#' Standardised covariates for the optimisers
+#'
+#' Covariates far from zero make the thresholds and their effects almost collinear, and the optimisers unstable. The
+#' optimisers then work on standardised covariates, with the matching thresholds and intercepts, which is the same
+#' model. This needs thresholds, intercepts of numeric items and effects of covariates free of constraints.
+#'
+#' @param DATA Data object from [set_latpl_data()].
+#' @param MODEL Model object from [set_latpl_model()] or [set_latpl_groups()].
+#' @param LINCON Output of [lincon()].
+#' @param NTHR Number of thresholds in each group.
+#' @return A list with the data `data` and model `model` for the optimisers, and the maps `to` and `from` the
+#'   parameter vector of the optimisers. Without standardisation, `DATA`, no `model` and identities.
+#' @seealso [fit_latpl()]
+#' @keywords internal
+standardise_covariates <- function(DATA, MODEL, LINCON, NTHR) {
+  raw <- list(data = DATA, model = NULL, to = identity, from = identity)
+  if (ncol(DATA$X) == 0) return(raw)
+  grouped <- inherits(MODEL, "latpl_groups")
+  models <- if (grouped) MODEL$MODELS else list(MODEL)
+  if (!any(vapply(models, function(x) ncol(x$GAMMA) > 0, logical(1)))) return(raw)
+  centre <- colMeans(DATA$X)
+  spread <- apply(DATA$X, 2, stats::sd)
+  spread[spread == 0] <- 1
+  block <- theta_block(MODEL, NTHR)
+  touched <- block %in% c("tau", "gamma", "kappa") | (block == "nu" & any(DATA$numeric))
+  fixed_nu <- any(vapply(models, function(x) any(!is.na(x$CONSTRINT[x$NUMERIC])), logical(1)))
+  if (fixed_nu || !all(which(touched) %in% LINCON$free_idx)) {
+    if (any(abs(centre) > 3 * spread)) {
+      message("Constraints on thresholds, intercepts or effects of covariates prevent standardising the covariates: consider centring them.")
+    }
+    return(raw)
+  }
+  scale_x <- function(M) sweep(M, 2, spread, "*")
+  rescale <- function(M) {
+    M$GAMMA <- scale_x(M$GAMMA)
+    M$KAPPA <- scale_x(M$KAPPA)
+    M
+  }
+  std_models <- lapply(models, rescale)
+  std_model <- if (grouped) replace(MODEL, "MODELS", list(std_models)) else std_models[[1]]
+  standard <- function(X) sweep(sweep(X, 2, centre, "-"), 2, spread, "/")
+  std_data <- DATA
+  std_data$X <- standard(DATA$X)
+  std_data$strata <- lapply(DATA$strata, standard)
+  if (!is.null(DATA$val)) std_data$val$strata <- lapply(DATA$val$strata, standard)
+  map <- function(theta, from_model, to_model, to_standard) {
+    pars <- theta2par(from_model, theta)
+    if (!grouped) pars <- list(pars)
+    pars <- Map(function(par, m) {
+      if (is.null(par$gamma)) return(par)
+      gamma_raw <- if (to_standard) par$gamma else sweep(par$gamma, 2, spread, "/")
+      kappa_raw <- if (to_standard) par$kappa else sweep(par$kappa, 2, spread, "/")
+      loadings <- par$loadings %*% solve(diag(ncol(par$loadings)) - par$regressions)
+      offset <- as.vector((loadings %*% gamma_raw + kappa_raw) %*% centre) * (if (to_standard) 1 else -1)
+      par$thresholds <- par$thresholds - rep(offset, DATA$cat - 1)
+      par$intercepts[m$NUMERIC] <- par$intercepts[m$NUMERIC] + offset[m$NUMERIC]
+      par$gamma <- if (to_standard) scale_x(par$gamma) else gamma_raw
+      par$kappa <- if (to_standard) scale_x(par$kappa) else kappa_raw
+      par
+    }, pars, models)
+    par2theta(to_model, if (grouped) pars else pars[[1]])
+  }
+  list(
+    data = std_data,
+    model = std_model,
+    to = function(theta) map(theta, MODEL, std_model, TRUE),
+    from = function(theta) map(theta, std_model, MODEL, FALSE)
+  )
+}
+
 #' Inputs of the C++ routines
 #'
 #' @param DATA Data object from [set_latpl_data()].
 #' @param MODEL Model object from [set_latpl_model()] or [set_latpl_groups()].
+#' @param TABLES Use the frequency tables (`TRUE`) or the individual observations (`FALSE`). If `NA`, as set by
+#'   [set_latpl_data()].
 #' @return A list with `model` and `data`, each a list with one element per group: the model specification, and
-#'   the frequencies, distinct response patterns, unit weights and cluster weights of the group.
+#'   the frequencies, distinct covariate rows, distinct response patterns with their strata, unit weights and cluster
+#'   weights of the group.
 #' @seealso [fit_latpl()], [run_sa()]
 #' @keywords internal
-engine <- function(DATA, MODEL) {
+engine <- function(DATA, MODEL, TABLES = NA) {
   models <- if (inherits(MODEL, "latpl_groups")) MODEL$MODELS else list(MODEL)
   gw <- if (length(DATA$weights)) DATA$weights else rep(1, DATA$n)
   jw <- if (length(DATA$jweights)) DATA$jweights else rep(1, DATA$n)
-  nc <- length(DATA$freq) / DATA$ngroups
-  nu <- length(DATA$ufreq) / DATA$ngroups
+  ns <- vapply(DATA$strata, nrow, numeric(1))
+  uc <- if (length(DATA$ufreq)) sum(DATA$cat) else 0
+  ou <- cumsum(c(0, ns[-length(ns)])) * uc
+  ot <- cumsum(c(0, (ns * DATA$tables)[-length(ns)]))
+  nc <- if (any(DATA$tables)) length(DATA$freq) / sum(ns * DATA$tables) else 0
+  nx <- ncol(DATA$X)
   list(
     model = lapply(models, function(x) {
       list(
@@ -250,12 +343,14 @@ engine <- function(DATA, MODEL) {
         CONSTRINT = x$CONSTRINT,
         CONSTRMEAN = x$CONSTRMEAN,
         CONSTRLOGSCALE = x$CONSTRLOGSCALE,
-        THETAPAR = x$PARAMETERIZATION == "theta"
+        THETAPAR = x$PARAMETERIZATION == "theta",
+        GAMMA = if (ncol(x$GAMMA) == nx) x$GAMMA else matrix(0, x$q, nx),
+        KAPPA = if (ncol(x$KAPPA) == nx) x$KAPPA else matrix(0, x$p, nx)
       )
     }),
     data = lapply(seq_len(DATA$ngroups) - 1, function(g) {
       rows <- which(DATA$group == g)
-      key <- do.call(paste, as.data.frame(DATA$Y[rows, , drop = FALSE]))
+      key <- if (any(DATA$numeric)) seq_along(rows) else do.call(paste, as.data.frame(cbind(DATA$stratum[rows], DATA$Y[rows, , drop = FALSE])))
       first <- !duplicated(key)
       id <- match(key, key[first])
       WM <- matrix(0, 0, 0)
@@ -273,11 +368,23 @@ engine <- function(DATA, MODEL) {
         )
         WM <- (A - rowMeans(A)) * sqrt(C / (C - 1))
       }
+      tables <- if (is.na(TABLES)) DATA$tables[g + 1] else TABLES
+      freq <- if (tables == DATA$tables[g + 1]) {
+        if (tables) DATA$freq[ot[g + 1] * nc + seq_len(ns[g + 1] * nc)] else numeric(0)
+      } else if (tables) {
+        pairs_freq(DATA$Y[rows, , drop = FALSE], DATA$cat, if (length(DATA$weights)) DATA$weights[rows] else numeric(0), DATA$stratum[rows])
+      } else {
+        numeric(0)
+      }
       list(
         N = length(rows),
         C_VEC = DATA$cat,
-        FREQ = DATA$freq[g * nc + seq_len(nc)],
-        UFREQ = DATA$ufreq[g * nu + seq_len(nu)],
+        TABLES = tables,
+        FREQ = freq,
+        UFREQ = DATA$ufreq[ou[g + 1] + seq_len(ns[g + 1] * uc)],
+        X = t(DATA$strata[[g + 1]]),
+        S = DATA$stratum[rows[first]],
+        W = as.numeric(rowsum(gw[rows], id)),
         Y = DATA$Y[rows[first], , drop = FALSE],
         UW = DATA$uweights[rows[first]],
         WV = sqrt(as.numeric(rowsum(jw[rows]^2, id))),
@@ -330,6 +437,22 @@ init_theta <- function(INIT, DATA, DIMS, MODEL, VERBOSE) {
         col(m$CONSTRMAT)[is.na(m$CONSTRMAT)] %in% which(marker)
       ] <- 1
       th[block == "logsd"] <- ifelse(marker[is.na(m$CONSTRLOGSD)], log(0.25), 0)
+      if (any(DATA$numeric)) {
+        spread <- rep(1, DIMS$p)
+        centre <- rep(0, DIMS$p)
+        for (j in which(DATA$numeric)) {
+          seen <- rows & !is.na(DATA$Y[, j])
+          centre[j] <- stats::weighted.mean(DATA$Y[seen, j], w[seen])
+          spread[j] <- sqrt(stats::weighted.mean((DATA$Y[seen, j] - centre[j])^2, w[seen]))
+        }
+        mk <- apply(!is.na(m$CONSTRMAT) & m$CONSTRMAT != 0, 2, match, x = TRUE)
+        unit <- ifelse(is.na(mk), 1, spread[mk])
+        free_load <- which(is.na(m$CONSTRMAT), arr.ind = TRUE)
+        th[block == "lambda"] <- th[block == "lambda"] * spread[free_load[, 1]] / unit[free_load[, 2]]
+        th[block == "logsd"] <- th[block == "logsd"] + log(unit[is.na(m$CONSTRLOGSD)])
+        th[block == "nu"] <- centre[is.na(m$CONSTRINT)]
+        th[block == "scale"][m$NUMERIC[is.na(m$CONSTRLOGSCALE)]] <- log(spread[m$NUMERIC & is.na(m$CONSTRLOGSCALE)])
+      }
       if (m$PARAMETERIZATION == "theta") {
         par <- theta2par(m, th)
         L <- par$loadings %*% solve(diag(m$q) - par$regressions)
@@ -358,9 +481,9 @@ init_theta <- function(INIT, DATA, DIMS, MODEL, VERBOSE) {
     if (
       models[[g]]$PARAMETERIZATION == "delta" &&
         any(
-          rowSums((L %*% par[[g]]$latent_correlations) * L) *
+          (rowSums((L %*% par[[g]]$latent_correlations) * L) *
             par[[g]]$scales^2 >
-            1
+            1)[!models[[g]]$NUMERIC]
         )
     ) {
       warning("Negative error variances implied by init parameters")
@@ -384,7 +507,21 @@ init_theta <- function(INIT, DATA, DIMS, MODEL, VERBOSE) {
 #' @seealso [fit_latpl()], [set_sa_control()]
 #' @keywords internal
 run_sa <- function(STARTS, DATA, ENGINE, LINCON, CONTROL, ADAM_ONLY, VERBOSE) {
-  val <- is.null(DATA$valfreq)
+  valdata <- ENGINE$data
+  if (!is.null(DATA$val)) {
+    valdata <- lapply(seq_len(DATA$ngroups) - 1, function(g) {
+      rows <- DATA$val$group == g
+      list(
+        TABLES = DATA$val$tables[g + 1],
+        FREQ = if (DATA$val$tables[g + 1]) DATA$val$freq[[g + 1]] else numeric(0),
+        UFREQ = numeric(0),
+        X = t(DATA$val$strata[[g + 1]]),
+        S = DATA$val$stratum[rows],
+        W = rep(1, sum(rows)),
+        Y = DATA$val$Y[rows, , drop = FALSE]
+      )
+    })
+  }
   npar <- length(LINCON$free_idx)
   free <- npar < length(STARTS[[1]])
   gain <- switch(
@@ -402,8 +539,7 @@ run_sa <- function(STARTS, DATA, ENGINE, LINCON, CONTROL, ADAM_ONLY, VERBOSE) {
     C = LINCON$c,
     MODEL = ENGINE$model,
     DATA = ENGINE$data,
-    VALFREQ = if (val) DATA$freq else DATA$valfreq,
-    VALUFREQ = if (val) DATA$ufreq else numeric(0),
+    VALDATA = valdata,
     PAIRS_PER_ITERATION = CONTROL$PAIRS_PER_ITERATION,
     ALPHA = CONTROL$ALPHA,
     ADAM_EPOCHS = CONTROL$ADAM_EPOCHS,

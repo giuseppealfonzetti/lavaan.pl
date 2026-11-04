@@ -13,7 +13,8 @@ theta_block(MODEL, NTHR)
 }
 \value{
 A character vector with the block of each parameter, in the order used by \code{\link[=fit_latpl]{fit_latpl()}}: \code{"tau"},
-\code{"lambda"}, \code{"corr"}, \code{"logsd"}, \code{"beta"}, \code{"rescov"}, \code{"nu"}, \code{"alpha"} or \code{"scale"}, group after group.
+\code{"lambda"}, \code{"corr"}, \code{"logsd"}, \code{"beta"}, \code{"rescov"}, \code{"nu"}, \code{"alpha"}, \code{"scale"}, \code{"gamma"} or \code{"kappa"}, group
+after group.
 }
 \description{
 Parameter blocks

@@ -213,6 +213,51 @@ for (name in cases_in("constraints")) {
   expect_matches_reference(name, fit_measures_short)
 }
 
+#### Covariates: estimates, standard errors, log-likelihood and unadjusted tests ####
+for (name in cases_in("covariates")) {
+  local({
+    expect_true(lavaan::lavInspect(ours[[name]], "converged"))
+    expect_identical(
+      parameterEstimates(ours[[name]])[, 1:3],
+      reference$cases[[name]]$estimates[, 1:3]
+    )
+    expect_matches_reference(
+      name,
+      if (name != "covariates/clusters") {
+        c("chisq", "df", "baseline.chisq", "baseline.df")
+      }
+    )
+  })
+}
+
+#### Numeric items: estimates, standard errors, log-likelihood and unadjusted tests ####
+for (name in setdiff(cases_in("mixed"), "mixed/pairwise")) {
+  local({
+    expect_true(lavaan::lavInspect(ours[[name]], "converged"))
+    expect_identical(
+      parameterEstimates(ours[[name]])[, 1:3],
+      reference$cases[[name]]$estimates[, 1:3]
+    )
+    expect_matches_reference(
+      name,
+      c("chisq", "df", "baseline.chisq", "baseline.df")
+    )
+  })
+}
+
+#### Numeric items with missing values: lavaan's scores are NA for incomplete rows, so its standard errors differ ####
+local({
+  fit <- ours[["mixed/pairwise"]]
+  ref <- reference$cases[["mixed/pairwise"]]
+  expect_equal(parameterEstimates(fit)$est, ref$estimates$est, tolerance = 1e-4)
+  expect_equal(fit@optim$logl, ref$logl, tolerance = 1e-6)
+  expect_equal(
+    unclass(fitMeasures(fit, c("chisq", "df", "baseline.chisq"))),
+    ref$fit_measures[c("chisq", "df", "baseline.chisq")],
+    tolerance = 1e-3
+  )
+})
+
 #### Equal thresholds give a stationary point of lavaan's objective ####
 local({
   fit <- cfa(

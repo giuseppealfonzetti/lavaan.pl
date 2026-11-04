@@ -1,7 +1,7 @@
-#' Ordinal data for pairwise likelihood estimation
+#' Ordinal and numeric data for pairwise likelihood estimation
 #'
-#'@param DATA Integer data matrix of dimension \eqn{n*p}. Categories must be
-#'  coded starting from zero.
+#'@param DATA Data matrix of dimension \eqn{n*p}. Categories of ordinal items must be
+#'  integers coded starting from zero.
 #'@param VALDATA Validation data used to monitor convergence of stochastic
 #'  approximations. If `NULL`, data passed via `DATA` is used for monitoring
 #'  purposes.
@@ -19,44 +19,65 @@
 #'  with `VALDATA` and several groups.
 #'@param WEIGHTS_NORMALIZATION Normalisation of the sampling weights, as in lavaan: to the total
 #'  number of observations (`"total"`) or to the number of observations of each group (`"group"`).
+#'@param X Numeric matrix of covariates, one row per observation, on which the responses are
+#'  conditioned. Observations with missing covariates are removed. If `NULL`, no covariates.
+#'@param VALX Covariates of `VALDATA`. Required with `VALDATA` and `X`.
+#'@param NUMERIC Logical vector marking the numeric items. If `NULL`, all items are ordinal.
 #'
 #' @return An object of class `latpl_data` with the data matrix `Y`, its dimensions `n` and `p`,
-#'   the number of categories of each item `cat`, the pairwise frequency tables `freq` and
+#'   the number of categories of each item `cat` (one for numeric items), the indicator of numeric
+#'   items `numeric`, the pairwise frequency tables `freq` and
 #'   `valfreq`, the treatment of missing values `missing`, the unit weights `uweights` and
 #'   univariate frequencies `ufreq` of the available-cases term, the normalised sampling weights
 #'   `weights` and their factors on the scores `jweights`, the cluster indices `cluster`, the group
-#'   indices `group` (from zero) and their number `ngroups`, and the time spent computing the
-#'   frequencies `freqTime`. With several groups, `freq`, `ufreq` and `valfreq` stack the tables of
-#'   each group.
+#'   indices `group` (from zero) and their number `ngroups`, the covariates `X`, the stratum of each
+#'   observation within its group `stratum` (from zero) and the distinct covariate rows of each group
+#'   `strata`, whether each group uses frequency tables `tables` or its individual observations, the
+#'   validation data `val`, and the time spent computing the frequencies `freqTime`. With several
+#'   groups or strata, `freq`, `ufreq` and `valfreq` stack the tables of each group and, within it, of
+#'   each stratum.
 #'
 #' @export
 set_latpl_data <- function(DATA, VALDATA = NULL, MISSING = c("listwise", "pairwise", "available.cases"),
                           WEIGHTS = NULL, WEIGHTS_TYPE = c("design", "frequency"), CLUSTER = NULL, GROUP = NULL,
-                          VALGROUP = NULL, WEIGHTS_NORMALIZATION = c("total", "group")) {
+                          VALGROUP = NULL, WEIGHTS_NORMALIZATION = c("total", "group"), X = NULL, VALX = NULL, NUMERIC = NULL) {
   MISSING <- match.arg(MISSING)
   WEIGHTS_TYPE <- match.arg(WEIGHTS_TYPE)
   WEIGHTS_NORMALIZATION <- match.arg(WEIGHTS_NORMALIZATION)
-  stopifnot(is.matrix(DATA), is.numeric(DATA), all(is.finite(DATA) | is.na(DATA)), min(DATA, na.rm = TRUE) == 0)
-  Y <- round(DATA)
+  stopifnot(is.matrix(DATA), is.numeric(DATA), all(is.finite(DATA) | is.na(DATA)))
+  numeric <- if (is.null(NUMERIC)) rep(FALSE, ncol(DATA)) else NUMERIC
+  stopifnot(is.logical(numeric), length(numeric) == ncol(DATA), !anyNA(numeric), all(numeric) || min(DATA[, !numeric], na.rm = TRUE) == 0)
+  if (MISSING == "available.cases" && any(numeric)) stop("MISSING = \"available.cases\" is not available with numeric items.")
+  Y <- DATA
+  storage.mode(Y) <- "double"
+  Y[, !numeric] <- round(Y[, !numeric])
   stopifnot(
     is.null(WEIGHTS) || (is.numeric(WEIGHTS) && length(WEIGHTS) == nrow(Y) && all(is.finite(WEIGHTS)) && all(WEIGHTS >= 0)),
     is.null(CLUSTER) || (length(CLUSTER) == nrow(Y) && !anyNA(CLUSTER)),
-    is.null(GROUP) || (length(GROUP) == nrow(Y) && !anyNA(GROUP))
+    is.null(GROUP) || (length(GROUP) == nrow(Y) && !anyNA(GROUP)),
+    is.null(X) || (is.matrix(X) && is.numeric(X) && nrow(X) == nrow(Y) && !any(is.infinite(X)))
   )
   group <- if (is.null(GROUP)) rep(0, nrow(Y)) else match(GROUP, unique(GROUP)) - 1
+  if (is.null(X)) X <- matrix(0, nrow(Y), 0)
+  storage.mode(X) <- "double"
   G <- max(group) + 1
   if (G > 1 && !is.null(VALDATA) && is.null(VALGROUP)) stop("VALGROUP is required with VALDATA and several groups.")
-  if (MISSING == "listwise" && anyNA(Y)) {
-    keep <- stats::complete.cases(Y)
-    message(sum(!keep), " incomplete observations removed (MISSING = \"listwise\").")
+  keep_x <- stats::complete.cases(X)
+  keep_y <- MISSING != "listwise" | stats::complete.cases(Y)
+  if (!all(keep_x)) message(sum(!keep_x), " observations with missing covariates removed.")
+  if (!all(keep_y)) message(sum(!keep_y), " incomplete observations removed (MISSING = \"listwise\").")
+  keep <- keep_x & keep_y
+  if (!all(keep)) {
     Y <- Y[keep, , drop = FALSE]
+    X <- X[keep, , drop = FALSE]
     if (!is.null(WEIGHTS)) WEIGHTS <- WEIGHTS[keep]
     if (!is.null(CLUSTER)) CLUSTER <- CLUSTER[keep]
     group <- group[keep]
   }
   stopifnot(nrow(Y) > 0, colSums(!is.na(Y)) > 0)
   cat <- apply(Y, 2, max, na.rm = TRUE) + 1
-  stopifnot(cat > 1)
+  cat[numeric] <- 1
+  stopifnot(cat[!numeric] > 1)
   weights <- jweights <- cluster <- numeric(0)
   if (!is.null(WEIGHTS)) {
     weights <- if (WEIGHTS_NORMALIZATION == "group") {
@@ -73,34 +94,50 @@ set_latpl_data <- function(DATA, VALDATA = NULL, MISSING = c("listwise", "pairwi
   freq_start_time <- Sys.time()
   uweights <- if (MISSING == "available.cases") rowSums(is.na(Y)) else rep(0, nrow(Y))
   uw <- if (length(weights)) uweights * weights else uweights
-  freq <- unlist(lapply(seq_len(G) - 1, function(g) {
-    pairs_freq(Y[group == g, , drop = FALSE], cat, if (length(weights)) weights[group == g] else numeric(0))
-  }))
-  ufreq <- unlist(lapply(seq_len(G) - 1, function(g) {
-    lapply(seq_len(ncol(Y)), function(j) vapply(seq_len(cat[j]) - 1, function(a) sum(uw[group == g & Y[, j] %in% a]), numeric(1)))
-  }))
-  valfreq <- NULL
+  st <- strata_index(X, group, Y, cat, if (length(weights)) weights else numeric(0))
+  ufreq <- numeric(0)
+  if (any(uw > 0)) {
+    uoff <- cumsum(c(0, cat[-length(cat)]))
+    sizes <- vapply(st$strata, nrow, numeric(1))
+    ufreq <- numeric(sum(sizes) * sum(cat))
+    for (j in seq_len(ncol(Y))) {
+      seen <- which(!is.na(Y[, j]) & uw > 0)
+      cells <- (cumsum(c(0, sizes[-G]))[group[seen] + 1] + st$stratum[seen]) * sum(cat) + uoff[j] + Y[seen, j] + 1
+      added <- rowsum(uw[seen], cells)
+      at <- as.numeric(rownames(added))
+      ufreq[at] <- ufreq[at] + added[, 1]
+    }
+  }
+  val <- NULL
   if (!is.null(VALDATA)) {
     stopifnot(
       is.matrix(VALDATA),
       is.numeric(VALDATA),
       all(is.finite(VALDATA)),
       ncol(VALDATA) == ncol(Y),
-      all(VALDATA >= 0),
-      all(t(VALDATA) <= cat - 1),
+      all(VALDATA[, !numeric] >= 0),
+      all(t(VALDATA)[!numeric, ] <= cat[!numeric] - 1),
       is.null(VALGROUP) || length(VALGROUP) == nrow(VALDATA)
     )
+    if (ncol(X) > 0 && is.null(VALX)) stop("VALX is required with VALDATA and X.")
+    if (is.null(VALX)) VALX <- matrix(0, nrow(VALDATA), 0)
+    stopifnot(is.matrix(VALX), is.numeric(VALX), all(is.finite(VALX)), nrow(VALX) == nrow(VALDATA), ncol(VALX) == ncol(X))
+    storage.mode(VALX) <- "double"
     valgroup <- if (is.null(VALGROUP)) rep(0, nrow(VALDATA)) else match(VALGROUP, unique(GROUP)) - 1
     if (anyNA(valgroup)) stop("VALGROUP must use the labels of GROUP.")
-    valfreq <- unlist(lapply(seq_len(G) - 1, function(g) pairs_freq(round(VALDATA[valgroup == g, , drop = FALSE]), cat)))
+    valY <- VALDATA
+    storage.mode(valY) <- "double"
+    valY[, !numeric] <- round(valY[, !numeric])
+    val <- c(list(Y = valY, group = valgroup), strata_index(VALX, valgroup, valY, cat, numeric(0)))
   }
   out <- list(
     Y = Y,
     n = nrow(Y),
     p = ncol(Y),
     cat = cat,
-    freq = freq,
-    valfreq = valfreq,
+    numeric = numeric,
+    freq = unlist(st$freq),
+    valfreq = unlist(val$freq),
     missing = MISSING,
     uweights = uweights,
     ufreq = ufreq,
@@ -109,10 +146,71 @@ set_latpl_data <- function(DATA, VALDATA = NULL, MISSING = c("listwise", "pairwi
     cluster = cluster,
     group = group,
     ngroups = G,
+    X = X,
+    stratum = st$stratum,
+    strata = st$strata,
+    tables = st$tables,
+    val = val,
     freqTime = as.numeric(difftime(Sys.time(), freq_start_time, units = "secs"))
   )
   class(out) <- "latpl_data"
   out
+}
+
+#' Distinct covariate rows and their frequency tables
+#'
+#' @param X Matrix of covariates.
+#' @param GROUP Group of each row, from zero.
+#' @param Y Data matrix.
+#' @param CAT Number of categories of each item.
+#' @param WEIGHTS Unit weights, or empty for unit weights.
+#' @return A list with, for each group, the distinct rows of `X` in order of appearance `strata`, whether frequency
+#'   tables are used `tables` (see [use_tables()]) and the tables `freq` (`NULL` when not used), and the index `stratum`
+#'   (from zero) of each row among the strata of its group.
+#' @seealso [set_latpl_data()]
+#' @keywords internal
+strata_index <- function(X, GROUP, Y, CAT, WEIGHTS) {
+  G <- max(GROUP) + 1
+  out <- list(strata = vector("list", G), tables = logical(G), freq = vector("list", G), stratum = numeric(nrow(X)))
+  for (g in seq_len(G)) {
+    rows <- GROUP == g - 1
+    key <- do.call(paste, as.data.frame(X[rows, , drop = FALSE]))
+    first <- if (ncol(X)) !duplicated(key) else which.max(rows) == which(rows)
+    out$strata[[g]] <- X[rows, , drop = FALSE][first, , drop = FALSE]
+    out$stratum[rows] <- if (ncol(X)) match(key, key[first]) - 1 else 0
+    out$tables[g] <- use_tables(nrow(out$strata[[g]]), Y[rows, , drop = FALSE], CAT, out$stratum[rows])
+    if (out$tables[g]) {
+      out$freq[[g]] <- pairs_freq(Y[rows, , drop = FALSE], CAT, if (length(WEIGHTS)) WEIGHTS[rows] else numeric(0), out$stratum[rows])
+    }
+  }
+  out
+}
+
+#' Whether frequency tables are cheaper than individual observations
+#'
+#' Compares the bivariate normal probabilities evaluated by each route over all pairs of ordinal items. A table
+#' evaluates \eqn{(c_k - 1)(c_l - 1)} of them for each pair and stratum. An observation evaluates only the corners of its
+#' cell: \eqn{a_k a_l}, where \eqn{a} is 1 for an extreme category, 2 for a middle one and 0 for a missing response,
+#' and identical observations count once.
+#'
+#' @param STRATA Number of distinct covariate rows.
+#' @param Y Data matrix.
+#' @param CAT Number of categories of each item.
+#' @param STRATUM Stratum of each row of `Y`.
+#' @return `TRUE` if the tables should be used. They must also fit in memory.
+#' @seealso [set_latpl_data()], [engine()]
+#' @keywords internal
+use_tables <- function(STRATA, Y, CAT, STRATUM) {
+  ordinal <- CAT > 1
+  if (STRATA == 1 || sum(ordinal) < 2) return(TRUE)
+  pairs_of <- function(a, b) (a^2 - b) / 2
+  cells <- pairs_of(sum(CAT[ordinal]), sum(CAT[ordinal]^2))
+  if (STRATA * cells > 5e7) return(FALSE)
+  rows <- if (any(!ordinal)) Y else unique(cbind(STRATUM, Y))[, -1, drop = FALSE]
+  categories <- rows[, ordinal, drop = FALSE]
+  a <- 2 - (categories == 0) - sweep(categories, 2, CAT[ordinal] - 1, "==")
+  a[is.na(a)] <- 0
+  STRATA * pairs_of(sum(CAT[ordinal] - 1), sum((CAT[ordinal] - 1)^2)) < sum(pairs_of(rowSums(a), rowSums(a^2)))
 }
 
 #' Factor model for pairwise likelihood estimation
@@ -150,18 +248,26 @@ set_latpl_data <- function(DATA, VALDATA = NULL, MISSING = c("listwise", "pairwi
 #' @param SCALES \eqn{p}-dimensional vector of positive scale factors of the latent responses, with
 #'  `PARAMETERIZATION = "delta"`. Elements set to `NA` are free, numerical values are fixed. If
 #'  `NULL`, all one.
+#' @param GAMMA \eqn{q*x}-dimensional matrix of regressions of the latent variables on the `x` covariates of
+#'  [set_latpl_data()]. Elements set to `NA` are free, numerical values are fixed. If `NULL`, all zero.
+#' @param KAPPA \eqn{p*x}-dimensional matrix of direct effects of the covariates on the latent responses.
+#'  Elements set to `NA` are free, numerical values are fixed. If `NULL`, all zero.
+#' @param NUMERIC Logical vector marking the numeric items, as in [set_latpl_data()]. Unless `INTERCEPTS`
+#'  and `SCALES` say otherwise, their intercepts and residual standard deviations are free. For them,
+#'  `SCALES` holds the residual standard deviations under both parameterizations.
 #'
 #' @return An object of class `latpl_model` with the identified loading constraints `CONSTRMAT`,
 #'   the log standard deviations of the latent variables `CONSTRLOGSD` (`NA` when free),
 #'   `CORRFLAG`, `STDLV`, `CONSTRAINTS`, `LATCOV`, `REGMAT`, `RESCOV`, `PARAMETERIZATION`, the
 #'   intercepts `CONSTRINT` and latent means `CONSTRMEAN`, the log scale factors or log residual
-#'   standard deviations `CONSTRLOGSCALE` (`NA` when free), and the numbers of items `p` and latent
-#'   variables `q`.
+#'   standard deviations `CONSTRLOGSCALE` (`NA` when free), the covariate effects `GAMMA` and `KAPPA`,
+#'   the indicator of numeric items `NUMERIC`, and the numbers of items `p` and latent variables `q`.
 #'
 #' @export
 set_latpl_model <- function(CONSTRMAT, CONSTRVAR = NULL, CORRFLAG = TRUE, STDLV = TRUE, CONSTRAINTS = NULL,
                            LATCOV = c("lkj", "direct"), REGMAT = NULL, RESCOV = NULL,
-                           PARAMETERIZATION = c("delta", "theta"), INTERCEPTS = NULL, MEANS = NULL, SCALES = NULL) {
+                           PARAMETERIZATION = c("delta", "theta"), INTERCEPTS = NULL, MEANS = NULL, SCALES = NULL,
+                           GAMMA = NULL, KAPPA = NULL, NUMERIC = NULL) {
   LATCOV <- match.arg(LATCOV)
   PARAMETERIZATION <- match.arg(PARAMETERIZATION)
   stopifnot(is.matrix(CONSTRMAT), !is.infinite(CONSTRMAT), CORRFLAG %in% c(0, 1), is.logical(STDLV))
@@ -192,14 +298,16 @@ set_latpl_model <- function(CONSTRMAT, CONSTRVAR = NULL, CORRFLAG = TRUE, STDLV 
     if (any(is.na(diag(REGMAT)) | diag(REGMAT) != 0)) stop("The diagonal of REGMAT must be zero.")
     if (!anyNA(REGMAT) && abs(det(diag(q) - REGMAT)) < 1e-8) stop("diag(q) - REGMAT must be invertible.")
   }
-  if (is.null(INTERCEPTS)) INTERCEPTS <- rep(0, p)
+  if (is.null(NUMERIC)) NUMERIC <- rep(FALSE, p)
+  stopifnot(is.logical(NUMERIC), length(NUMERIC) == p, !anyNA(NUMERIC))
+  if (is.null(INTERCEPTS)) INTERCEPTS <- ifelse(NUMERIC, NA, 0)
   if (is.null(MEANS)) MEANS <- rep(0, q)
   stopifnot(length(INTERCEPTS) == p, !is.infinite(INTERCEPTS), length(MEANS) == q, !is.infinite(MEANS))
   if (PARAMETERIZATION == "theta") {
     if (!is.null(SCALES)) stop("SCALES requires PARAMETERIZATION = \"delta\"; set the residual variances in the diagonal of RESCOV.")
-    SCALES <- if (length(RESCOV)) sqrt(diag(RESCOV)) else rep(1, p)
+    SCALES <- if (length(RESCOV)) sqrt(diag(RESCOV)) else ifelse(NUMERIC, NA, 1)
   }
-  if (is.null(SCALES)) SCALES <- rep(1, p)
+  if (is.null(SCALES)) SCALES <- ifelse(NUMERIC, NA, 1)
   stopifnot(length(SCALES) == p, !is.infinite(SCALES))
   if (any(SCALES <= 0, na.rm = TRUE)) stop(if (PARAMETERIZATION == "theta") "Residual variances must be positive." else "SCALES must be positive.")
   if (length(RESCOV)) {
@@ -207,10 +315,15 @@ set_latpl_model <- function(CONSTRMAT, CONSTRVAR = NULL, CORRFLAG = TRUE, STDLV 
     diag(RESCOV) <- 0
     if (!identical(is.na(RESCOV), t(is.na(RESCOV))) || !isSymmetric(unname(RESCOV))) stop("RESCOV must be symmetric.")
   }
+  nx <- max(NCOL(GAMMA) * !is.null(GAMMA), NCOL(KAPPA) * !is.null(KAPPA))
+  if (is.null(GAMMA)) GAMMA <- matrix(0, q, nx)
+  if (is.null(KAPPA)) KAPPA <- matrix(0, p, nx)
+  stopifnot(is.matrix(GAMMA), is.matrix(KAPPA), dim(GAMMA) == c(q, nx), dim(KAPPA) == c(p, nx), !is.infinite(GAMMA), !is.infinite(KAPPA))
+  storage.mode(GAMMA) <- storage.mode(KAPPA) <- "double"
   out <- list(CONSTRMAT = CONSTRMAT, CONSTRLOGSD = log(sqrt(CONSTRVAR)), CORRFLAG = as.logical(CORRFLAG), STDLV = STDLV,
               CONSTRAINTS = CONSTRAINTS, LATCOV = LATCOV, p = p, q = q, REGMAT = REGMAT, RESCOV = RESCOV,
               PARAMETERIZATION = PARAMETERIZATION, CONSTRINT = as.numeric(INTERCEPTS), CONSTRMEAN = as.numeric(MEANS),
-              CONSTRLOGSCALE = log(as.numeric(SCALES)))
+              CONSTRLOGSCALE = log(as.numeric(SCALES)), GAMMA = GAMMA, KAPPA = KAPPA, NUMERIC = NUMERIC)
   class(out) <- "latpl_model"
   out
 }

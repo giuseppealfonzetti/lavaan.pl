@@ -19,6 +19,7 @@ print.latpl_fit <- function(x, ...){
        "  - Intercepts:", x$dims$nint, "\n",
        "  - Latent means:", x$dims$nmean, "\n",
        "  - Scales:", x$dims$nscale, "\n",
+       "  - Effects of covariates:", x$dims$ngam + x$dims$nkap, "\n",
        "  - Total:", x$dims$npar, "\n\n")
 
   if(x$method == 'ucminf'){
@@ -60,11 +61,13 @@ print.latpl_fit <- function(x, ...){
 print.latpl_data <- function(x, ...) {
   cat(
     "<latpl_data>", x$n, "observations,", x$p, "items (", x$p * (x$p - 1) / 2, "pairs )\n",
-    " Categories per item:", paste(range(x$cat), collapse = " to "), "\n",
+    " Numeric items:", sum(x$numeric), "\n",
+    " Categories per ordinal item:", if (all(x$numeric)) "none" else paste(range(x$cat[!x$numeric]), collapse = " to "), "\n",
     " Missing values:", sum(is.na(x$Y)), "(", x$missing, ")\n",
     " Sampling weights:", if (length(x$weights)) "yes" else "none", "\n",
     " Clusters:", if (length(x$cluster)) length(unique(x$cluster)) else "none", "\n",
     " Groups:", x$ngroups, "\n",
+    " Covariates:", ncol(x$X), "(", sum(vapply(x$strata, nrow, numeric(1))), "strata )\n",
     " Validation data:", if (is.null(x$valfreq)) "none" else "yes", "\n"
   )
   invisible(x)
@@ -87,6 +90,7 @@ print.latpl_model <- function(x, ...) {
     " Free residual covariances:", sum(is.na(x$RESCOV[upper.tri(x$RESCOV)])), "\n",
     " Parameterization:", x$PARAMETERIZATION, "\n",
     " Free intercepts, latent means, scales:", sum(is.na(x$CONSTRINT)), sum(is.na(x$CONSTRMEAN)), sum(is.na(x$CONSTRLOGSCALE)), "\n",
+    " Free effects of covariates:", sum(is.na(x$GAMMA)) + sum(is.na(x$KAPPA)), "\n",
     " Linear constraints:", NROW(x$CONSTRAINTS$A), "\n",
     " Identification:", if (x$STDLV) "standardised latent variables" else "marker loadings", "\n"
   )
@@ -125,7 +129,8 @@ get_par.latpl_fit <- function(OBJ, OPTION = c("list", "raw", "transformed"), ...
     block <- theta_block(m, nthr)
     R <- stats::cov2cor(theta2par(m, th)$latent_correlations)
     c(th[block %in% c("tau", "lambda")], if (any(block == "corr")) R[upper.tri(R)], exp(th[block == "logsd"]),
-      th[block %in% c("beta", "rescov", "nu", "alpha")], exp((1 + (m$PARAMETERIZATION == "theta")) * th[block == "scale"]))
+      th[block %in% c("beta", "rescov", "nu", "alpha")], exp((1 + (m$PARAMETERIZATION == "theta" | m$NUMERIC)[is.na(m$CONSTRLOGSCALE)]) * th[block == "scale"]),
+      th[block %in% c("gamma", "kappa")])
   }, models, split(OBJ$theta, rep(seq_along(d), d))), use.names = FALSE)
 }
 

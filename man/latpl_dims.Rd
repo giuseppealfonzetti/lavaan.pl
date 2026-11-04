@@ -15,7 +15,7 @@ latpl_dims(DATA, MODEL)
 A list with the sample size \code{n}, the numbers of items \code{p} and latent variables \code{q}, the numbers of
 categories \code{cat}, the number of groups \code{ngroups}, the number of pairs \code{pairs} over all groups, the size of each
 parameter block summed over groups (\code{nthr}, \code{nload}, \code{ncorr}, \code{nvar}, \code{nreg}, \code{nres}, \code{nint}, \code{nmean},
-\code{nscale}) and the number of parameters \code{d}.
+\code{nscale}, \code{ngam}, \code{nkap}), the number of covariates \code{nx} and the number of parameters \code{d}.
 }
 \description{
 Dimensions of a fit

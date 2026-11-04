@@ -4,16 +4,20 @@
 \alias{engine}
 \title{Inputs of the C++ routines}
 \usage{
-engine(DATA, MODEL)
+engine(DATA, MODEL, TABLES = NA)
 }
 \arguments{
 \item{DATA}{Data object from \code{\link[=set_latpl_data]{set_latpl_data()}}.}
 
 \item{MODEL}{Model object from \code{\link[=set_latpl_model]{set_latpl_model()}} or \code{\link[=set_latpl_groups]{set_latpl_groups()}}.}
+
+\item{TABLES}{Use the frequency tables (\code{TRUE}) or the individual observations (\code{FALSE}). If \code{NA}, as set by
+\code{\link[=set_latpl_data]{set_latpl_data()}}.}
 }
 \value{
 A list with \code{model} and \code{data}, each a list with one element per group: the model specification, and
-the frequencies, distinct response patterns, unit weights and cluster weights of the group.
+the frequencies, distinct covariate rows, distinct response patterns with their strata, unit weights and cluster
+weights of the group.
 }
 \description{
 Inputs of the C++ routines

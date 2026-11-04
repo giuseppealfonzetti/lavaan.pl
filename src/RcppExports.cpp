@@ -53,17 +53,17 @@ BEGIN_RCPP
 END_RCPP
 }
 // cpp_saturated
-Rcpp::List cpp_saturated(const Eigen::Map<Eigen::VectorXd> TAU, const Eigen::Map<Eigen::VectorXd> RHO, const Rcpp::List DATA, const int ORDER, const bool SCORES);
-RcppExport SEXP _lavaan_pl_cpp_saturated(SEXP TAUSEXP, SEXP RHOSEXP, SEXP DATASEXP, SEXP ORDERSEXP, SEXP SCORESSEXP) {
+Rcpp::List cpp_saturated(const Eigen::Map<Eigen::VectorXd> ITEMS, const Eigen::Map<Eigen::VectorXd> RHO, const Rcpp::List DATA, const int ORDER, const bool SCORES);
+RcppExport SEXP _lavaan_pl_cpp_saturated(SEXP ITEMSSEXP, SEXP RHOSEXP, SEXP DATASEXP, SEXP ORDERSEXP, SEXP SCORESSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< const Eigen::Map<Eigen::VectorXd> >::type TAU(TAUSEXP);
+    Rcpp::traits::input_parameter< const Eigen::Map<Eigen::VectorXd> >::type ITEMS(ITEMSSEXP);
     Rcpp::traits::input_parameter< const Eigen::Map<Eigen::VectorXd> >::type RHO(RHOSEXP);
     Rcpp::traits::input_parameter< const Rcpp::List >::type DATA(DATASEXP);
     Rcpp::traits::input_parameter< const int >::type ORDER(ORDERSEXP);
     Rcpp::traits::input_parameter< const bool >::type SCORES(SCORESSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_saturated(TAU, RHO, DATA, ORDER, SCORES));
+    rcpp_result_gen = Rcpp::wrap(cpp_saturated(ITEMS, RHO, DATA, ORDER, SCORES));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -86,21 +86,22 @@ BEGIN_RCPP
 END_RCPP
 }
 // pairs_freq
-Eigen::VectorXd pairs_freq(const Eigen::Map<Eigen::MatrixXd> Y, const Eigen::Map<Eigen::VectorXd> C_VEC, const Rcpp::NumericVector WEIGHTS);
-RcppExport SEXP _lavaan_pl_pairs_freq(SEXP YSEXP, SEXP C_VECSEXP, SEXP WEIGHTSSEXP) {
+Eigen::VectorXd pairs_freq(const Eigen::Map<Eigen::MatrixXd> Y, const Eigen::Map<Eigen::VectorXd> C_VEC, const Rcpp::NumericVector WEIGHTS, const Rcpp::NumericVector STRATA);
+RcppExport SEXP _lavaan_pl_pairs_freq(SEXP YSEXP, SEXP C_VECSEXP, SEXP WEIGHTSSEXP, SEXP STRATASEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< const Eigen::Map<Eigen::MatrixXd> >::type Y(YSEXP);
     Rcpp::traits::input_parameter< const Eigen::Map<Eigen::VectorXd> >::type C_VEC(C_VECSEXP);
     Rcpp::traits::input_parameter< const Rcpp::NumericVector >::type WEIGHTS(WEIGHTSSEXP);
-    rcpp_result_gen = Rcpp::wrap(pairs_freq(Y, C_VEC, WEIGHTS));
+    Rcpp::traits::input_parameter< const Rcpp::NumericVector >::type STRATA(STRATASEXP);
+    rcpp_result_gen = Rcpp::wrap(pairs_freq(Y, C_VEC, WEIGHTS, STRATA));
     return rcpp_result_gen;
 END_RCPP
 }
 // cpp_sa
-Rcpp::List cpp_sa(const Eigen::Map<Eigen::MatrixXd> STARTS, const Eigen::Map<Eigen::MatrixXd> K, const Eigen::Map<Eigen::VectorXd> C, const Rcpp::List MODEL, const Rcpp::List DATA, const Eigen::Map<Eigen::VectorXd> VALFREQ, const Eigen::Map<Eigen::VectorXd> VALUFREQ, const int PAIRS_PER_ITERATION, const double ALPHA, const int ADAM_EPOCHS, const int BURN_EPOCHS, const int EPOCHS, const double TOL, const double DECAY, const double AVG_FROM, const int GAIN, const int SEED, const bool ADAM_ONLY, const bool VERBOSE);
-RcppExport SEXP _lavaan_pl_cpp_sa(SEXP STARTSSEXP, SEXP KSEXP, SEXP CSEXP, SEXP MODELSEXP, SEXP DATASEXP, SEXP VALFREQSEXP, SEXP VALUFREQSEXP, SEXP PAIRS_PER_ITERATIONSEXP, SEXP ALPHASEXP, SEXP ADAM_EPOCHSSEXP, SEXP BURN_EPOCHSSEXP, SEXP EPOCHSSEXP, SEXP TOLSEXP, SEXP DECAYSEXP, SEXP AVG_FROMSEXP, SEXP GAINSEXP, SEXP SEEDSEXP, SEXP ADAM_ONLYSEXP, SEXP VERBOSESEXP) {
+Rcpp::List cpp_sa(const Eigen::Map<Eigen::MatrixXd> STARTS, const Eigen::Map<Eigen::MatrixXd> K, const Eigen::Map<Eigen::VectorXd> C, const Rcpp::List MODEL, const Rcpp::List DATA, const Rcpp::List VALDATA, const int PAIRS_PER_ITERATION, const double ALPHA, const int ADAM_EPOCHS, const int BURN_EPOCHS, const int EPOCHS, const double TOL, const double DECAY, const double AVG_FROM, const int GAIN, const int SEED, const bool ADAM_ONLY, const bool VERBOSE);
+RcppExport SEXP _lavaan_pl_cpp_sa(SEXP STARTSSEXP, SEXP KSEXP, SEXP CSEXP, SEXP MODELSEXP, SEXP DATASEXP, SEXP VALDATASEXP, SEXP PAIRS_PER_ITERATIONSEXP, SEXP ALPHASEXP, SEXP ADAM_EPOCHSSEXP, SEXP BURN_EPOCHSSEXP, SEXP EPOCHSSEXP, SEXP TOLSEXP, SEXP DECAYSEXP, SEXP AVG_FROMSEXP, SEXP GAINSEXP, SEXP SEEDSEXP, SEXP ADAM_ONLYSEXP, SEXP VERBOSESEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -109,8 +110,7 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< const Eigen::Map<Eigen::VectorXd> >::type C(CSEXP);
     Rcpp::traits::input_parameter< const Rcpp::List >::type MODEL(MODELSEXP);
     Rcpp::traits::input_parameter< const Rcpp::List >::type DATA(DATASEXP);
-    Rcpp::traits::input_parameter< const Eigen::Map<Eigen::VectorXd> >::type VALFREQ(VALFREQSEXP);
-    Rcpp::traits::input_parameter< const Eigen::Map<Eigen::VectorXd> >::type VALUFREQ(VALUFREQSEXP);
+    Rcpp::traits::input_parameter< const Rcpp::List >::type VALDATA(VALDATASEXP);
     Rcpp::traits::input_parameter< const int >::type PAIRS_PER_ITERATION(PAIRS_PER_ITERATIONSEXP);
     Rcpp::traits::input_parameter< const double >::type ALPHA(ALPHASEXP);
     Rcpp::traits::input_parameter< const int >::type ADAM_EPOCHS(ADAM_EPOCHSSEXP);
@@ -123,7 +123,7 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< const int >::type SEED(SEEDSEXP);
     Rcpp::traits::input_parameter< const bool >::type ADAM_ONLY(ADAM_ONLYSEXP);
     Rcpp::traits::input_parameter< const bool >::type VERBOSE(VERBOSESEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_sa(STARTS, K, C, MODEL, DATA, VALFREQ, VALUFREQ, PAIRS_PER_ITERATION, ALPHA, ADAM_EPOCHS, BURN_EPOCHS, EPOCHS, TOL, DECAY, AVG_FROM, GAIN, SEED, ADAM_ONLY, VERBOSE));
+    rcpp_result_gen = Rcpp::wrap(cpp_sa(STARTS, K, C, MODEL, DATA, VALDATA, PAIRS_PER_ITERATION, ALPHA, ADAM_EPOCHS, BURN_EPOCHS, EPOCHS, TOL, DECAY, AVG_FROM, GAIN, SEED, ADAM_ONLY, VERBOSE));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -134,8 +134,8 @@ static const R_CallMethodDef CallEntries[] = {
     {"_lavaan_pl_cpp_rho", (DL_FUNC) &_lavaan_pl_cpp_rho, 3},
     {"_lavaan_pl_cpp_saturated", (DL_FUNC) &_lavaan_pl_cpp_saturated, 5},
     {"_lavaan_pl_cpp_saturated_traces", (DL_FUNC) &_lavaan_pl_cpp_saturated_traces, 8},
-    {"_lavaan_pl_pairs_freq", (DL_FUNC) &_lavaan_pl_pairs_freq, 3},
-    {"_lavaan_pl_cpp_sa", (DL_FUNC) &_lavaan_pl_cpp_sa, 19},
+    {"_lavaan_pl_pairs_freq", (DL_FUNC) &_lavaan_pl_pairs_freq, 4},
+    {"_lavaan_pl_cpp_sa", (DL_FUNC) &_lavaan_pl_cpp_sa, 18},
     {NULL, NULL, 0}
 };
 

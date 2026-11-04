@@ -4,7 +4,7 @@
 \alias{pairs_freq}
 \title{Pairwise frequencies}
 \usage{
-pairs_freq(Y, C_VEC, WEIGHTS = as.numeric(c()))
+pairs_freq(Y, C_VEC, WEIGHTS = as.numeric(c()), STRATA = as.numeric(c()))
 }
 \arguments{
 \item{Y}{Data matrix of dimension \eqn{n*p}, with categories coded from zero and \code{NA} for
@@ -13,10 +13,13 @@ missing responses.}
 \item{C_VEC}{Number of categories of each item.}
 
 \item{WEIGHTS}{Optional vector of unit weights; empty for unit weights.}
+
+\item{STRATA}{Optional vector with the stratum of each row, from zero; empty for a single stratum.}
 }
 \value{
 The (weighted) frequencies of the bivariate response patterns: pairs \eqn{(k, l)},
 \eqn{l < k}, ordered by \eqn{k}, and within each pair the categories of \eqn{k} then \eqn{l}.
+With \code{STRATA}, the tables of each stratum one after the other.
 }
 \description{
 Pairwise frequencies

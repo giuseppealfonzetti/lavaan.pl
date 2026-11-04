@@ -19,7 +19,10 @@ set_latpl_model(
   PARAMETERIZATION = c("delta", "theta"),
   INTERCEPTS = NULL,
   MEANS = NULL,
-  SCALES = NULL
+  SCALES = NULL,
+  GAMMA = NULL,
+  KAPPA = NULL,
+  NUMERIC = NULL
 )
 }
 \arguments{
@@ -71,14 +74,24 @@ to \code{NA} are free, numerical values are fixed. If \code{NULL}, all zero.}
 \item{SCALES}{\eqn{p}-dimensional vector of positive scale factors of the latent responses, with
 \code{PARAMETERIZATION = "delta"}. Elements set to \code{NA} are free, numerical values are fixed. If
 \code{NULL}, all one.}
+
+\item{GAMMA}{\eqn{q*x}-dimensional matrix of regressions of the latent variables on the \code{x} covariates of
+\code{\link[=set_latpl_data]{set_latpl_data()}}. Elements set to \code{NA} are free, numerical values are fixed. If \code{NULL}, all zero.}
+
+\item{KAPPA}{\eqn{p*x}-dimensional matrix of direct effects of the covariates on the latent responses.
+Elements set to \code{NA} are free, numerical values are fixed. If \code{NULL}, all zero.}
+
+\item{NUMERIC}{Logical vector marking the numeric items, as in \code{\link[=set_latpl_data]{set_latpl_data()}}. Unless \code{INTERCEPTS}
+and \code{SCALES} say otherwise, their intercepts and residual standard deviations are free. For them,
+\code{SCALES} holds the residual standard deviations under both parameterizations.}
 }
 \value{
 An object of class \code{latpl_model} with the identified loading constraints \code{CONSTRMAT},
 the log standard deviations of the latent variables \code{CONSTRLOGSD} (\code{NA} when free),
 \code{CORRFLAG}, \code{STDLV}, \code{CONSTRAINTS}, \code{LATCOV}, \code{REGMAT}, \code{RESCOV}, \code{PARAMETERIZATION}, the
 intercepts \code{CONSTRINT} and latent means \code{CONSTRMEAN}, the log scale factors or log residual
-standard deviations \code{CONSTRLOGSCALE} (\code{NA} when free), and the numbers of items \code{p} and latent
-variables \code{q}.
+standard deviations \code{CONSTRLOGSCALE} (\code{NA} when free), the covariate effects \code{GAMMA} and \code{KAPPA},
+the indicator of numeric items \code{NUMERIC}, and the numbers of items \code{p} and latent variables \code{q}.
 }
 \description{
 Print method for \code{latpl_model} objects

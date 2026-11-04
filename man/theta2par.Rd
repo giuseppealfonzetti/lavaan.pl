@@ -17,8 +17,9 @@ par2theta(MODEL, PAR)
 \item{PAR}{List with the thresholds \code{thresholds}, the loading matrix \code{loadings}, the latent
 (disturbance) covariance matrix \code{latent_correlations}, the regression matrix \code{regressions}, the
 residual covariance matrix \code{residual_covariances} (with the residual variances on the diagonal
-when \code{PARAMETERIZATION = "theta"}), the intercepts \code{intercepts}, the latent means \code{means} and,
-with \code{PARAMETERIZATION = "delta"}, the scale factors \code{scales}.}
+when \code{PARAMETERIZATION = "theta"}), the intercepts \code{intercepts}, the latent means \code{means},
+with \code{PARAMETERIZATION = "delta"}, the scale factors \code{scales} and, with covariates, their effects
+\code{gamma} and \code{kappa}.}
 }
 \value{
 \code{theta2par()} returns the list \code{PAR}, or with \code{\link[=set_latpl_groups]{set_latpl_groups()}} a list of them, one

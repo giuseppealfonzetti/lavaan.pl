@@ -81,6 +81,47 @@ set.seed(3)
 bfi_groups$w <- runif(1000, .2, 3)
 bfi_groups$cl <- rep(1:40, length.out = 1000)
 
+set.seed(7)
+mimic_n <- 800
+mimic_data <- data.frame(
+  x1 = rbinom(mimic_n, 1, .5),
+  x2 = rbinom(mimic_n, 1, .3),
+  z1 = rnorm(mimic_n),
+  z2 = round(rnorm(mimic_n, 40, 10))
+)
+mimic_factor <- .5 * mimic_data$x1 - .3 * mimic_data$x2 + .4 * mimic_data$z1 + rnorm(mimic_n)
+for (j in 1:6) {
+  mimic_data[[paste0("y", j)]] <- ordered(findInterval(
+    .7 * mimic_factor + .2 * (j == 1) * mimic_data$x2 + rnorm(mimic_n, 0, sqrt(.51)),
+    c(-.8, 0, .8)
+  ))
+}
+mimic_missing <- mimic_data
+for (j in 2:5) {
+  mimic_missing[[paste0("y", j)]][runif(mimic_n) < .15] <- NA
+}
+mimic_data$w <- runif(mimic_n, .2, 3)
+mimic_data$cl <- rep(1:40, length.out = mimic_n)
+mimic_data$g <- rep(c("a", "b"), length.out = mimic_n)
+mimic_items <- "f =~ y1 + y2 + y3 + y4 + y5 + y6"
+mixed_data <- mimic_data[, c("x1", "z1", "w", "cl", "g")]
+for (j in 1:6) {
+  latent <- .7 * mimic_factor + rnorm(mimic_n, 0, sqrt(.51))
+  mixed_data[[paste0("y", j)]] <- if (j <= 2) {
+    10 * latent + 5
+  } else {
+    ordered(findInterval(latent, c(-.8, 0, .8)))
+  }
+}
+mixed_missing <- mixed_data
+for (j in c(1, 3, 4)) {
+  mixed_missing[[paste0("y", j)]][runif(mimic_n) < .15] <- NA
+}
+mixed_numeric <- mixed_data
+for (j in 3:4) {
+  mixed_numeric[[paste0("y", j)]] <- as.numeric(mixed_numeric[[paste0("y", j)]]) + rnorm(mimic_n)
+}
+
 #### Models ####
 two_factors_three_items <- "A =~ A1 + A2 + A3\nC =~ C1 + C2 + C3"
 two_factors_four_items <- "A =~ A1 + A2 + A3 + A4\nC =~ C1 + C2 + C3 + C4"
@@ -244,8 +285,122 @@ multigroup_cases <- function(parameterization) {
   )
 }
 
+covariate_case <- function(regressions, ..., data = mimic_data) {
+  function(fit) {
+    fit$sem(
+      paste(mimic_items, regressions, sep = "\n"),
+      data,
+      test = "mean.var.adjusted",
+      ...
+    )
+  }
+}
+
 lavaan_pml_cases <- c(
   setNames(lapply(grid, grid_case), paste0("grid/", names(grid))),
+  list(
+    "mixed/std.lv" = function(fit) {
+      fit$cfa(mimic_items, mixed_data, std.lv = TRUE, test = "mean.var.adjusted")
+    },
+    "mixed/marker" = function(fit) {
+      fit$cfa(mimic_items, mixed_data, test = "mean.var.adjusted")
+    },
+    "mixed/ordinal marker" = function(fit) {
+      fit$cfa(
+        "f =~ y3 + y1 + y2 + y4 + y5 + y6",
+        mixed_data,
+        test = "mean.var.adjusted"
+      )
+    },
+    "mixed/theta" = function(fit) {
+      fit$cfa(
+        mimic_items,
+        mixed_data,
+        std.lv = TRUE,
+        parameterization = "theta",
+        test = "mean.var.adjusted"
+      )
+    },
+    "mixed/residual covariance" = function(fit) {
+      fit$cfa(
+        paste(mimic_items, "y1 ~~ y3", sep = "\n"),
+        mixed_data,
+        std.lv = TRUE,
+        test = "mean.var.adjusted"
+      )
+    },
+    "mixed/two factors" = function(fit) {
+      fit$cfa(
+        "f1 =~ y1 + y3 + y4\nf2 =~ y2 + y5 + y6",
+        mixed_data,
+        std.lv = TRUE,
+        test = "mean.var.adjusted"
+      )
+    },
+    "mixed/pairwise" = function(fit) {
+      fit$cfa(
+        mimic_items,
+        mixed_missing,
+        std.lv = TRUE,
+        missing = "pairwise",
+        test = "mean.var.adjusted"
+      )
+    },
+    "mixed/two groups" = function(fit) {
+      fit$cfa(
+        mimic_items,
+        mixed_data,
+        std.lv = TRUE,
+        group = "g",
+        test = "mean.var.adjusted"
+      )
+    },
+    "mixed/equal loadings" = function(fit) {
+      fit$cfa(
+        "f =~ y1 + y2 + a*y3 + a*y4 + y5 + y6",
+        mixed_data,
+        std.lv = TRUE,
+        test = "mean.var.adjusted"
+      )
+    },
+    "mixed/mostly numeric" = function(fit) {
+      fit$cfa(mimic_items, mixed_numeric, std.lv = TRUE, test = "mean.var.adjusted")
+    },
+    "covariates/binary, marker" = covariate_case("f ~ x1 + x2"),
+    "covariates/binary, std.lv" = covariate_case("f ~ x1 + x2", std.lv = TRUE),
+    "covariates/continuous" = covariate_case("f ~ x1 + z1"),
+    "covariates/many strata" = covariate_case("f ~ x1 + z2"),
+    "covariates/direct effect" = covariate_case("f ~ x1 + x2\ny1 ~ x2"),
+    "covariates/direct effect only" = covariate_case("y1 ~ x2 + z1"),
+    "covariates/theta" = covariate_case(
+      "f ~ x1 + x2",
+      parameterization = "theta"
+    ),
+    "covariates/equal effects" = covariate_case("f ~ b*x1 + b*x2"),
+    "covariates/two groups" = covariate_case(
+      "f ~ x1 + x2",
+      group = "g",
+      std.lv = TRUE
+    ),
+    "covariates/group equal" = covariate_case(
+      "f ~ x1 + x2",
+      group = "g",
+      group.equal = c("loadings", "thresholds")
+    ),
+    "covariates/pairwise" = covariate_case(
+      "f ~ x1 + x2",
+      missing = "pairwise",
+      data = mimic_missing
+    ),
+    "covariates/clusters" = function(fit) {
+      fit$sem(
+        paste(mimic_items, "f ~ x1 + x2", sep = "\n"),
+        mimic_data,
+        test = "none",
+        cluster = "cl"
+      )
+    }
+  ),
   setNames(
     lapply(grid[grid_with_tests], grid_test_case),
     paste0("tests/", grid_with_tests)

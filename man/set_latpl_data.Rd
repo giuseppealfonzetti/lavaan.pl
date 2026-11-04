@@ -16,7 +16,10 @@ set_latpl_data(
   CLUSTER = NULL,
   GROUP = NULL,
   VALGROUP = NULL,
-  WEIGHTS_NORMALIZATION = c("total", "group")
+  WEIGHTS_NORMALIZATION = c("total", "group"),
+  X = NULL,
+  VALX = NULL,
+  NUMERIC = NULL
 )
 }
 \arguments{
@@ -24,8 +27,8 @@ set_latpl_data(
 
 \item{...}{Ignored.}
 
-\item{DATA}{Integer data matrix of dimension \eqn{n*p}. Categories must be
-coded starting from zero.}
+\item{DATA}{Data matrix of dimension \eqn{n*p}. Categories of ordinal items must be
+integers coded starting from zero.}
 
 \item{VALDATA}{Validation data used to monitor convergence of stochastic
 approximations. If \code{NULL}, data passed via \code{DATA} is used for monitoring
@@ -51,19 +54,30 @@ with \code{VALDATA} and several groups.}
 
 \item{WEIGHTS_NORMALIZATION}{Normalisation of the sampling weights, as in lavaan: to the total
 number of observations (\code{"total"}) or to the number of observations of each group (\code{"group"}).}
+
+\item{X}{Numeric matrix of covariates, one row per observation, on which the responses are
+conditioned. Observations with missing covariates are removed. If \code{NULL}, no covariates.}
+
+\item{VALX}{Covariates of \code{VALDATA}. Required with \code{VALDATA} and \code{X}.}
+
+\item{NUMERIC}{Logical vector marking the numeric items. If \code{NULL}, all items are ordinal.}
 }
 \value{
 An object of class \code{latpl_data} with the data matrix \code{Y}, its dimensions \code{n} and \code{p},
-the number of categories of each item \code{cat}, the pairwise frequency tables \code{freq} and
+the number of categories of each item \code{cat} (one for numeric items), the indicator of numeric
+items \code{numeric}, the pairwise frequency tables \code{freq} and
 \code{valfreq}, the treatment of missing values \code{missing}, the unit weights \code{uweights} and
 univariate frequencies \code{ufreq} of the available-cases term, the normalised sampling weights
 \code{weights} and their factors on the scores \code{jweights}, the cluster indices \code{cluster}, the group
-indices \code{group} (from zero) and their number \code{ngroups}, and the time spent computing the
-frequencies \code{freqTime}. With several groups, \code{freq}, \code{ufreq} and \code{valfreq} stack the tables of
-each group.
+indices \code{group} (from zero) and their number \code{ngroups}, the covariates \code{X}, the stratum of each
+observation within its group \code{stratum} (from zero) and the distinct covariate rows of each group
+\code{strata}, whether each group uses frequency tables \code{tables} or its individual observations, the
+validation data \code{val}, and the time spent computing the frequencies \code{freqTime}. With several
+groups or strata, \code{freq}, \code{ufreq} and \code{valfreq} stack the tables of each group and, within it, of
+each stratum.
 }
 \description{
 Print method for \code{latpl_data} objects
 
-Ordinal data for pairwise likelihood estimation
+Ordinal and numeric data for pairwise likelihood estimation
 }

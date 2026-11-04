@@ -35,8 +35,12 @@ tests <- Map(compute_plrt, fits, vars)
 saturated <- function(fit, tau, rho, order, scores) {
   engine_data <- list(
     C_VEC = fit$data$cat,
+    TABLES = TRUE,
     FREQ = fit$data$freq,
     UFREQ = fit$data$ufreq,
+    X = matrix(0, 0, 1),
+    S = numeric(fit$data$n),
+    W = rep(1, fit$data$n),
     Y = fit$data$Y,
     UW = fit$data$uweights
   )
@@ -224,8 +228,12 @@ local({
     correlations_free(theta_free),
     list(
       C_VEC = fit$data$cat,
+      TABLES = TRUE,
       FREQ = fit$data$freq,
       UFREQ = numeric(0),
+      X = matrix(0, 0, 1),
+      S = numeric(fit$data$n),
+      W = rep(1, fit$data$n),
       Y = fit$data$Y,
       UW = numeric(0)
     ),
