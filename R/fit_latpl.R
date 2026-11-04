@@ -1,15 +1,15 @@
-#'Fit factor models for ordinal data with pairwise likelihood methods
+#'Fit factor models for ordinal and numeric data with pairwise likelihood methods
 #'
 #'@description
 #'
-#'Fit latent variable models for ordinal variable using pairwise likelihood
-#'methods running via quasi-Newton BFGS or stochastic approximations.
+#'Fit latent variable models using pairwise stochastic approximation (the default)
+#'or the exact pairwise likelihood estimate via quasi-Newton BFGS.
 #'
 #'@param DATA Data object from [set_latpl_data()].
 #'@param MODEL Model object from [set_latpl_model()], or from [set_latpl_groups()] for several groups.
-#'@param CONTROL Control object of the main optimiser: [set_ucminf_control()]
-#'  for the quasi-Newton BFGS optimiser from the \code{ucminf} package,
-#'  [set_sa_control()] for Stochastic Approximations.
+#'@param CONTROL Control object of the main optimiser: [set_sa_control()] for
+#'  stochastic approximation, [set_ucminf_control()] for the quasi-Newton BFGS
+#'  optimiser from the \code{ucminf} package.
 #'@param INIT Starting values object from [set_init()].
 #'@param NCORES Integer value setting the number of threads to carry out the
 #'  estimation.
@@ -17,13 +17,13 @@
 #'
 #'@return Object of class `latpl_fit`: a list with the inputs `data`, `model` and
 #'  `control`, the starting values `init`, the estimates `theta` (use
-#'  [get_par()]), the dimensions `dims`, the optimiser output `numFit` (ucminf)
-#'  or `stoFit` (SA), and the timing `RTime`.
+#'  [get_par()]), the dimensions `dims`, the optimiser output `stoFit` (SA) or
+#'  `numFit` (ucminf), the variance `vars` at the estimate (SA), and the timing `RTime`.
 #'@export
 fit_latpl <- function(
   DATA,
   MODEL,
-  CONTROL = set_ucminf_control(),
+  CONTROL = set_sa_control(),
   INIT = set_init(),
   NCORES = 1,
   VERBOSE = FALSE
@@ -67,7 +67,18 @@ fit_latpl <- function(
     ),
     class = "latpl_fit"
   )
+  full <- function(x) as.vector(lc$K %*% x + lc$c)
   fit$init <- init_theta(INIT, DATA, dims, MODEL, VERBOSE)
+  if (is.null(INIT$THETA)) {
+    x <- fit$init[lc$free_idx]
+    free_block <- theta_block(MODEL, nthr)[lc$free_idx]
+    for (i in 1:20) {
+      fit$init <- full(x)
+      if (implied_variance(MODEL, fit$init) < .95) break
+      x[free_block == "lambda"] <- .8 * x[free_block == "lambda"]
+      x[free_block == "logsd"] <- x[free_block == "logsd"] + log(.8)
+    }
+  }
   std <- standardise_covariates(DATA, MODEL, lc, nthr)
   eng_std <- if (is.null(std$model)) eng else engine(std$data, std$model)
   if (METHOD == "ucminf" && INIT$METHOD == "SA") {
@@ -84,7 +95,6 @@ fit_latpl <- function(
       FALSE
     )$theta)
   }
-  full <- function(x) as.vector(lc$K %*% x + lc$c)
   nll <- function(theta) -cpp_pl(theta, eng$model, eng$data)$pl / dims$n
 
   # With the direct parametrisation, points with a non positive definite latent
@@ -232,6 +242,7 @@ fit_latpl <- function(
       all(is.finite(opt$theta))
     fit$stoFit <- opt[setdiff(names(opt), "theta")]
     fit$theta <- opt$theta
+    fit <- check_sa(fit, CONTROL, pd)
   }
   fit$RTime <- as.numeric(difftime(Sys.time(), start_time, units = "secs"))
   if (VERBOSE) {
@@ -240,6 +251,86 @@ fit_latpl <- function(
   fit
 }
 
+
+#' End-of-run check of the stochastic approximation
+#'
+#' Stores the variance at the estimate, which the check needs and [compute_var()] reuses. The fit has failed if the
+#' observed information is not positive definite, or if the estimate is further from the optimum of the pairwise
+#' likelihood than one standard error and four times the predicted noise on the worst parameter, because the noise cannot
+#' explain it. A larger distance that the noise explains only warns: the standard errors account for it. With
+#' `CONTROL$REFINE`, Newton steps then move the estimate to the optimum.
+#'
+#' @param FIT Object of class latpl_fit.
+#' @param CONTROL Control object from [set_sa_control()].
+#' @param FEASIBLE Function checking that a parameter vector is in the parameter space.
+#' @return `FIT`, with `vars` and, in `stoFit`, the check `check` and the updated `converged`.
+#' @seealso [fit_latpl()], [compute_var()]
+#' @keywords internal
+check_sa <- function(FIT, CONTROL, FEASIBLE) {
+  FIT$stoFit$check <- list(done = FALSE, pd = NA, distance = NA, noise = NA, refine_steps = 0)
+  if (FIT$dims$npar > 2000) return(FIT)
+  pl <- function(theta) cpp_pl(theta, FIT$engine$model, FIT$engine$data)$pl
+  vars <- tryCatch(compute_var(FIT), latpl_not_pd = function(e) NULL)
+  FIT$stoFit$check$done <- TRUE
+  FIT$stoFit$check$pd <- !is.null(vars)
+  if (is.null(vars)) {
+    FIT$stoFit$converged <- FALSE
+    warning(
+      "The observed information is not positive definite at the SA estimate, which is not an optimum of the pairwise likelihood: use set_ucminf_control() or other starting values.",
+      call. = FALSE
+    )
+    return(FIT)
+  }
+  distance <- max(vars$distance)
+  relative_noise <- function(v) {
+    se <- sqrt(v$asymptotic_variance / FIT$dims$n)
+    r <- (sqrt(pmax(v$optimisation_noise, 0)) / se)[se > 0]
+    if (FIT$stoFit$averaged > 0) max(r) else 0
+  }
+  FIT$stoFit$check$distance <- distance
+  FIT$stoFit$check$noise <- relative_noise(vars)
+  if (isTRUE(CONTROL$REFINE)) {
+    FIT$stoFit$theta_average <- FIT$theta
+    FIT$stoFit$refined <- TRUE
+    current <- pl(FIT$theta)
+    for (i in seq_len(10)) {
+      if (max(vars$distance) < 0.01) break
+      a <- 1
+      repeat {
+        candidate <- as.vector(FIT$theta + FIT$lincon$K %*% (a * vars$step))
+        value <- if (FEASIBLE(candidate)) pl(candidate) else NA
+        if (isTRUE(value >= current) || a < 1e-3) break
+        a <- a / 2
+      }
+      if (!isTRUE(value >= current)) break
+      FIT$theta <- candidate
+      current <- value
+      FIT$stoFit$check$refine_steps <- i
+      vars <- tryCatch(compute_var(FIT), latpl_not_pd = function(e) NULL)
+      if (is.null(vars)) break
+    }
+    distance <- if (is.null(vars)) Inf else max(vars$distance)
+  }
+  explained <- if (is.null(vars)) 0 else relative_noise(vars)
+  if (distance > max(1, 4 * explained)) {
+    FIT$stoFit$converged <- FALSE
+    warning(
+      "The SA estimate is ",
+      signif(distance, 3),
+      " standard errors from the optimum of the pairwise likelihood on its worst parameter, more than the optimisation noise explains: use other starting values or set_ucminf_control().",
+      call. = FALSE
+    )
+  } else if (distance > 1) {
+    warning(
+      "The SA estimate is ",
+      signif(distance, 3),
+      " standard errors from the optimum of the pairwise likelihood on its worst parameter, because of the optimisation noise, which the standard errors account for. For more precision, increase EPOCHS or use REFINE = TRUE; see sa_diagnostics().",
+      call. = FALSE
+    )
+  }
+  FIT$vars <- vars
+  FIT
+}
 
 #' Standardised covariates for the optimisers
 #'
@@ -426,33 +517,19 @@ init_theta <- function(INIT, DATA, DIMS, MODEL, VERBOSE) {
           -DIMS$cat[j]
         ]
       }))
-      th[block %in% c("lambda", "beta")] <- 0.25
-      fixed <- if (length(m$REGMAT)) {
-        rbind(m$CONSTRMAT, m$REGMAT)
-      } else {
-        m$CONSTRMAT
+      th[block == "beta"] <- 0.25
+      spread <- rep(1, DIMS$p)
+      centre <- rep(0, DIMS$p)
+      for (j in which(DATA$numeric)) {
+        seen <- rows & !is.na(DATA$Y[, j])
+        centre[j] <- stats::weighted.mean(DATA$Y[seen, j], w[seen])
+        spread[j] <- sqrt(stats::weighted.mean((DATA$Y[seen, j] - centre[j])^2, w[seen]))
       }
-      marker <- is.na(m$CONSTRLOGSD) & colSums(!is.na(fixed) & fixed != 0) > 0
-      th[block == "lambda"][
-        col(m$CONSTRMAT)[is.na(m$CONSTRMAT)] %in% which(marker)
-      ] <- 1
-      th[block == "logsd"] <- ifelse(marker[is.na(m$CONSTRLOGSD)], log(0.25), 0)
-      if (any(DATA$numeric)) {
-        spread <- rep(1, DIMS$p)
-        centre <- rep(0, DIMS$p)
-        for (j in which(DATA$numeric)) {
-          seen <- rows & !is.na(DATA$Y[, j])
-          centre[j] <- stats::weighted.mean(DATA$Y[seen, j], w[seen])
-          spread[j] <- sqrt(stats::weighted.mean((DATA$Y[seen, j] - centre[j])^2, w[seen]))
-        }
-        mk <- apply(!is.na(m$CONSTRMAT) & m$CONSTRMAT != 0, 2, match, x = TRUE)
-        unit <- ifelse(is.na(mk), 1, spread[mk])
-        free_load <- which(is.na(m$CONSTRMAT), arr.ind = TRUE)
-        th[block == "lambda"] <- th[block == "lambda"] * spread[free_load[, 1]] / unit[free_load[, 2]]
-        th[block == "logsd"] <- th[block == "logsd"] + log(unit[is.na(m$CONSTRLOGSD)])
-        th[block == "nu"] <- centre[is.na(m$CONSTRINT)]
-        th[block == "scale"][m$NUMERIC[is.na(m$CONSTRLOGSCALE)]] <- log(spread[m$NUMERIC & is.na(m$CONSTRLOGSCALE)])
-      }
+      start <- signed_loadings(DATA$Y[rows, , drop = FALSE], m, spread)
+      th[block == "lambda"] <- start$loadings[is.na(m$CONSTRMAT)]
+      th[block == "logsd"] <- log(start$sd[is.na(m$CONSTRLOGSD)])
+      th[block == "nu"] <- centre[is.na(m$CONSTRINT)]
+      th[block == "scale"][m$NUMERIC[is.na(m$CONSTRLOGSCALE)]] <- log(spread[m$NUMERIC & is.na(m$CONSTRLOGSCALE)])
       if (m$PARAMETERIZATION == "theta") {
         par <- theta2par(m, th)
         L <- par$loadings %*% solve(diag(m$q) - par$regressions)
@@ -471,25 +548,68 @@ init_theta <- function(INIT, DATA, DIMS, MODEL, VERBOSE) {
     message("- Initialised at user-supplied values.")
   }
   stopifnot(is.numeric(theta), length(theta) == DIMS$d, all(is.finite(theta)))
-  par <- if (inherits(MODEL, "latpl_groups")) {
-    theta2par(MODEL, theta)
-  } else {
-    list(theta2par(MODEL, theta))
-  }
-  for (g in seq_along(models)) {
-    L <- par[[g]]$loadings %*% solve(diag(models[[g]]$q) - par[[g]]$regressions)
-    if (
-      models[[g]]$PARAMETERIZATION == "delta" &&
-        any(
-          (rowSums((L %*% par[[g]]$latent_correlations) * L) *
-            par[[g]]$scales^2 >
-            1)[!models[[g]]$NUMERIC]
-        )
-    ) {
-      warning("Negative error variances implied by init parameters")
-    }
+  if (!is.null(INIT$THETA) && implied_variance(MODEL, theta) > 1) {
+    warning("Negative error variances implied by init parameters")
   }
   theta
+}
+
+#' Signed starting loadings
+#'
+#' The first eigenvector of the correlations among the items of each factor, so that reversed items start with a
+#' negative loading. Factors scaled by a fixed loading take the variance that matches it, and factors without items keep
+#' a small variance.
+#'
+#' @param Y Data matrix of the group.
+#' @param MODEL Model object from [set_latpl_model()].
+#' @param SPREAD Standard deviation of numeric items, one for the others.
+#' @return A list with the matrix `loadings` and the latent standard deviations `sd`.
+#' @seealso [init_theta()]
+#' @keywords internal
+signed_loadings <- function(Y, MODEL, SPREAD) {
+  rows <- unique(round(seq(1, nrow(Y), length.out = min(nrow(Y), 2000))))
+  L <- MODEL$CONSTRMAT
+  sd <- ifelse(is.na(MODEL$CONSTRLOGSD), .25, exp(MODEL$CONSTRLOGSD))
+  L[is.na(L)] <- .25
+  for (h in seq_len(MODEL$q)) {
+    S <- which(is.na(MODEL$CONSTRMAT[, h]) | MODEL$CONSTRMAT[, h] != 0)
+    if (length(S) < 2) next
+    R <- suppressWarnings(stats::cor(Y[rows, S, drop = FALSE], use = "pairwise.complete.obs"))
+    R[is.na(R)] <- 0
+    e <- eigen(R, symmetric = TRUE)
+    v <- pmin(pmax(e$vectors[, 1] * sqrt(max(e$values[1] - 1, .1)), -.9), .9)
+    v <- if (v[1] < 0) -v else v
+    fix <- which(!is.na(MODEL$CONSTRMAT[S, h]))[1]
+    if (is.na(MODEL$CONSTRLOGSD[h]) && !is.na(fix)) {
+      sd[h] <- abs(v[fix] * SPREAD[S[fix]] / MODEL$CONSTRMAT[S[fix], h])
+      v <- v * sign(v[fix] * MODEL$CONSTRMAT[S[fix], h]) * SPREAD[S] / sd[h]
+    } else {
+      if (is.na(MODEL$CONSTRLOGSD[h])) sd[h] <- 1
+      if (!is.na(fix)) v <- v * sign(v[fix] * MODEL$CONSTRMAT[S[fix], h])
+      v <- v * SPREAD[S] / sd[h]
+    }
+    free <- is.na(MODEL$CONSTRMAT[S, h])
+    L[S[free], h] <- v[free]
+  }
+  list(loadings = L, sd = sd)
+}
+
+#' Largest variance of the latent responses implied by the factors
+#'
+#' @param MODEL Model object from [set_latpl_model()] or [set_latpl_groups()].
+#' @param THETA Parameter vector.
+#' @return The largest implied variance among the ordinal items under `PARAMETERIZATION = "delta"`, which must be below
+#'   one, and zero if there are none.
+#' @seealso [fit_latpl()], [init_theta()]
+#' @keywords internal
+implied_variance <- function(MODEL, THETA) {
+  models <- if (inherits(MODEL, "latpl_groups")) MODEL$MODELS else list(MODEL)
+  pars <- if (inherits(MODEL, "latpl_groups")) theta2par(MODEL, THETA) else list(theta2par(MODEL, THETA))
+  max(0, unlist(Map(function(m, par) {
+    if (m$PARAMETERIZATION != "delta") return(0)
+    L <- par$loadings %*% solve(diag(m$q) - par$regressions)
+    (rowSums((L %*% par$latent_correlations) * L) * par$scales^2)[!m$NUMERIC]
+  }, models, pars)))
 }
 
 #' Stochastic approximation

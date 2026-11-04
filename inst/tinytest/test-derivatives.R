@@ -478,13 +478,15 @@ local({
       WEIGHTS = weights,
       WEIGHTS_TYPE = "frequency"
     ),
-    model
+    model,
+    CONTROL = set_ucminf_control()
   )
   fit_replicated <- fit_latpl(
     set_latpl_data(items_complete[
       rep(seq_len(nrow(items_complete)), weights),
     ]),
-    model
+    model,
+    CONTROL = set_ucminf_control()
   )
   theta <- fit_weighted$theta + 0.05
   hj_weighted <- lavaan.pl:::cpp_HJ(
@@ -508,10 +510,11 @@ local({
   set.seed(2)
   weights <- sample(1:3, nrow(items_complete), replace = TRUE)
   clusters <- rep(1:30, length.out = nrow(items_complete))
-  fit_unweighted <- fit_latpl(set_latpl_data(items_complete), model)
+  fit_unweighted <- fit_latpl(set_latpl_data(items_complete), model, CONTROL = set_ucminf_control())
   fit_clustered <- fit_latpl(
     set_latpl_data(items_complete, WEIGHTS = weights, CLUSTER = clusters),
-    model
+    model,
+    CONTROL = set_ucminf_control()
   )
   theta <- fit_unweighted$theta + 0.05
   hj <- lavaan.pl:::cpp_HJ(
@@ -536,11 +539,13 @@ local({
   clusters <- rep(1:15, length.out = 300)
   fit_unclustered <- fit_latpl(
     set_latpl_data(items_complete, GROUP = group),
-    model_two_groups
+    model_two_groups,
+    CONTROL = set_ucminf_control()
   )
   fit_clustered <- fit_latpl(
     set_latpl_data(items_complete, CLUSTER = clusters, GROUP = group),
-    model_two_groups
+    model_two_groups,
+    CONTROL = set_ucminf_control()
   )
   theta <- fit_unclustered$theta + 0.05
   hj <- lavaan.pl:::cpp_HJ(

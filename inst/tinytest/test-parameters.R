@@ -93,7 +93,8 @@ local({
   bfi_items <- as.matrix(data.frame(lapply(bfi[, 1:6], as.numeric))) - 1
   fit <- fit_latpl(
     set_latpl_data(bfi_items),
-    set_latpl_model(build_constr_mat(6, 2, "simple"), STDLV = FALSE)
+    set_latpl_model(build_constr_mat(6, 2, "simple"), STDLV = FALSE),
+    CONTROL = set_ucminf_control()
   )
   expect_identical(get_par(fit, OPTION = "raw"), fit$theta)
   par <- get_par(fit)
@@ -123,10 +124,11 @@ local({
 #### LKJ and direct latent covariances give the same fit ####
 for (stdlv in c(TRUE, FALSE)) {
   local({
-    fit_lkj <- fit_latpl(data, set_latpl_model(three_factors, STDLV = stdlv))
+    fit_lkj <- fit_latpl(data, set_latpl_model(three_factors, STDLV = stdlv), CONTROL = set_ucminf_control())
     fit_direct <- fit_latpl(
       data,
-      set_latpl_model(three_factors, STDLV = stdlv, LATCOV = "direct")
+      set_latpl_model(three_factors, STDLV = stdlv, LATCOV = "direct"),
+      CONTROL = set_ucminf_control()
     )
     vars_lkj <- compute_var(fit_lkj)
     vars_direct <- compute_var(fit_direct)
@@ -174,7 +176,8 @@ local({
         ),
         b = 0
       )
-    )
+    ),
+    CONTROL = set_ucminf_control()
   )
   expect_equal(get_par(fit, OPTION = "list")$latent_correlations[1, 3], 0)
 })
@@ -183,7 +186,8 @@ local({
 local({
   fit_correlated <- fit_latpl(
     data,
-    set_latpl_model(three_factors, STDLV = FALSE)
+    set_latpl_model(three_factors, STDLV = FALSE),
+    CONTROL = set_ucminf_control()
   )
   fit_saturated <- fit_latpl(
     data,
@@ -192,7 +196,8 @@ local({
       STDLV = FALSE,
       CORRFLAG = FALSE,
       REGMAT = regressions
-    )
+    ),
+    CONTROL = set_ucminf_control()
   )
   fit_restricted <- fit_latpl(
     data,
@@ -201,7 +206,8 @@ local({
       STDLV = FALSE,
       CORRFLAG = FALSE,
       REGMAT = replace(regressions, 3, 0)
-    )
+    ),
+    CONTROL = set_ucminf_control()
   )
   par_saturated <- get_par(fit_saturated, OPTION = "list")
   total_effects <- solve(diag(3) - par_saturated$regressions)
@@ -238,7 +244,8 @@ local({
       three_factors,
       REGMAT = regressions,
       RESCOV = fixed_and_free
-    )
+    ),
+    CONTROL = set_ucminf_control()
   )
   expect_equal(get_par(fit, OPTION = "list")$residual_covariances[2, 1], 0.1)
 })

@@ -360,8 +360,8 @@ set_latpl_groups <- function(MODELS, CONSTRAINTS = NULL) {
 #' Starting values for pairwise likelihood estimation
 #'
 #' @param METHOD \tabular{ll}{ \code{'standard'} \tab Thresholds from the univariate margins,
-#'  loadings and regression coefficients at `0.25`, uncorrelated latent variables with unit
-#'  variances, no residual covariances. \cr \tab \cr \code{'SA'} \tab The end point of the Adam phase of the
+#'  signed loadings from the correlations among the items of each factor, regression coefficients
+#'  at `0.25`, uncorrelated latent variables, no residual covariances. \cr \tab \cr \code{'SA'} \tab The end point of the Adam phase of the
 #'  pairwise stochastic approximation ([set_sa_init_control()]), started from `THETA` or from the
 #'  `standard` values. With [set_sa_control()], the Adam phase is already part of the optimiser and
 #'  `'SA'` adds nothing. \cr }
@@ -384,6 +384,8 @@ set_init <- function(METHOD = c("standard", "SA"), THETA = NULL, CONTROL = set_s
 }
 
 #' Control options for the ucminf optimiser
+#'
+#' The route to the exact pairwise likelihood estimate, as an alternative to [set_sa_control()].
 #'
 #' @param GRTOL Tolerance on the largest absolute gradient element.
 #' @param XTOL Tolerance on the relative step length.
@@ -421,7 +423,8 @@ set_ucminf_control <- function(
 #' @param PAIRS_PER_ITERATION Number of item pairs drawn at each iteration.
 #' @param ALPHA Step length of the Adam phase, divided by the square root of the number of
 #'   iterations per epoch.
-#' @param ADAM_EPOCHS Maximum number of epochs of the Adam phase.
+#' @param ADAM_EPOCHS Maximum number of epochs of the Adam phase, or as many as make 150 iterations if
+#'   more.
 #' @param BURN_EPOCHS Maximum number of epochs of the stochastic Newton burn-in.
 #' @param EPOCHS Number of epochs of the averaged phase.
 #' @param TOL Improvement of the pairwise log-likelihood at the epoch average, per free parameter,
@@ -432,6 +435,8 @@ set_ucminf_control <- function(
 #'   `"diagonal"` (Adam's diagonal preconditioner, no Newton burn-in), or `"auto"` (`"hessian"` up
 #'   to 2000 free parameters).
 #' @param SEED Seed of the pair sampling.
+#' @param REFINE If `TRUE`, finish with Newton steps on the full pairwise likelihood, which take the
+#'   average to the exact optimum at the cost of a few evaluations of the Hessian.
 #'
 #' @return An object of class `latpl_sa_control` to be passed to [fit_latpl()] via `CONTROL`, or to
 #'   [cfa()] via `control`.
@@ -442,12 +447,13 @@ set_sa_control <- function(
   ALPHA = 0.2,
   ADAM_EPOCHS = 5,
   BURN_EPOCHS = 30,
-  EPOCHS = 20,
+  EPOCHS = 50,
   TOL = 0.05,
   DECAY = 0.75,
   AVG_FROM = 0.25,
   GAIN = c("auto", "hessian", "diagonal"),
-  SEED = 123
+  SEED = 123,
+  REFINE = FALSE
 ) {
   GAIN <- match.arg(GAIN)
   num <- function(x) is.numeric(x) && length(x) == 1 && is.finite(x)
@@ -460,11 +466,12 @@ set_sa_control <- function(
     num(TOL), TOL > 0,
     num(DECAY), DECAY > 0.5, DECAY < 1,
     num(AVG_FROM), AVG_FROM >= 0, AVG_FROM < 1,
-    num(SEED), SEED > 0
+    num(SEED), SEED > 0,
+    isTRUE(REFINE) || isFALSE(REFINE)
   )
   out <- list(PAIRS_PER_ITERATION = as.integer(PAIRS_PER_ITERATION), ALPHA = ALPHA, ADAM_EPOCHS = as.integer(ADAM_EPOCHS),
               BURN_EPOCHS = as.integer(BURN_EPOCHS), EPOCHS = as.integer(EPOCHS), TOL = TOL, DECAY = DECAY,
-              AVG_FROM = AVG_FROM, GAIN = GAIN, SEED = as.integer(SEED))
+              AVG_FROM = AVG_FROM, GAIN = GAIN, SEED = as.integer(SEED), REFINE = REFINE)
   class(out) <- "latpl_sa_control"
   out
 }

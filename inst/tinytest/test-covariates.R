@@ -24,7 +24,7 @@ model <- set_latpl_model(
   STDLV = FALSE,
   GAMMA = matrix(NA, 1, 2)
 )
-fit <- fit_latpl(data, model)
+fit <- fit_latpl(data, model, CONTROL = set_ucminf_control())
 
 #### Covariates define the strata of the frequency tables ####
 local({
@@ -79,7 +79,7 @@ local({
     A = unname(rbind(equalities, additive)),
     b = numeric(nrow(equalities) + 1)
   )
-  fit_groups <- fit_latpl(data_groups, groups)
+  fit_groups <- fit_latpl(data_groups, groups, CONTROL = set_ucminf_control())
   par_groups <- theta2par(groups, fit_groups$theta)
   par <- get_par(fit)
   expect_equal(par$thresholds, par_groups[[1]]$thresholds, tolerance = 1e-4)
@@ -103,8 +103,8 @@ local({
 
 #### Covariates in the data with no effect in the model leave the fit unchanged ####
 local({
-  plain <- fit_latpl(set_latpl_data(items), set_latpl_model(loadings_structure))
-  ignored <- fit_latpl(data, set_latpl_model(loadings_structure))
+  plain <- fit_latpl(set_latpl_data(items), set_latpl_model(loadings_structure), CONTROL = set_ucminf_control())
+  ignored <- fit_latpl(data, set_latpl_model(loadings_structure), CONTROL = set_ucminf_control())
   expect_equal(ignored$theta, plain$theta, tolerance = 1e-5)
 })
 
@@ -129,7 +129,8 @@ local({
       STDLV = FALSE,
       GAMMA = matrix(NA, 1, 2),
       KAPPA = kappa
-    )
+    ),
+    CONTROL = set_ucminf_control()
   )
   par <- get_par(fit_direct)
   expect_true(par$kappa[1, 2] > .5)
@@ -157,7 +158,8 @@ local({
   rows <- rep(seq_len(n), times)
   fit_replicated <- fit_latpl(
     set_latpl_data(items[rows, ], X = binary[rows, ]),
-    model
+    model,
+    CONTROL = set_ucminf_control()
   )
   fit_weighted <- fit_latpl(
     set_latpl_data(
@@ -166,7 +168,8 @@ local({
       WEIGHTS = times,
       WEIGHTS_TYPE = "frequency"
     ),
-    model
+    model,
+    CONTROL = set_ucminf_control()
   )
   expect_equal(fit_weighted$theta, fit_replicated$theta, tolerance = 1e-5)
 })
@@ -181,7 +184,8 @@ local({
   expect_error(
     fit_latpl(
       set_latpl_data(items),
-      set_latpl_model(loadings_structure, GAMMA = matrix(NA, 1, 2))
+      set_latpl_model(loadings_structure, GAMMA = matrix(NA, 1, 2)),
+      CONTROL = set_ucminf_control()
     ),
     "one column per covariate"
   )
@@ -312,7 +316,7 @@ local({
     STDLV = FALSE,
     GAMMA = matrix(NA, 1, 2)
   )
-  fit_continuous <- fit_latpl(data_continuous, model_continuous)
+  fit_continuous <- fit_latpl(data_continuous, model_continuous, CONTROL = set_ucminf_control())
   vars <- compute_var(fit_continuous)
   se <- sqrt(vars$asymptotic_variance / n)
   gamma <- as.vector(get_par(fit_continuous)$gamma)
@@ -371,7 +375,7 @@ local({
     sum(data_available$uweights[observed] * log(probability))
   }))
   expect_equal(pl(data_available) - pl(data_pairwise), univariate, tolerance = 1e-8)
-  fit_available <- fit_latpl(data_available, model_gamma)
+  fit_available <- fit_latpl(data_available, model_gamma, CONTROL = set_ucminf_control())
   expect_true(max(abs(
     lavaan.pl:::cpp_pl(fit_available$theta, fit_available$engine$model, fit_available$engine$data, 1L)$gradient
   )) / n < 1e-4)
@@ -387,14 +391,15 @@ local({
   gamma_fixed <- matrix(c(NA, 0), 1, 2)
   fit_nested <- fit_latpl(
     data,
-    set_latpl_model(loadings_structure, STDLV = FALSE, GAMMA = gamma_fixed)
+    set_latpl_model(loadings_structure, STDLV = FALSE, GAMMA = gamma_fixed),
+    CONTROL = set_ucminf_control()
   )
   difference <- compute_plrt(fit_nested, H1 = fit)$model
   pl <- function(x) lavaan.pl:::cpp_pl(x$theta, x$engine$model, x$engine$data)$pl
   expect_equal(difference$stat, 2 * (pl(fit) - pl(fit_nested)))
   expect_equal(difference$df, 1)
   expect_true(difference$pvalue.scaled < .05)
-  fit_without <- fit_latpl(data, set_latpl_model(loadings_structure, STDLV = FALSE))
+  fit_without <- fit_latpl(data, set_latpl_model(loadings_structure, STDLV = FALSE), CONTROL = set_ucminf_control())
   expect_equal(
     compute_plrt(fit_without, H1 = fit_nested)$model$df,
     1
@@ -402,7 +407,8 @@ local({
   data_units <- set_latpl_data(items, X = cbind(binary, rnorm(n)))
   fit_units <- fit_latpl(
     data_units,
-    set_latpl_model(loadings_structure, GAMMA = matrix(NA, 1, 3))
+    set_latpl_model(loadings_structure, GAMMA = matrix(NA, 1, 3)),
+    CONTROL = set_ucminf_control()
   )
   expect_false(data_units$tables)
   test_units <- compute_plrt(fit_units, compute_var(fit_units))
@@ -466,9 +472,9 @@ local({
   age <- round(rnorm(n, 40, 10))
   items_age <- simulate_mimic(n, p, cbind(age - 40), -.05, 22)
   model_age <- set_latpl_model(loadings_structure, GAMMA = matrix(NA, 1, 1))
-  fit_raw <- fit_latpl(set_latpl_data(items_age, X = cbind(age)), model_age)
-  fit_centred <- fit_latpl(set_latpl_data(items_age, X = cbind(age - 40)), model_age)
-  fit_scaled <- fit_latpl(set_latpl_data(items_age, X = cbind(1000 * age)), model_age)
+  fit_raw <- fit_latpl(set_latpl_data(items_age, X = cbind(age)), model_age, CONTROL = set_ucminf_control())
+  fit_centred <- fit_latpl(set_latpl_data(items_age, X = cbind(age - 40)), model_age, CONTROL = set_ucminf_control())
+  fit_scaled <- fit_latpl(set_latpl_data(items_age, X = cbind(1000 * age)), model_age, CONTROL = set_ucminf_control())
   par_raw <- get_par(fit_raw)
   par_centred <- get_par(fit_centred)
   expect_equal(abs(par_raw$loadings), abs(par_centred$loadings), tolerance = 1e-4)
@@ -486,7 +492,8 @@ local({
   fit_started <- fit_latpl(
     set_latpl_data(items_age, X = cbind(age)),
     model_age,
-    INIT = set_init(METHOD = "SA")
+    INIT = set_init(METHOD = "SA"),
+    CONTROL = set_ucminf_control()
   )
   expect_equal(pl(fit_started)$pl, pl(fit_centred)$pl, tolerance = 1e-8)
   fit_sa <- fit_latpl(
@@ -497,7 +504,7 @@ local({
   expect_true(fit_sa$stoFit$converged)
   expect_equal(pl(fit_sa)$pl, pl(fit_centred)$pl, tolerance = 1e-4)
   fixed <- set_latpl_model(loadings_structure, GAMMA = matrix(0.01, 1, 1))
-  fit_fixed <- fit_latpl(set_latpl_data(items_age, X = cbind(age)), fixed)
+  fit_fixed <- fit_latpl(set_latpl_data(items_age, X = cbind(age)), fixed, CONTROL = set_ucminf_control())
   expect_equal(as.vector(get_par(fit_fixed)$gamma), 0.01)
   expect_true(max(abs(pl(fit_fixed)$gradient)) / n < 1e-3)
   expect_message(
@@ -507,7 +514,8 @@ local({
         loadings_structure,
         GAMMA = matrix(NA, 1, 1),
         CONSTRAINTS = list(A = matrix(replace(numeric(25), 1, 1), 1), b = -1)
-      )
+      ),
+      CONTROL = set_ucminf_control()
     )),
     "consider centring"
   )

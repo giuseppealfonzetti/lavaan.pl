@@ -40,6 +40,13 @@ reference:
       - compute_plrt
       - compute_plrt.latpl_fit
 
+  - title: Diagnostics of the stochastic approximation
+    contents:
+      - sa_diagnostics
+      - plot_sa
+      - sa_compare
+      - sa_stability
+
   - title: Inputs and controls
     contents:
       - starts_with("set_")

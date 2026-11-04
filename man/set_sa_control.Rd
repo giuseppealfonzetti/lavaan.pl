@@ -9,12 +9,13 @@ set_sa_control(
   ALPHA = 0.2,
   ADAM_EPOCHS = 5,
   BURN_EPOCHS = 30,
-  EPOCHS = 20,
+  EPOCHS = 50,
   TOL = 0.05,
   DECAY = 0.75,
   AVG_FROM = 0.25,
   GAIN = c("auto", "hessian", "diagonal"),
-  SEED = 123
+  SEED = 123,
+  REFINE = FALSE
 )
 }
 \arguments{
@@ -23,7 +24,8 @@ set_sa_control(
 \item{ALPHA}{Step length of the Adam phase, divided by the square root of the number of
 iterations per epoch.}
 
-\item{ADAM_EPOCHS}{Maximum number of epochs of the Adam phase.}
+\item{ADAM_EPOCHS}{Maximum number of epochs of the Adam phase, or as many as make 150 iterations if
+more.}
 
 \item{BURN_EPOCHS}{Maximum number of epochs of the stochastic Newton burn-in.}
 
@@ -41,6 +43,9 @@ below which, at two consecutive epochs, a burn-in phase ends.}
 to 2000 free parameters).}
 
 \item{SEED}{Seed of the pair sampling.}
+
+\item{REFINE}{If \code{TRUE}, finish with Newton steps on the full pairwise likelihood, which take the
+average to the exact optimum at the cost of a few evaluations of the Hessian.}
 }
 \value{
 An object of class \code{latpl_sa_control} to be passed to \code{\link[=fit_latpl]{fit_latpl()}} via \code{CONTROL}, or to

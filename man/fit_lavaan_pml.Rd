@@ -51,12 +51,12 @@ for more details. Possible options are:
 }}
 
 \item{start}{A vector of starting values in lavaan's free-parameter order
-(as returned by \code{coef()}). If not provided, lavaan's starting values are
-used and refined according to \code{estimator.args$init}.}
+(as returned by \code{coef()}). If not provided, those of \code{\link[=set_init]{set_init()}} are used
+and refined according to \code{estimator.args$init}.}
 
-\item{control}{Control object of the estimation algorithm: \code{\link[=set_ucminf_control]{set_ucminf_control()}}
-for the quasi-Newton BFGS optimiser (default), \code{\link[=set_sa_control]{set_sa_control()}} for stochastic
-approximation.}
+\item{control}{Control object of the estimation algorithm: \code{\link[=set_sa_control]{set_sa_control()}} for
+stochastic approximation (default), \code{\link[=set_ucminf_control]{set_ucminf_control()}} for the quasi-Newton
+BFGS optimiser.}
 
 \item{verbose}{If \code{TRUE}, print additional information during the estimation
 process.}

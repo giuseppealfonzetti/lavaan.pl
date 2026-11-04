@@ -40,6 +40,8 @@ print.latpl_fit <- function(x, ...){
       "    Epochs: Adam", x$stoFit$adam_epochs, "| Newton", x$stoFit$newton_epochs, "| averaged", x$control$EPOCHS,
       "(", x$stoFit$epoch_length, "iterations each, gain:", x$stoFit$gain, ")\n",
       "    Rejected steps:", x$stoFit$rejections, "(", x$stoFit$rejections_averaging, "in the averaged phase )\n",
+      "    Converged:", x$stoFit$converged, "\n",
+      "    Largest distance from the optimum:", if (x$stoFit$check$done) signif(x$stoFit$check$distance, 2) else "not checked", "standard errors\n",
       "    Estimation time:", round(x$RTime, 2), "s\n",
       "    Data reduction:", round(x$data$freqTime,2), "s (in set_latpl_data())\n",
       "    Cores used:", x$cores, "\n",
@@ -142,13 +144,15 @@ get_par.latpl_fit <- function(OBJ, OPTION = c("list", "raw", "transformed"), ...
 #'   interpretable parameters, `H`, `J`, the sandwich `vcov` and its diagonal
 #'   `asymptotic_variance` on the transformed scale, `optimisation_noise` (SA
 #'   fits only), the optimisation noise matrix `noise` on the optimisation scale
-#'   (SA fits only) and the timing `RTime`.
+#'   (SA fits only), the Newton step to the optimum `step`, its size in standard errors of
+#'   each parameter `distance`, the estimates `theta` and the timing `RTime`.
 #' @export
 compute_var <- function(OBJ, NUMDERIV = FALSE, VERBOSE = FALSE) UseMethod('compute_var')
 
 #' @rdname compute_var
 #' @export
 compute_var.latpl_fit <- function(OBJ, NUMDERIV = FALSE, VERBOSE = FALSE) {
+  if (!NUMDERIV && identical(OBJ$vars$theta, OBJ$theta) && !is.null(OBJ$theta)) return(OBJ$vars)
   start_time <- Sys.time()
   lc <- OBJ$lincon
   full <- function(x) as.vector(lc$K %*% x + lc$c)
@@ -171,65 +175,26 @@ compute_var.latpl_fit <- function(OBJ, NUMDERIV = FALSE, VERBOSE = FALSE) {
     H <- numDeriv::jacobian(function(x) -as.vector(crossprod(lc$K, cpp_pl(full(x), OBJ$engine$model, OBJ$engine$data, 1L)$gradient)) / OBJ$dims$n, xf)
   }
   R <- tryCatch(chol(H), error = function(e) NULL)
-  if (is.null(R)) stop("H not positive definite.")
+  if (is.null(R)) {
+    stop(structure(class = c("latpl_not_pd", "error", "condition"), list(message = "H not positive definite.", call = NULL)))
+  }
   invH <- chol2inv(R)
   vcov <- trJacob %*% invH %*% J %*% invH %*% t(trJacob)
   opt_noise <- NA
   noise <- NULL
   if (OBJ$method == "SA") {
     P <- OBJ$dims$pairs
-    ppi <- OBJ$control$PAIRS_PER_ITERATION
+    ppi <- min(OBJ$control$PAIRS_PER_ITERATION, P)
     n <- OBJ$dims$n
     G <- crossprod(lc$K, HJ$gradient) / n
     V <- (P - ppi) / (ppi * (P - 1)) * (P * crossprod(lc$K, HJ$pairvar %*% lc$K) / n^2 - tcrossprod(G))
-    noise <- invH %*% V %*% invH / OBJ$stoFit$averaged
+    noise <- invH %*% V %*% invH / OBJ$stoFit$averaged * !isTRUE(OBJ$stoFit$refined)
     opt_noise <- diag(trJacob %*% noise %*% t(trJacob))
   }
+  step <- as.vector(invH %*% crossprod(lc$K, HJ$gradient)) / OBJ$dims$n
+  se <- sqrt(diag(vcov) / OBJ$dims$n)
   list(trJacob = trJacob, H = H, invH = trJacob %*% invH, J = J, vcov = vcov, asymptotic_variance = diag(vcov),
-       optimisation_noise = opt_noise, noise = noise, RTime = as.numeric(difftime(Sys.time(), start_time, units = "secs")))
-}
-
-#' Trajectories of the estimates
-#'
-#' @param OBJ Object of class latpl_fit, or a lavaan object from [cfa()] or [sem()].
-#' @return For SA fits, the trajectories in long format, invisibly, after plotting them; the SA path when
-#'   tinyplot is not installed; `NULL` for ucminf fits.
-#' @seealso [fit_latpl()]
-#' @keywords internal
-plot_traj <- function(OBJ) UseMethod('plot_traj')
-#' @export
-plot_traj.latpl_fit <- function(OBJ){
-
-  if(OBJ$method=="ucminf"){
-    warning('Trajectories not available for numerical fit.')
-    return(NULL)
-  }
-
-  if (!requireNamespace("tinyplot", quietly = TRUE)) {
-    warning('{tinyplot} must be installed to plot trajectories.\n
-            The trajectories list will be returned.')
-    return(OBJ$stoFit$path)
-  }
-
-  path <- OBJ$stoFit$path
-  type <- theta_block(OBJ$model, sum(OBJ$data$cat - 1))
-  long <- do.call(rbind, Map(function(iter, theta) {
-    data.frame(iter = iter,
-               par = get_par(replace(OBJ, "theta", list(theta)), OPTION = "transformed"),
-               id = seq_along(theta),
-               type = type)
-  }, path$iter, path$theta))
-  ends <- tapply(path$iter, path$phase, max)[c("1", "2")]
-
-  do.call(tinyplot::tinyplot, list(
-    par ~ iter | factor(id), data = long, facet = ~type, type = "l",
-    legend = FALSE, col = "black", xlab = "Iterations", ylab = "Estimates",
-    draw = bquote(abline(v = .(ends[!is.na(ends)]), lty = 2, col = "lightgrey"))
-  ))
-  invisible(long)
-}
-
-#' @export
-plot_traj.lavaan <- function(OBJ) {
-  plot_traj(OBJ@external$lavaan.pl)
+       optimisation_noise = opt_noise, noise = noise, step = step,
+       distance = ifelse(se > 0, abs(as.vector(trJacob %*% step)) / se, 0), theta = OBJ$theta,
+       RTime = as.numeric(difftime(Sys.time(), start_time, units = "secs")))
 }

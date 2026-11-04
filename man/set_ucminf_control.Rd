@@ -20,5 +20,5 @@ An object of class \code{latpl_ucminf_control} to be passed to \code{\link[=fit_
 when \code{METHOD = "ucminf"}, or to \code{\link[=cfa]{cfa()}} via \code{control}.
 }
 \description{
-Control options for the ucminf optimiser
+The route to the exact pairwise likelihood estimate, as an alternative to \code{\link[=set_sa_control]{set_sa_control()}}.
 }

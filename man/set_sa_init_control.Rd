@@ -18,7 +18,8 @@ set_sa_init_control(
 \item{ALPHA}{Step length of the Adam phase, divided by the square root of the number of
 iterations per epoch.}
 
-\item{ADAM_EPOCHS}{Maximum number of epochs of the Adam phase.}
+\item{ADAM_EPOCHS}{Maximum number of epochs of the Adam phase, or as many as make 150 iterations if
+more.}
 
 \item{TOL}{Improvement of the pairwise log-likelihood at the epoch average, per free parameter,
 below which, at two consecutive epochs, a burn-in phase ends.}

@@ -16,7 +16,7 @@ local({
     unclass(ucminf_control),
     list(GRTOL = 1e-6, XTOL = 1e-12, STEPMAX = 1, MAXEVAL = 500L)
   )
-  expect_identical(sa_control$EPOCHS, 20L)
+  expect_identical(sa_control$EPOCHS, 50L)
   expect_identical(sa_control$GAIN, "auto")
   expect_identical(sa_init_control$EPOCHS, 0L)
   expect_false("BURN_EPOCHS" %in% names(formals(set_sa_init_control)))

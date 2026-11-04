@@ -17,14 +17,14 @@ for (j in 3:p) responses[, j] <- findInterval(latent[, j], c(-.8, 0, .8))
 loadings_structure <- matrix(NA, p, 1)
 data_mixed <- set_latpl_data(responses, NUMERIC = numeric_items)
 model_mixed <- set_latpl_model(loadings_structure, NUMERIC = numeric_items)
-fit_mixed <- fit_latpl(data_mixed, model_mixed)
+fit_mixed <- fit_latpl(data_mixed, model_mixed, CONTROL = set_ucminf_control())
 data_both <- set_latpl_data(responses, NUMERIC = numeric_items, X = covariates)
 model_both <- set_latpl_model(
   loadings_structure,
   GAMMA = matrix(NA, 1, 2),
   NUMERIC = numeric_items
 )
-fit_both <- fit_latpl(data_both, model_both)
+fit_both <- fit_latpl(data_both, model_both, CONTROL = set_ucminf_control())
 frame <- as.data.frame(responses)
 names(frame) <- paste0("y", seq_len(p))
 for (j in 3:p) frame[[j]] <- ordered(frame[[j]])
@@ -66,7 +66,7 @@ local({
 local({
   rescaled <- responses
   rescaled[, 1] <- 100 * rescaled[, 1] + 7
-  fit_rescaled <- fit_latpl(set_latpl_data(rescaled, NUMERIC = numeric_items), model_mixed)
+  fit_rescaled <- fit_latpl(set_latpl_data(rescaled, NUMERIC = numeric_items), model_mixed, CONTROL = set_ucminf_control())
   par <- get_par(fit_mixed)
   par_rescaled <- get_par(fit_rescaled)
   expect_equal(par_rescaled$loadings[1], 100 * par$loadings[1], tolerance = 1e-3)
@@ -145,7 +145,8 @@ local({
   expect_true(is.finite(test$baseline$stat.scaled))
   fit_nested <- fit_latpl(
     data_both,
-    set_latpl_model(loadings_structure, GAMMA = matrix(c(NA, 0), 1, 2), NUMERIC = numeric_items)
+    set_latpl_model(loadings_structure, GAMMA = matrix(c(NA, 0), 1, 2), NUMERIC = numeric_items),
+    CONTROL = set_ucminf_control()
   )
   difference <- compute_plrt(fit_nested, H1 = fit_both)$model
   expect_equal(difference$df, 1)
@@ -197,7 +198,7 @@ local({
   )
   expect_error(set_latpl_data(responses, NUMERIC = c(TRUE, FALSE)))
   expect_error(
-    fit_latpl(data_mixed, set_latpl_model(loadings_structure)),
+    fit_latpl(data_mixed, set_latpl_model(loadings_structure), CONTROL = set_ucminf_control()),
     "same numeric items"
   )
   expect_error(sem(paste(syntax, "f ~ x1", sep = "\n"), frame, missing = "available.cases"), "available.cases")

@@ -243,7 +243,8 @@ Rcpp::List cpp_sa(
     v = b2 * v + (1 - b2) * G.cwiseAbs2();
     return Eigen::VectorXd(alpha * (m / (1 - std::pow(b1, ta))).array() / ((v / (1 - std::pow(b2, ta))).array().sqrt() + 1e-8));
   };
-  const int max_adam = ADAM_ONLY || GAIN == 1 ? ADAM_EPOCHS : ADAM_EPOCHS + BURN_EPOCHS;
+  const int min_adam = std::max(ADAM_EPOCHS, (150 + E - 1) / E);
+  const int max_adam = ADAM_ONLY || GAIN == 1 ? min_adam : min_adam + BURN_EPOCHS;
   Eigen::VectorXd xw, vw;
   double fw = R_PosInf;
   int taw = 0;

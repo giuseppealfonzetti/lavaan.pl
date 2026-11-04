@@ -100,6 +100,14 @@ semPaths(fit, whatLabels = "est", layout = "circle", residuals = FALSE,
          legend = FALSE)
 ```
 
+## Checking the stochastic approximation
+
+The estimates come from pairwise stochastic approximation by default. `sa_diagnostics()` reports how the run behaved, how far the estimates are predicted to be from the exact pairwise likelihood estimate, and how much noise the sampling of pairs adds to the standard errors. See also `plot_sa()`, `sa_compare()` and `sa_stability()`. Use `control = set_ucminf_control()` for the exact estimate.
+
+```{r}
+sa_diagnostics(fit)
+```
+
 ## Session information
 
 ```{r}

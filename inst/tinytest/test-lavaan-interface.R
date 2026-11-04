@@ -31,8 +31,8 @@ local({
 
 #### std.lv gives the same fit ####
 local({
-  fit_marker <- cfa(three_factors, bfi, std.lv = FALSE)
-  fit_stdlv <- cfa(three_factors, bfi, std.lv = TRUE)
+  fit_marker <- cfa(three_factors, bfi, std.lv = FALSE, control = set_ucminf_control())
+  fit_stdlv <- cfa(three_factors, bfi, std.lv = TRUE, control = set_ucminf_control())
   expect_equal(
     fit_marker@external$lavaan.pl$numFit$value,
     fit_stdlv@external$lavaan.pl$numFit$value
@@ -250,11 +250,17 @@ local({
 
 #### A just-identified higher-order factor reproduces the correlated factors ####
 local({
-  fit_correlated <- cfa(three_factors_four_items, bfi_sample, std.lv = TRUE)
+  fit_correlated <- cfa(
+    three_factors_four_items,
+    bfi_sample,
+    std.lv = TRUE,
+    control = set_ucminf_control()
+  )
   fit_higher_order <- sem(
     paste(three_factors_four_items, "\nG =~ A + C + E"),
     bfi_sample,
-    std.lv = TRUE
+    std.lv = TRUE,
+    control = set_ucminf_control()
   )
   expect_equal(
     fit_higher_order@optim$logl,

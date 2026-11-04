@@ -2,9 +2,9 @@
 #'
 #' Fit a Confirmatory Factor Analysis (CFA) model, or a Structural Equation Model (SEM) with
 #' regressions among the latent variables and residual covariances of the items, using the
-#' `lavaan.pl()` engine within the [`lavaan`] framework. By default, a quasi-Newton BFGS optimiser
-#' from the [`ucminf`] package is used. For large data sets, the stochastic
-#' approximation algorithm can be used.
+#' `lavaan.pl()` engine within the [`lavaan`] framework. By default, the pairwise stochastic
+#' approximation algorithm is used. For the exact pairwise likelihood estimate, use a quasi-Newton
+#' BFGS optimiser from the [`ucminf`] package with `control = set_ucminf_control()`.
 #'
 #' @details Not all [`lavaan`] options can be used at present. Some options of
 #'   interest are:
@@ -28,8 +28,8 @@
 #'   latent variable is determined by fixing the factor loading of the first
 #'   indicator to 1.0.
 #' @param start A vector of starting values in lavaan's free-parameter order
-#'   (as returned by `coef()`). If not provided, lavaan's starting values are
-#'   used and refined according to `estimator.args$init`.
+#'   (as returned by `coef()`). If not provided, those of [set_init()] are used
+#'   and refined according to `estimator.args$init`.
 #' @param estimator The estimator is `PML`. If any other estimator is provided,
 #'   then [`lavaan::cfa()`] (or [`lavaan::sem()`]) is used.
 #' @param estimator.args A list of arguments for [fit_latpl()]--see the help file
@@ -42,9 +42,9 @@
 #'     \item{\code{valx}}{Covariates of `valdata`. Required with `valdata` and covariates.}
 #'     \item{\code{computevar_numderiv}}{If `TRUE`, the asymptotic variance-covariance matrix is computed using numerical derivatives.}
 #'   }
-#' @param control Control object of the estimation algorithm: [set_ucminf_control()]
-#'   for the quasi-Newton BFGS optimiser (default), [set_sa_control()] for stochastic
-#'   approximation.
+#' @param control Control object of the estimation algorithm: [set_sa_control()] for
+#'   stochastic approximation (default), [set_ucminf_control()] for the quasi-Newton
+#'   BFGS optimiser.
 #' @param verbose If `TRUE`, print additional information during the estimation
 #'   process.
 #' @param ... Additional arguments to be passed to [lavaan()].
@@ -135,7 +135,7 @@ fit_lavaan_pml <- function(LAVFUN, CALL, model, data, std.lv, estimator, estimat
   if (any(c("init_method", "init_control", "cpp_control_init") %in% names(estimator.args))) {
     stop("`estimator.args$init_method`, `init_control` and `cpp_control_init` are no longer supported; use `init = set_init(...)`.", call. = FALSE)
   }
-  if (is.null(control)) control <- set_ucminf_control()
+  if (is.null(control)) control <- set_sa_control()
   if (!inherits(control, c("latpl_ucminf_control", "latpl_sa_control"))) {
     stop("`control` must be created with `set_ucminf_control()` or `set_sa_control()`.", call. = FALSE)
   }
@@ -205,10 +205,9 @@ fit_lavaan_pml <- function(LAVFUN, CALL, model, data, std.lv, estimator, estimat
   # Compute standard errors ----------------------------------------------------
   vars <- NULL
   if (lavargs$se != "none") {
-    vars <- compute_var(
-      OBJ = fit,
-      NUMDERIV = computevar_numderiv,
-      VERBOSE = verbose
+    vars <- tryCatch(
+      compute_var(OBJ = fit, NUMDERIV = computevar_numderiv, VERBOSE = verbose),
+      latpl_not_pd = function(e) if (fit$method == "SA") NULL else stop(e)
     )
   }
 
@@ -471,21 +470,10 @@ spec_from_lavaan <- function(template, start = NULL, valdata = NULL, valgroup = 
 
   # Note: the values in lavaan.pl are always in the order of thresholds, loadings, latent
   # correlations, latent variances, regressions, then residual covariances.
-  if (is.null(start) && G > 1L) {
-    init <- init_theta(set_init(), data_spec, latpl_dims(data_spec, model), model, FALSE)
-    sgn <- unlist(Map(function(s, f) s$lambda[f$lambda > 0], lavaan_matrices(template, "start"), frees))
-    lam <- theta_block(model, sum(data_spec$cat - 1)) == "lambda"
-    init[lam] <- ifelse(sgn < 0, -1, 1) * init[lam]
-  } else {
-    if (is.null(start)) {
-      starts <- lavaan_matrices(template, "start")
-      starts[[1]]$tau[] <- unlist(lapply(which(!numeric_items), function(j) {
-        stats::qnorm(cumsum(tabulate(X[[1]][, j] + 1, nlev[j]))[-nlev[j]] / sum(!is.na(X[[1]][, j])))
-      }))
-    } else {
-      glist <- lavaan::lav_model_set_parameters(template@Model, as.numeric(start))@GLIST
-      starts <- lavaan_matrices(template, unname(split(glist, rep(seq_len(G), template@Model@nmat))))
-    }
+  init <- NULL
+  if (!is.null(start)) {
+    glist <- lavaan::lav_model_set_parameters(template@Model, as.numeric(start))@GLIST
+    starts <- lavaan_matrices(template, unname(split(glist, rep(seq_len(G), template@Model@nmat))))
     pars <- lapply(starts, function(s) {
       list(thresholds = as.numeric(s$tau), loadings = s$lambda, latent_correlations = s$psi, regressions = s$beta,
            residual_covariances = s$theta, intercepts = as.vector(s$nu), means = as.vector(s$alpha),
@@ -626,7 +614,7 @@ as_lavaan <- function(fit, vars = NULL, template) {
 
   # Change test slot -----------------------------------------------------------
   plrt <- NULL
-  if (!identical(out@Options$test, "none")) {
+  if (!identical(out@Options$test, "none") && !identical(fit$stoFit$check$pd, FALSE)) {
     plrt <- compute_plrt(fit, if (is.null(vars)) compute_var(fit) else vars)
     tests <- setdiff(out@Options$test, "standard")
     for (t in setdiff(tests, "mean.var.adjusted")) {

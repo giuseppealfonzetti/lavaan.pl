@@ -8,9 +8,9 @@ Authors@R: c(
     person("Haziq", "Jamil", , "haziq.jamil@gmail.com", role = "aut",
            comment = c(ORCID = "0000-0003-3298-1010"))
   )
-Description: The lavaan.pl package provides a fast implementation of numerical
-    and stochastic pairiwse likelihood estimation for latent variable
-    models with ordinal data.
+Description: The lavaan.pl package provides pairwise stochastic approximation
+    for latent variable models with ordinal, numeric and mixed data, and an
+    efficient implementation of the exact pairwise likelihood estimate.
 License: MIT + file LICENSE
 URL: https://giuseppealfonzetti.github.io/lavaan.pl/
 BugReports: https://github.com/giuseppealfonzetti/lavaan.pl/issues

@@ -21,7 +21,8 @@ A list with the Jacobian \code{trJacob} of the transformation to
 interpretable parameters, \code{H}, \code{J}, the sandwich \code{vcov} and its diagonal
 \code{asymptotic_variance} on the transformed scale, \code{optimisation_noise} (SA
 fits only), the optimisation noise matrix \code{noise} on the optimisation scale
-(SA fits only) and the timing \code{RTime}.
+(SA fits only), the Newton step to the optimum \code{step}, its size in standard errors of
+each parameter \code{distance}, the estimates \code{theta} and the timing \code{RTime}.
 }
 \description{
 Compute variance of the estimates

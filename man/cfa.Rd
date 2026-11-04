@@ -60,12 +60,12 @@ for more details. Possible options are:
 }}
 
 \item{start}{A vector of starting values in lavaan's free-parameter order
-(as returned by \code{coef()}). If not provided, lavaan's starting values are
-used and refined according to \code{estimator.args$init}.}
+(as returned by \code{coef()}). If not provided, those of \code{\link[=set_init]{set_init()}} are used
+and refined according to \code{estimator.args$init}.}
 
-\item{control}{Control object of the estimation algorithm: \code{\link[=set_ucminf_control]{set_ucminf_control()}}
-for the quasi-Newton BFGS optimiser (default), \code{\link[=set_sa_control]{set_sa_control()}} for stochastic
-approximation.}
+\item{control}{Control object of the estimation algorithm: \code{\link[=set_sa_control]{set_sa_control()}} for
+stochastic approximation (default), \code{\link[=set_ucminf_control]{set_ucminf_control()}} for the quasi-Newton
+BFGS optimiser.}
 
 \item{verbose}{If \code{TRUE}, print additional information during the estimation
 process.}
@@ -81,9 +81,9 @@ variance components, from \code{\link[=compute_var]{compute_var()}}, and its tes
 \description{
 Fit a Confirmatory Factor Analysis (CFA) model, or a Structural Equation Model (SEM) with
 regressions among the latent variables and residual covariances of the items, using the
-\code{lavaan.pl()} engine within the \code{\link[lavaan:lavaan]{lavaan}} framework. By default, a quasi-Newton BFGS optimiser
-from the \code{\link[ucminf:ucminf]{ucminf}} package is used. For large data sets, the stochastic
-approximation algorithm can be used.
+\code{lavaan.pl()} engine within the \code{\link[lavaan:lavaan]{lavaan}} framework. By default, the pairwise stochastic
+approximation algorithm is used. For the exact pairwise likelihood estimate, use a quasi-Newton
+BFGS optimiser from the \code{\link[ucminf:ucminf]{ucminf}} package with \code{control = set_ucminf_control()}.
 }
 \details{
 Not all \code{\link[lavaan:lavaan]{lavaan}} options can be used at present. Some options of

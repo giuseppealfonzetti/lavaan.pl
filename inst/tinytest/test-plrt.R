@@ -27,7 +27,7 @@ datasets <- list(
   ),
   complete = set_latpl_data(items)
 )
-fits <- lapply(datasets, function(x) fit_latpl(x, set_latpl_model(two_factors)))
+fits <- lapply(datasets, function(x) fit_latpl(x, set_latpl_model(two_factors), CONTROL = set_ucminf_control()))
 vars <- lapply(fits, compute_var)
 tests <- Map(compute_plrt, fits, vars)
 
@@ -171,7 +171,8 @@ local({
   fit_correlated <- fits$complete
   fit_orthogonal <- fit_latpl(
     datasets$complete,
-    set_latpl_model(two_factors, CORRFLAG = FALSE)
+    set_latpl_model(two_factors, CORRFLAG = FALSE),
+    CONTROL = set_ucminf_control()
   )
   nested <- compute_plrt(fit_orthogonal, H1 = fit_correlated)$model
   hj <- lavaan.pl:::cpp_HJ(
@@ -212,7 +213,8 @@ local({
     set_latpl_model(
       two_factors,
       CONSTRAINTS = list(A = fixed_threshold, b = -1)
-    )
+    ),
+    CONTROL = set_ucminf_control()
   )
   model_vars <- compute_var(fit)
   test <- compute_plrt(fit, model_vars)
@@ -286,12 +288,14 @@ local({
     set_latpl_groups(list(
       set_latpl_model(two_factors),
       set_latpl_model(two_factors)
-    ))
+    )),
+    CONTROL = set_ucminf_control()
   )
   test_separate <- lapply(1:2, function(g) {
     compute_plrt(fit_latpl(
       set_latpl_data(items[data_two_groups$group == g - 1, ]),
-      set_latpl_model(two_factors)
+      set_latpl_model(two_factors),
+      CONTROL = set_ucminf_control()
     ))
   })
   test_two_groups <- compute_plrt(fit_two_groups)
@@ -320,7 +324,7 @@ local({
     set_latpl_model(two_factors),
     set_latpl_model(two_factors)
   ))
-  fit_free <- fit_latpl(data_two_groups, model_two_groups)
+  fit_free <- fit_latpl(data_two_groups, model_two_groups, CONTROL = set_ucminf_control())
   names_free <- theta_names(data_two_groups, model_two_groups)
   equal_loadings <- matrix(0, 1, length(names_free))
   equal_loadings[1, match(c("lambda[2,1]", "lambda[2,1].g2"), names_free)] <- c(
@@ -329,7 +333,8 @@ local({
   )
   fit_equal <- fit_latpl(
     data_two_groups,
-    set_latpl_groups(model_two_groups$MODELS, list(A = equal_loadings, b = 0))
+    set_latpl_groups(model_two_groups$MODELS, list(A = equal_loadings, b = 0)),
+    CONTROL = set_ucminf_control()
   )
   nested <- compute_plrt(fit_equal, H1 = fit_free)$model
   pl <- function(fit) {

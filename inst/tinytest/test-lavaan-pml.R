@@ -258,12 +258,32 @@ local({
   )
 })
 
+#### Under default SA every case returns, and a converged fit is as close to the reference as its noise explains ####
+local({
+  stochastic <- list(cfa = lavaan.pl::cfa, sem = lavaan.pl::sem)
+  for (name in names(lavaan_pml_cases)) {
+    fit <- suppressWarnings(lavaan_pml_cases[[name]](stochastic))
+    engine_fit <- fit@external$lavaan.pl
+    expect_identical(engine_fit$method, "SA", info = name)
+    ref <- reference$cases[[name]]$estimates
+    use <- !is.na(ref$se) & ref$se > 0
+    distance <- max(abs(parameterEstimates(fit)$est - ref$est)[use] / ref$se[use])
+    if (engine_fit$stoFit$converged) {
+      expect_true(distance <= max(1, 4 * engine_fit$stoFit$check$noise) + .1, info = name)
+      expect_true(abs(engine_fit$stoFit$check$distance - distance) < .1, info = name)
+    } else {
+      expect_false(lavaan::lavInspect(fit, "converged"), info = name)
+    }
+  }
+})
+
 #### Equal thresholds give a stationary point of lavaan's objective ####
 local({
   fit <- cfa(
     paste(two_factors_four_items, "\nA3 | t*t3\nA4 | t*t3"),
     bfi_600,
-    std.lv = TRUE
+    std.lv = TRUE,
+    control = set_ucminf_control()
   )
   gradient <- lavaan::lavTech(fit, "gradient")
   constraints_jacobian <- fit@Model@ceq.JAC
