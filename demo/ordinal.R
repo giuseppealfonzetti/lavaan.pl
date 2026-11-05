@@ -18,7 +18,7 @@ mod <- "
   # ext ~~ 0*neu
   # agr ~~ 0*neu
 "
-fit <- cfa(model = mod, data = bfi, std.lv = TRUE, test = "none", verbose = TRUE,
+fit <- pmlcfa(model = mod, data = bfi, std.lv = TRUE, test = "none", verbose = TRUE,
            estimator.args = list(computevar_numderiv = TRUE))
 summary(fit)
 

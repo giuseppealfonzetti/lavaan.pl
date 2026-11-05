@@ -277,7 +277,7 @@ local({
   )
 })
 
-#### cfa() with SA adds the optimisation noise to the covariance matrix ####
+#### pmlcfa() with SA adds the optimisation noise to the covariance matrix ####
 local({
   colnames(items) <- paste0("y", 1:p)
   items_ordered <- as.data.frame(lapply(as.data.frame(items), ordered))
@@ -292,7 +292,7 @@ local({
     }),
     collapse = "\n"
   )
-  fit <- cfa(syntax, items_ordered, std.lv = TRUE, control = set_sa_control())
+  fit <- pmlcfa(syntax, items_ordered, std.lv = TRUE, control = set_sa_control())
   template <- lavaan::cfa(
     syntax,
     items_ordered,
@@ -303,7 +303,7 @@ local({
     test = "none",
     do.fit = FALSE
   )
-  without_noise <- as_lavaan(
+  without_noise <- lavaan.pl:::create_lav_from_latpl(
     fit@external$lavaan.pl,
     modifyList(fit@external$vars, list(noise = NULL)),
     template
@@ -341,14 +341,14 @@ local({
   )
 })
 
-#### SA-QN is the default of fit_latpl(), cfa() and sem() ####
+#### SA-QN is the default of fit_latpl(), pmlcfa() and pmlsem() ####
 local({
   expect_identical(fit_latpl(data, model)$method, "SA-QN")
   mimic <- as.data.frame(lapply(as.data.frame(items[, 1:6]), ordered))
   names(mimic) <- paste0("y", 1:6)
   for (fit in list(
-    lavaan.pl::cfa("f =~ y1 + y2 + y3 + y4 + y5 + y6", mimic),
-    lavaan.pl::sem("f =~ y1 + y2 + y3 + y4 + y5 + y6", mimic)
+    lavaan.pl::pmlcfa("f =~ y1 + y2 + y3 + y4 + y5 + y6", mimic),
+    lavaan.pl::pmlsem("f =~ y1 + y2 + y3 + y4 + y5 + y6", mimic)
   )) {
     expect_identical(fit@external$lavaan.pl$method, "SA-QN")
     expect_identical(fit@Options$optim.method, "SA-QN")
@@ -426,7 +426,7 @@ local({
   expect_true(still(20) <= 20)
 })
 
-#### A saddle point is reported, and cfa() returns without standard errors ####
+#### A saddle point is reported, and pmlcfa() returns without standard errors ####
 local({
   small <- set_latpl_data(items[, 1:6])
   model_small <- set_latpl_model(build_constr_mat(6, 1, "simple"))
@@ -446,7 +446,7 @@ local({
   template <- lavaan::cfa(syntax, frame, estimator = "PML", std.lv = TRUE, do.fit = FALSE)
   zero_loadings <- replace(lavaan::coef(template), grepl("=~", names(lavaan::coef(template))), 0)
   expect_warning(
-    fit_lavaan <- lavaan.pl::cfa(syntax, frame, std.lv = TRUE, start = zero_loadings, test = "mean.var.adjusted", optim.method = "SA"),
+    fit_lavaan <- lavaan.pl::pmlcfa(syntax, frame, std.lv = TRUE, start = zero_loadings, test = "mean.var.adjusted", optim.method = "SA"),
     "not positive definite"
   )
   expect_false(lavaan::lavInspect(fit_lavaan, "converged"))

@@ -1,12 +1,12 @@
 #' Fit behind a stochastic approximation object
 #'
-#' @param OBJ Object of class latpl_fit, or a lavaan object from [cfa()] or [sem()].
+#' @param OBJ Object of class latpl_fit, or a `lavaan.pl` object from [lavaan.pl()].
 #' @return The object of class latpl_fit.
 #' @seealso [sa_diagnostics()], [plot_sa()], [sa_stability()]
 #' @keywords internal
 sa_fit <- function(OBJ) {
-  fit <- if (inherits(OBJ, "lavaan")) OBJ@external$lavaan.pl else OBJ
-  if (!inherits(fit, "latpl_fit")) stop("OBJ must come from fit_latpl(), cfa() or sem().", call. = FALSE)
+  fit <- if (inherits(OBJ, "lavaan.pl")) get_latpl_fit(OBJ) else OBJ
+  if (!inherits(fit, "latpl_fit")) stop("OBJ must come from fit_latpl(), pmlcfa() or pmlsem().", call. = FALSE)
   if (fit$method %in% c("QN", "SA-QN")) stop("OBJ was not fitted by stochastic approximation.", call. = FALSE)
   fit
 }
@@ -40,7 +40,7 @@ sa_parameters <- function(FIT) {
 #' pairs sampled, on top of the statistical variability; the distance is how far the estimate is from the exact pairwise
 #' likelihood estimate, predicted from the gradient without fitting it.
 #'
-#' @param OBJ Object of class latpl_fit, or a lavaan object from [cfa()] or [sem()], fitted by stochastic approximation.
+#' @param OBJ Object of class latpl_fit, or a `lavaan.pl` object from [lavaan.pl()], fitted by stochastic approximation.
 #' @param TARGET Largest ratio of the optimisation noise to the standard error used to suggest a number of epochs.
 #' @return An object of class `latpl_sa_diagnostics`: a list with `converged`, the checks `checks`, the summary of the
 #'   phases `phases`, the settings `settings`, the table of free parameters `parameters` from `sa_parameters()`, its
@@ -105,7 +105,7 @@ print.latpl_sa_diagnostics <- function(x, ...) {
 
 #' Plots of the stochastic approximation
 #'
-#' @param OBJ Object of class latpl_fit, or a lavaan object from [cfa()] or [sem()], fitted by stochastic approximation.
+#' @param OBJ Object of class latpl_fit, or a `lavaan.pl` object from [lavaan.pl()], fitted by stochastic approximation.
 #' @param WHAT `"trajectory"` for the estimates across iterations by parameter block, `"objective"` for the pairwise
 #'   likelihood along the burn-in (it is not monitored in the averaged phase), `"noise"` for the optimisation noise
 #'   relative to the standard error of each parameter.
@@ -155,7 +155,7 @@ plot_sa <- function(OBJ, WHAT = c("trajectory", "objective", "noise"), BLOCKS = 
 #' Fits the same model and data with other seeds of the pair sampling, and compares the spread of the estimates with the
 #' optimisation noise predicted by [compute_var()] from a single fit.
 #'
-#' @param OBJ Object of class latpl_fit, or a lavaan object from [cfa()] or [sem()], fitted by stochastic approximation.
+#' @param OBJ Object of class latpl_fit, or a `lavaan.pl` object from [lavaan.pl()], fitted by stochastic approximation.
 #' @param SEEDS Seeds of the pair sampling.
 #' @return An object of class `latpl_sa_stability`: a list with the table `parameters` of each free parameter (`name`,
 #'   `block`, standard error `se`, standard deviation across seeds `observed`, predicted noise `predicted`), the estimates

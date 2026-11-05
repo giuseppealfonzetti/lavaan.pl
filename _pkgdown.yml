@@ -24,11 +24,12 @@ navbar:
 reference:
   - title: lavaan wrapper
     contents:
-      - cfa
-      - sem
+      - lavaan.pl
+      - lavaan.pl-class
       - lavTestLRT
-      - anova
-      - as_lavaan
+      - parameterEstimates
+      - standardizedSolution
+      - get_latpl_fit
 
   - title: Original functions
     contents:

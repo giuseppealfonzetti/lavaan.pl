@@ -7,7 +7,7 @@
 sa_fit(OBJ)
 }
 \arguments{
-\item{OBJ}{Object of class latpl_fit, or a lavaan object from \code{\link[=cfa]{cfa()}} or \code{\link[=sem]{sem()}}.}
+\item{OBJ}{Object of class latpl_fit, or a \code{lavaan.pl} object from \code{\link[=lavaan.pl]{lavaan.pl()}}.}
 }
 \value{
 The object of class latpl_fit.

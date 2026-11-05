@@ -27,7 +27,7 @@ When the package is installed, you can load it with:
 library(lavaan.pl)
 ```
 
-The startup message indicates that the `{lavaan.pl}` package provides its own version of the `cfa()` function, which can be used to estimate lavaan.pl models using the `lavaan` syntax.
+The `{lavaan.pl}` package provides the `pmlcfa()` and `pmlsem()` functions, which return `{lavaan}` objects and can be used to estimate lavaan.pl models using the `lavaan` syntax.
 An example is given below.
 
 ## Fitting an ordinal CFA model
@@ -62,12 +62,13 @@ mod <- "
 ```
 
 Users of `{lavaan}` will be familiar with this syntax. 
-The call to the `cfa()` function is made as usual:
+The call to the `pmlcfa()` function is made as for `lavaan::cfa()`:
 
 ``` r
-# Fit the model (note, this cfa() function is from the lavaan.pl package)
-fit <- cfa(model = mod, data = bfi, std.lv = TRUE, test = "mean.var.adjusted")
+# Fit the model
+fit <- pmlcfa(model = mod, data = bfi, std.lv = TRUE, test = "mean.var.adjusted")
 summary(fit)
+#> lavaan.pl 0.1.0.9002 
 #> lavaan 0.7-2 ended normally after 12 iterations
 #> 
 #>   Estimator                                        PML
@@ -367,7 +368,7 @@ Three algorithms are available through `optim.method`. The default, `"SA-QN"`, g
 With `"SA"`, `sa_diagnostics()` reports how the run behaved, how far the estimates are predicted to be from the pairwise likelihood estimate, and how much noise the sampling of pairs adds to the standard errors. See also `plot_sa()` and `sa_stability()`.
 
 ``` r
-fit_sa <- lavaan.pl::cfa(mod, bfi, std.lv = TRUE, optim.method = "SA")
+fit_sa <- lavaan.pl::pmlcfa(mod, bfi, std.lv = TRUE, optim.method = "SA")
 sa_diagnostics(fit_sa)
 #> SA fit: converged 
 #> 
@@ -513,5 +514,5 @@ sessionInfo()
 
 <!-- ## `{lavaan}` wrapper -->
 
-<!-- This package also provides a user-friendly `{lavaan}`-style interface to estimate factor analysis models using the `cfa()` function. -->
+<!-- This package also provides a user-friendly `{lavaan}`-style interface to estimate factor analysis models using the `pmlcfa()` function. -->
 <!-- Let's rerun the above example, but this time using the stochastic approximation algorithm. -->

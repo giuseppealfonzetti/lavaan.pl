@@ -53,7 +53,7 @@ pairwise log-likelihood is kept, with a warning if the runs disagree. Each run a
 \item{MAXEVAL}{Maximum number of function evaluations.}
 }
 \value{
-An object of class \code{latpl_saqn_control} to be passed to \code{\link[=fit_latpl]{fit_latpl()}} via \code{CONTROL}, or to \code{\link[=cfa]{cfa()}} via
+An object of class \code{latpl_saqn_control} to be passed to \code{\link[=fit_latpl]{fit_latpl()}} via \code{CONTROL}, or to \code{\link[=pmlcfa]{pmlcfa()}} via
 \code{control}.
 }
 \description{

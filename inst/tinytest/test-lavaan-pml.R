@@ -99,7 +99,7 @@ for (name in cases_in("grid")) {
   local({
     fit <- ours[[name]]
     ref <- reference$cases[[name]]
-    expect_identical(as.character(class(fit)), "lavaan")
+    expect_inherits(fit, "lavaan.pl")
     expect_true(lavaan::lavInspect(fit, "converged"))
     expect_identical(parameterEstimates(fit)[, 1:3], ref$estimates[, 1:3])
     expect_matches_reference(name)
@@ -260,7 +260,7 @@ local({
 
 #### Under the default every case reaches the estimate of QN; bifactor can also reach the lower optimum, which is lavaan's ####
 local({
-  default <- list(cfa = lavaan.pl::cfa, sem = lavaan.pl::sem)
+  default <- list(cfa = lavaan.pl::pmlcfa, sem = lavaan.pl::pmlsem)
   for (name in names(lavaan_pml_cases)) {
     fit <- suppressWarnings(lavaan_pml_cases[[name]](default))
     expect_identical(fit@external$lavaan.pl$method, "SA-QN", info = name)
@@ -278,8 +278,8 @@ local({
 #### Under SA every case returns, and a converged fit is as close to the exact estimate as its noise explains ####
 local({
   stochastic <- list(
-    cfa = function(...) lavaan.pl::cfa(..., control = set_sa_control()),
-    sem = function(...) lavaan.pl::sem(..., control = set_sa_control())
+    cfa = function(...) lavaan.pl::pmlcfa(..., control = set_sa_control()),
+    sem = function(...) lavaan.pl::pmlsem(..., control = set_sa_control())
   )
   for (name in names(lavaan_pml_cases)) {
     fit <- suppressWarnings(lavaan_pml_cases[[name]](stochastic))
@@ -303,7 +303,7 @@ local({
 
 #### Equal thresholds give a stationary point of lavaan's objective ####
 local({
-  fit <- cfa(
+  fit <- pmlcfa(
     paste(two_factors_four_items, "\nA3 | t*t3\nA4 | t*t3"),
     bfi_600,
     std.lv = TRUE,
@@ -336,7 +336,7 @@ expect_true(
 
 #### Several starts reach the higher bifactor optimum and warn of the other ####
 local({
-  several <- function(...) lavaan.pl::cfa(..., control = set_saqn_control(SEED = 1, NSTARTS = 8))
+  several <- function(...) lavaan.pl::pmlcfa(..., control = set_saqn_control(SEED = 1, NSTARTS = 8))
   expect_warning(
     fit <- lavaan_pml_cases[["bifactor"]](list(cfa = several)),
     "several optima"

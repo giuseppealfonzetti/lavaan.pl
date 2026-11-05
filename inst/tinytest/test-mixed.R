@@ -106,14 +106,15 @@ local({
 
 #### Mixed items with covariates: the objective is lavaan's, at the optimum of its gradient ####
 local({
-  fit <- sem(paste(syntax, "f ~ x1 + x2", sep = "\n"), frame, std.lv = TRUE, optim.method = "QN")
+  fit <- pmlsem(paste(syntax, "f ~ x1 + x2", sep = "\n"), frame, std.lv = TRUE, optim.method = "QN")
   engine_fit <- fit@external$lavaan.pl
+  lavaan_logl <- function(x) {
+    table <- lavaan::parTable(x)
+    table$start <- table$est
+    lavaan::lavaan(table, frame, estimator = "PML", do.fit = FALSE)@optim$logl
+  }
   expect_true(lavaan::lavInspect(fit, "converged"))
-  expect_equal(
-    fit@optim$fx * n,
-    -lavaan.pl:::cpp_pl(engine_fit$theta, engine_fit$engine$model, engine_fit$engine$data)$pl,
-    tolerance = 1e-7
-  )
+  expect_equal(fit@optim$logl, lavaan_logl(fit), tolerance = 1e-7)
   gradient <- lavaan.pl:::cpp_pl(
     engine_fit$theta,
     engine_fit$engine$model,
@@ -121,18 +122,14 @@ local({
     1L
   )$gradient
   expect_true(max(abs(gradient)) / n < 1e-4)
-  fit_direct <- sem(
+  fit_direct <- pmlsem(
     paste(syntax, "f ~ x1\ny1 ~ x2\ny3 ~ x2", sep = "\n"),
     frame,
     std.lv = TRUE
   )
   engine_direct <- fit_direct@external$lavaan.pl
   expect_equal(engine_direct$dims$nkap, 2)
-  expect_equal(
-    fit_direct@optim$fx * n,
-    -lavaan.pl:::cpp_pl(engine_direct$theta, engine_direct$engine$model, engine_direct$engine$data)$pl,
-    tolerance = 1e-7
-  )
+  expect_equal(fit_direct@optim$logl, lavaan_logl(fit_direct), tolerance = 1e-7)
   expect_true(is.finite(coef(fit_direct)["y1~x2"]))
 })
 
@@ -201,5 +198,5 @@ local({
     fit_latpl(data_mixed, set_latpl_model(loadings_structure), CONTROL = set_qn_control()),
     "same numeric items"
   )
-  expect_error(sem(paste(syntax, "f ~ x1", sep = "\n"), frame, missing = "available.cases"), "available.cases")
+  expect_error(pmlsem(paste(syntax, "f ~ x1", sep = "\n"), frame, missing = "available.cases"), "available.cases")
 })

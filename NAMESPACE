@@ -3,28 +3,35 @@
 S3method(compute_plrt,latpl_fit)
 S3method(compute_var,latpl_fit)
 S3method(get_par,latpl_fit)
+S3method(lavaan::lavInspect,lavaan.pl)
+S3method(lavaan::lavTech,lavaan.pl)
 S3method(plot,latpl_sa_stability)
 S3method(print,latpl_data)
 S3method(print,latpl_fit)
 S3method(print,latpl_model)
 S3method(print,latpl_sa_diagnostics)
 S3method(print,latpl_sa_stability)
-export(anova)
-export(as_lavaan)
 export(build_constr_mat)
-export(cfa)
 export(compute_plrt)
 export(compute_var)
+export(fitMeasures)
 export(fit_latpl)
+export(fitmeasures)
 export(gen_loadings)
+export(get_latpl_fit)
 export(get_par)
+export(lavParameterEstimates)
 export(lavTestLRT)
+export(lavaan.pl)
 export(pairs_freq)
 export(par2theta)
+export(parameterEstimates)
+export(parameterestimates)
 export(plot_sa)
+export(pmlcfa)
+export(pmlsem)
 export(sa_diagnostics)
 export(sa_stability)
-export(sem)
 export(set_init)
 export(set_latpl_data)
 export(set_latpl_groups)
@@ -34,17 +41,53 @@ export(set_sa_control)
 export(set_sa_init_control)
 export(set_saqn_control)
 export(sim_data)
+export(standardizedSolution)
+export(standardizedsolution)
 export(theta2par)
 export(theta_names)
+exportClasses(lavaan.pl)
+exportMethods(anova)
+exportMethods(coef)
+exportMethods(fitted)
+exportMethods(fitted.values)
+exportMethods(logLik)
+exportMethods(nobs)
+exportMethods(predict)
+exportMethods(resid)
+exportMethods(residuals)
+exportMethods(show)
+exportMethods(summary)
+exportMethods(update)
+exportMethods(vcov)
 import(RcppEigen)
 import(RcppParallel)
+importClassesFrom(lavaan,lavaan)
 importFrom(Rcpp,sourceCpp)
+importFrom(lavaan,
+  fitMeasures,
+  fitmeasures
+)
 importFrom(methods,
+  as,
   new,
+  setClass,
+  setMethod,
+  show,
   slot
 )
 importFrom(stats,
+  anova,
+  coef,
+  fitted,
+  fitted.values,
+  logLik,
+  nobs,
+  predict,
+  resid,
+  residuals,
   rnorm,
-  runif
+  runif,
+  update,
+  vcov
 )
 useDynLib(lavaan.pl, .registration = TRUE)

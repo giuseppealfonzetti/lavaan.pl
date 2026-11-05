@@ -17,7 +17,7 @@ set_qn_control(GRTOL = 1e-06, XTOL = 1e-12, STEPMAX = 1, MAXEVAL = 500)
 }
 \value{
 An object of class \code{latpl_qn_control} to be passed to \code{\link[=fit_latpl]{fit_latpl()}} via \code{CONTROL}, or to
-\code{\link[=cfa]{cfa()}} via \code{control}.
+\code{\link[=pmlcfa]{pmlcfa()}} via \code{control}.
 }
 \description{
 The \code{QN} method: the exact pairwise likelihood estimate, by the BFGS optimiser of the \code{ucminf} package.

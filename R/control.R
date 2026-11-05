@@ -368,7 +368,7 @@ set_latpl_groups <- function(MODELS, CONSTRAINTS = NULL) {
 #' @param THETA Initialising vector. If `NULL`, the `standard` initialisation point is used.
 #' @param CONTROL Control object from [set_sa_init_control()], used when `METHOD = "SA"`.
 #'
-#' @return An object of class `latpl_init` to be passed to [fit_latpl()] via `INIT`, or to [cfa()]
+#' @return An object of class `latpl_init` to be passed to [fit_latpl()] via `INIT`, or to [pmlcfa()]
 #'   via `estimator.args$init`.
 #'
 #' @export
@@ -393,7 +393,7 @@ set_init <- function(METHOD = c("standard", "SA"), THETA = NULL, CONTROL = set_s
 #' @param MAXEVAL Maximum number of function evaluations.
 #'
 #' @return An object of class `latpl_qn_control` to be passed to [fit_latpl()] via `CONTROL`, or to
-#'   [cfa()] via `control`.
+#'   [pmlcfa()] via `control`.
 #'
 #' @export
 set_qn_control <- function(
@@ -441,7 +441,7 @@ set_qn_control <- function(
 #' @param SEED Seed of the pair sampling.
 #'
 #' @return An object of class `latpl_sa_control` to be passed to [fit_latpl()] via `CONTROL`, or to
-#'   [cfa()] via `control`.
+#'   [pmlcfa()] via `control`.
 #'
 #' @export
 set_sa_control <- function(
@@ -491,7 +491,7 @@ set_sa_control <- function(
 #' @param NSTARTS Number of full runs from the same starting values, with seeds `SEED`, `SEED + 1` and so on. The highest
 #'   pairwise log-likelihood is kept, with a warning if the runs disagree. Each run adds its full cost.
 #'
-#' @return An object of class `latpl_saqn_control` to be passed to [fit_latpl()] via `CONTROL`, or to [cfa()] via
+#' @return An object of class `latpl_saqn_control` to be passed to [fit_latpl()] via `CONTROL`, or to [pmlcfa()] via
 #'   `control`.
 #'
 #' @export
@@ -525,7 +525,7 @@ set_saqn_control <- function(
 #'
 #' @param CONTROL Control object from [set_saqn_control()], [set_sa_control()] or [set_qn_control()].
 #' @return `"SA-QN"`, `"SA"` or `"QN"`.
-#' @seealso [fit_latpl()], [cfa()]
+#' @seealso [fit_latpl()], [pmlcfa()]
 #' @keywords internal
 control_method <- function(CONTROL) {
   if (inherits(CONTROL, "latpl_saqn_control")) return("SA-QN")

@@ -52,7 +52,7 @@ parameters).}
 }
 \value{
 An object of class \code{latpl_sa_control} to be passed to \code{\link[=fit_latpl]{fit_latpl()}} via \code{CONTROL}, or to
-\code{\link[=cfa]{cfa()}} via \code{control}.
+\code{\link[=pmlcfa]{pmlcfa()}} via \code{control}.
 }
 \description{
 The \code{SA} method. It draws item pairs at each iteration, uniformly and independently across iterations, and runs in

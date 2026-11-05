@@ -1,0 +1,32 @@
+#### Delegated methods match lavaan on the same fit ####
+local({
+  fit <- pmlcfa("eta =~ y1 + y2 + y3 + y4 + y5", LSAT, std.lv = TRUE, test = "mean.var.adjusted")
+  plain <- as(fit, "lavaan")
+  expect_inherits(fit, "lavaan.pl")
+  expect_true(is(fit, "lavaan"))
+  expect_equal(coef(fit), lavaan::coef(plain))
+  expect_equal(vcov(fit), lavaan::vcov(plain))
+  expect_equal(nobs(fit), lavaan::nobs(plain))
+  expect_equal(fitted(fit), lavaan::fitted(plain))
+  expect_equal(fitted.values(fit), lavaan::fitted.values(plain))
+  expect_equal(residuals(fit, type = "cor"), lavaan::residuals(plain, type = "cor"))
+  expect_equal(resid(fit, type = "cor"), lavaan::resid(plain, type = "cor"))
+  expect_equal(predict(fit), lavaan::predict(plain))
+  expect_equal(fitMeasures(fit, c("chisq", "df", "cfi")), lavaan::fitMeasures(plain, c("chisq", "df", "cfi")))
+  expect_equal(lavaan::lavInspect(fit, "std.se"), lavaan::lavInspect(plain, "std.se"))
+  expect_true(all(is.finite(unlist(lavaan::lavInspect(fit, "std.se")$lambda))))
+  expect_equal(lavaan::lavTech(fit, "est"), lavaan::lavTech(plain, "est"))
+  expect_identical(get_latpl_fit(fit), fit@external$lavaan.pl)
+  expect_error(get_latpl_fit(plain), "must come from")
+  shown <- capture.output(fit)
+  expect_true(startsWith(shown[1], "lavaan.pl"))
+  expect_equal(shown[-1], capture.output(plain))
+})
+
+#### lavaan.pl does not carry copies of lavaan's methods ####
+local({
+  ns <- asNamespace("lavaan.pl")
+  tables <- grep("^[.]__T__", names(ns), value = TRUE)
+  expect_true(length(tables) > 0)
+  expect_true(all(vapply(tables, function(table) identical(names(ns[[table]]), "lavaan.pl"), logical(1))))
+})

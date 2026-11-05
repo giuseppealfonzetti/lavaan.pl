@@ -12,27 +12,29 @@ bfi_sample <- bfi_sample[complete.cases(bfi_sample[, twelve_items]), ][
 ]
 three_factors_four_items <- "A =~ A1 + A2 + A3 + A4\nC =~ C1 + C2 + C3 + C4\nE =~ E1 + E2 + E3 + E4"
 
-#### cfa() returns a lavaan object for binary and ordinal items ####
+#### pmlcfa() returns a lavaan.pl object for binary and ordinal items ####
 local({
   for (fit in list(
-    cfa(lsat_model, LSAT, std.lv = TRUE),
-    cfa(three_factors, bfi, std.lv = TRUE)
+    pmlcfa(lsat_model, LSAT, std.lv = TRUE),
+    pmlcfa(three_factors, bfi, std.lv = TRUE)
   )) {
-    expect_identical(as.character(class(fit)), "lavaan")
+    expect_inherits(fit, "lavaan.pl")
     expect_inherits(coef(fit), "lavaan.vector")
     expect_false(is.null(fit@external$lavaan.pl))
   }
 })
 
-#### Estimators other than PML are fitted by lavaan ####
+#### Estimators other than PML are left to lavaan ####
 local({
-  expect_null(cfa(lsat_model, LSAT, estimator = "DWLS")@external$lavaan.pl)
+  expect_error(pmlcfa(lsat_model, LSAT, estimator = "DWLS"), "lavaan::cfa")
+  expect_error(pmlsem(lsat_model, LSAT, estimator = "DWLS"), "lavaan::sem")
+  expect_false(is.null(pmlcfa(lsat_model, LSAT, estimator = "PML", se = "none")@external$lavaan.pl))
 })
 
 #### std.lv gives the same fit ####
 local({
-  fit_marker <- cfa(three_factors, bfi, std.lv = FALSE, control = set_qn_control())
-  fit_stdlv <- cfa(three_factors, bfi, std.lv = TRUE, control = set_qn_control())
+  fit_marker <- pmlcfa(three_factors, bfi, std.lv = FALSE, control = set_qn_control())
+  fit_stdlv <- pmlcfa(three_factors, bfi, std.lv = TRUE, control = set_qn_control())
   expect_equal(
     fit_marker@external$lavaan.pl$numFit$value,
     fit_stdlv@external$lavaan.pl$numFit$value
@@ -42,14 +44,14 @@ local({
 
 #### SA is selected through control ####
 local({
-  fit <- suppressWarnings(cfa(
+  fit <- suppressWarnings(pmlcfa(
     three_factors,
     bfi,
     std.lv = TRUE,
     control = set_sa_control(),
     se = "none"
   ))
-  expect_identical(as.character(class(fit)), "lavaan")
+  expect_inherits(fit, "lavaan.pl")
   expect_identical(fit@external$lavaan.pl$method, "SA")
 })
 
@@ -62,7 +64,7 @@ local({
     as.numeric
   ))) -
     1
-  fit <- suppressWarnings(cfa(
+  fit <- suppressWarnings(pmlcfa(
     two_factors,
     bfi[1:1000, ],
     group = "gender",
@@ -87,7 +89,7 @@ local({
     }))
   )
   expect_error(
-    cfa(
+    pmlcfa(
       two_factors,
       bfi[1:1000, ],
       group = "gender",
@@ -101,7 +103,7 @@ local({
 
 #### Fixed loadings and equality constraints are honoured ####
 local({
-  fit <- cfa(
+  fit <- pmlcfa(
     "A =~ -0.4*A1 + A2 + a*A3 + b*A4 + c*A5\nC =~ 0.6*C1 + C2 + C3 + C4 + C5\na == 0.5*b + 0.25*c",
     bfi,
     std.lv = TRUE
@@ -114,7 +116,7 @@ local({
 
 #### update() refits with lavaan.pl ####
 local({
-  fit <- cfa(lsat_model, LSAT, std.lv = TRUE)
+  fit <- pmlcfa(lsat_model, LSAT, std.lv = TRUE)
   fit_no_se <- update(fit, se = "none")
   fit_four_items <- update(fit, model = "eta =~ y1 + y2 + y3 + y4")
   expect_identical(fit_no_se@Options$se, "none")
@@ -125,8 +127,8 @@ local({
 
 #### Numerical and analytic standard errors agree ####
 local({
-  fit_analytic <- cfa(lsat_model, LSAT, std.lv = TRUE)
-  fit_numeric <- cfa(
+  fit_analytic <- pmlcfa(lsat_model, LSAT, std.lv = TRUE)
+  fit_numeric <- pmlcfa(
     lsat_model,
     LSAT,
     std.lv = TRUE,
@@ -139,10 +141,10 @@ local({
   )
 })
 
-#### cfa() validates the control arguments ####
+#### pmlcfa() validates the control arguments ####
 local({
   expect_error(
-    cfa(
+    pmlcfa(
       lsat_model,
       LSAT,
       std.lv = TRUE,
@@ -151,11 +153,11 @@ local({
     "set_qn_control"
   )
   expect_error(
-    cfa(lsat_model, LSAT, std.lv = TRUE, estimator.args = list(method = "SA")),
+    pmlcfa(lsat_model, LSAT, std.lv = TRUE, estimator.args = list(method = "SA")),
     "optim.method"
   )
   expect_error(
-    cfa(
+    pmlcfa(
       lsat_model,
       LSAT,
       std.lv = TRUE,
@@ -164,7 +166,7 @@ local({
     "set_init"
   )
   expect_error(
-    cfa(
+    pmlcfa(
       lsat_model,
       LSAT,
       std.lv = TRUE,
@@ -173,7 +175,7 @@ local({
     "set_init"
   )
   expect_error(
-    cfa(
+    pmlcfa(
       lsat_model,
       LSAT,
       std.lv = TRUE,
@@ -181,7 +183,7 @@ local({
     ),
     "start"
   )
-  fit <- cfa(
+  fit <- pmlcfa(
     lsat_model,
     LSAT,
     std.lv = TRUE,
@@ -195,25 +197,25 @@ local({
 local({
   bfi_weighted <- data.frame(bfi, w = 1)
   expect_error(
-    cfa("A =~ A1 + a*A2 + A3\nC =~ C1 + C2 + C3\na > 2", bfi, std.lv = TRUE),
+    pmlcfa("A =~ A1 + a*A2 + A3\nC =~ C1 + C2 + C3\na > 2", bfi, std.lv = TRUE),
     "Inequality constraints"
   )
   expect_error(
-    cfa("A =~ A1 + a*A2 + b*A3\nC =~ C1 + C2 + C3\na > b", bfi, std.lv = TRUE),
+    pmlcfa("A =~ A1 + a*A2 + b*A3\nC =~ C1 + C2 + C3\na > b", bfi, std.lv = TRUE),
     "Inequality constraints"
   )
   expect_error(
-    cfa(three_factors, bfi, std.lv = TRUE, bounds = "standard"),
+    pmlcfa(three_factors, bfi, std.lv = TRUE, bounds = "standard"),
     "bounds"
   )
-  expect_error(cfa(
+  expect_error(pmlcfa(
     three_factors,
     bfi,
     std.lv = TRUE,
     missing = "doubly.robust"
   ))
   expect_error(
-    cfa(
+    pmlcfa(
       three_factors,
       bfi_weighted,
       std.lv = TRUE,
@@ -223,7 +225,7 @@ local({
     "normalization"
   )
   expect_error(
-    cfa(
+    pmlcfa(
       "A =~ A1 + A2 + A3\nC =~ C1 + C2 + C3\nA ~~ v*A\nA ~~ c*C\nc == v",
       bfi,
       std.lv = FALSE
@@ -231,7 +233,7 @@ local({
     "covariances and variances"
   )
   expect_error(
-    cfa(
+    pmlcfa(
       "A =~ A1 + A2 + A3\nC =~ C1 + C2 + C3\nA ~~ v1*A\nC ~~ v2*C\nv1 == v2 + 0.5",
       bfi,
       std.lv = FALSE
@@ -239,24 +241,24 @@ local({
     "variances"
   )
   expect_error(
-    cfa("A =~ A1 + a*A2 + A3\nA1 | t*t1\na == t", bfi, std.lv = TRUE),
+    pmlcfa("A =~ A1 + a*A2 + A3\nA1 | t*t1\na == t", bfi, std.lv = TRUE),
     "either thresholds"
   )
   expect_error(
-    sem("A =~ A1 + A2 + A3\nC =~ C1 + C2 + C3\nA1 ~ C", bfi, std.lv = TRUE),
+    pmlsem("A =~ A1 + A2 + A3\nC =~ C1 + C2 + C3\nA1 ~ C", bfi, std.lv = TRUE),
     "observed variables"
   )
 })
 
 #### A just-identified higher-order factor reproduces the correlated factors ####
 local({
-  fit_correlated <- cfa(
+  fit_correlated <- pmlcfa(
     three_factors_four_items,
     bfi_sample,
     std.lv = TRUE,
     control = set_qn_control()
   )
-  fit_higher_order <- sem(
+  fit_higher_order <- pmlsem(
     paste(three_factors_four_items, "\nG =~ A + C + E"),
     bfi_sample,
     std.lv = TRUE,
@@ -271,13 +273,13 @@ local({
 
 #### A residual covariance improves the fit in a nested test ####
 local({
-  fit_correlated <- cfa(
+  fit_correlated <- pmlcfa(
     three_factors_four_items,
     bfi_sample,
     std.lv = TRUE,
     test = "mean.var.adjusted"
   )
-  fit_residual <- cfa(
+  fit_residual <- pmlcfa(
     paste(three_factors_four_items, "\nA1 ~~ A2"),
     bfi_sample,
     std.lv = TRUE,
@@ -291,9 +293,9 @@ local({
 #### optim.method selects the algorithm, and is shown by lavaan ####
 local({
   fits <- list(
-    `SA-QN` = cfa(lsat_model, LSAT, std.lv = TRUE),
-    SA = cfa(lsat_model, LSAT, std.lv = TRUE, optim.method = "SA"),
-    QN = cfa(lsat_model, LSAT, std.lv = TRUE, optim.method = "QN")
+    `SA-QN` = pmlcfa(lsat_model, LSAT, std.lv = TRUE),
+    SA = pmlcfa(lsat_model, LSAT, std.lv = TRUE, optim.method = "SA"),
+    QN = pmlcfa(lsat_model, LSAT, std.lv = TRUE, optim.method = "QN")
   )
   for (method in names(fits)) {
     expect_identical(fits[[method]]@external$lavaan.pl$method, method)
@@ -302,18 +304,54 @@ local({
   }
   expect_equal(unname(coef(fits$`SA-QN`)), unname(coef(fits$QN)), tolerance = 1e-4)
   expect_identical(
-    cfa(lsat_model, LSAT, std.lv = TRUE, optim.method = "SA", control = set_sa_control(AVERAGE_EPOCHS = 5))@external$lavaan.pl$control$AVERAGE_EPOCHS,
+    pmlcfa(lsat_model, LSAT, std.lv = TRUE, optim.method = "SA", control = set_sa_control(AVERAGE_EPOCHS = 5))@external$lavaan.pl$control$AVERAGE_EPOCHS,
     5L
   )
   expect_identical(
-    cfa(lsat_model, LSAT, std.lv = TRUE, control = set_sa_control())@external$lavaan.pl$method,
+    pmlcfa(lsat_model, LSAT, std.lv = TRUE, control = set_sa_control())@external$lavaan.pl$method,
     "SA"
   )
-  expect_error(cfa(lsat_model, LSAT, std.lv = TRUE, optim.method = "nlminb"), "must be")
-  expect_error(cfa(lsat_model, LSAT, std.lv = TRUE, optim.method = "QN", control = set_sa_control()), "is for SA")
-  expect_error(cfa(lsat_model, LSAT, std.lv = TRUE, control = list()), "must be created")
-  expect_identical(
-    lavaan::lavInspect(cfa(lsat_model, LSAT, estimator = "DWLS", optim.method = "nlminb"), "options")$optim.method,
-    "nlminb"
+  expect_error(pmlcfa(lsat_model, LSAT, std.lv = TRUE, optim.method = "nlminb"), "must be")
+  expect_error(pmlcfa(lsat_model, LSAT, std.lv = TRUE, optim.method = "QN", control = set_sa_control()), "is for SA")
+  expect_error(pmlcfa(lsat_model, LSAT, std.lv = TRUE, control = list()), "must be created")
+})
+
+#### lavaan's slots come from the engine, not from a second lavaan fit ####
+local({
+  set.seed(2)
+  frame <- as.data.frame(bfi)[1:600, ]
+  frame$x1 <- rnorm(600)
+  frame$w <- runif(600, .5, 2)
+  syntax <- "A =~ A1 + A2 + A3\nC =~ C1 + C2 + C3\nC ~ x1"
+  fit <- pmlsem(syntax, frame, std.lv = TRUE, sampling.weights = "w")
+  engine_fit <- fit@external$lavaan.pl
+  logl <- lavaan.pl:::cpp_pl(engine_fit$theta, engine_fit$engine$model, engine_fit$engine$data)$pl
+  expect_identical(fit@optim$logl, logl)
+  expect_equal(fit@optim$fx, -logl / nobs(fit))
+  expect_equal(unname(vcov(fit)[1, 1]), parameterEstimates(fit)$se[1]^2)
+  expect_false(isTRUE(all.equal(
+    lavaan::lavInspect(fit, "start")$lambda,
+    lavaan::lavInspect(fit, "est")$lambda,
+    check.attributes = FALSE
+  )))
+  fit_ordinal <- pmlcfa(lsat_model, LSAT, std.lv = TRUE)
+  expect_equal(fit_ordinal@optim$npar, length(coef(fit_ordinal)))
+  expect_true(all(is.finite(parameterEstimates(pmlcfa(lsat_model, LSAT, std.lv = TRUE, se = "none"))$est)))
+  expect_warning(
+    suppressMessages(pmlcfa("A =~ A1 + A2\nC =~ C1 + C2 + C3", frame, std.lv = TRUE, se = "none")),
+    "ov variances are negative"
+  )
+})
+
+#### lavaan's snake_case options are understood ####
+local({
+  fit <- pmlcfa(lsat_model, LSAT, std_lv = TRUE, optim_method = "QN")
+  expect_true(fit@Options$std.lv)
+  expect_identical(fit@external$lavaan.pl$method, "QN")
+  expect_identical(fit@Options$optim.method, "QN")
+  expect_false(fit@Options$ceq.simple)
+  expect_error(
+    pmlcfa("eta =~ y1 + a*y2 + a*y3 + y4 + y5", LSAT, std.lv = TRUE, ceq.simple = TRUE),
+    "ceq.simple"
   )
 })

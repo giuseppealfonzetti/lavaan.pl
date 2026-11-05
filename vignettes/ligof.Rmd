@@ -30,7 +30,7 @@ library(lavaan.bingof)
 ```{r, eval = FALSE}
 (dat <- gen_data_bin(n = 1000, seed = 123))
 mod <- "eta =~ y1 + y2 + y3 + y4 + y5"
-fit <- cfa(mod, dat, std.lv = TRUE)
+fit <- pmlcfa(mod, dat, std.lv = TRUE)
 stopifnot(!is.null(fit@external$lavaan.pl))
 
 # Test statistics
@@ -40,12 +40,12 @@ all_tests(fit)
 As a comparison, we can look at the output from using the `cfa()` function in the `{lavaan}` package.
 
 ```{r, eval = FALSE}
-fit1 <- lavaan.pl::cfa(mod, dat, std.lv = TRUE, control = set_qn_control())
+fit1 <- lavaan.pl::pmlcfa(mod, dat, std.lv = TRUE, control = set_qn_control())
 fit2 <- lavaan::cfa(mod, dat, std.lv = TRUE, estimator = "PML")
 
 # Test equality of coefficients and standard errors
 stopifnot(isTRUE(all.equal(coef(fit1), coef(fit2), tolerance = 1e-5)))  
-stopifnot(isTRUE(all.equal(fit1@Fit@se, fit2@Fit@se, tolerance = 1e-5)))
+stopifnot(isTRUE(all.equal(parameterEstimates(fit1)$se, parameterEstimates(fit2)$se, tolerance = 1e-5)))
 
 # Test equality of test statistics and p-values
 tests <- c(
@@ -98,7 +98,7 @@ information_matrix <- function(fit, type) {
 ```{r, eval = FALSE}
 # From lavaan.pl
 Hinv1 <- attr(fit1@vcov$vcov, "E.inv")
-fit1 <- cfa(mod, dat, std.lv = TRUE, estimator.args = list(computevar_numderiv = TRUE), verbose = TRUE)
+fit1 <- pmlcfa(mod, dat, std.lv = TRUE, estimator.args = list(computevar_numderiv = TRUE), verbose = TRUE)
 Hinv2 <- attr(fit1@vcov$vcov, "E.inv")
 Hinv3 <- solve(information_matrix(fit1, "observed"))
 

@@ -1,0 +1,111 @@
+#' Convert a lavaan.pl fit into a lavaan.pl object
+#'
+#' @param fit Object of class `latpl_fit` returned by [fit_latpl()].
+#' @param vars Output of [compute_var()] for `fit`, or `NULL` to skip standard errors.
+#' @param template Unfitted [lavaan::lavaan] object for the same model and data, created with `do.fit = FALSE`.
+#' @return An object of class `lavaan.pl`.
+#' @keywords internal
+create_lav_from_latpl <- function(fit, vars = NULL, template) {
+  frees <- lavaan_matrices(template, "free")
+  par_lav <- function(theta) {
+    fit$theta <- theta
+    pars <- get_par(fit, OPTION = "list")
+    if (!inherits(fit$model, "latpl_groups")) pars <- list(pars)
+    x <- numeric(template@Model@nx.free)
+    for (g in seq_along(frees)) {
+      free <- frees[[g]]
+      par <- pars[[g]]
+      x[free$tau[free$tau > 0]] <- par$thresholds[free$tau > 0]
+      x[free$lambda[free$lambda > 0]] <- par$loadings[free$lambda > 0]
+      x[free$psi[free$psi > 0]] <- par$latent_correlations[free$psi > 0]
+      if (!is.null(free$beta)) x[free$beta[free$beta > 0]] <- par$regressions[free$beta > 0]
+      x[free$theta[free$theta > 0]] <- par$residual_covariances[free$theta > 0]
+      x[free$nu[free$nu > 0]] <- par$intercepts[free$nu > 0]
+      x[free$alpha[free$alpha > 0]] <- par$means[free$alpha > 0]
+      if (!is.null(par$scales)) x[free$delta[free$delta > 0]] <- par$scales[free$delta > 0]
+      if (!is.null(par$gamma)) {
+        x[free$gamma[free$gamma > 0]] <- par$gamma[free$gamma > 0]
+        x[free$kappa[free$kappa > 0]] <- par$kappa[free$kappa > 0]
+      }
+    }
+    x
+  }
+
+  # Change Model and implied slots ---------------------------------------------
+  out <- new("lavaan.pl", template)
+  x <- par_lav(fit$theta)
+  logl <- cpp_pl(fit$theta, fit$engine$model, fit$engine$data)$pl
+  out@Model <- lavaan::lav_model_set_parameters(template@Model, x)
+  out@implied <- lavaan::lav_model_implied(out@Model)
+  out@ParTable$est <- lavaan::lav_model_get_parameters(out@Model, type = "user", extra = TRUE)
+  out@Options$do.fit <- TRUE
+  out@Options$optim.method <- fit$method
+  out@optim[c("x", "npar", "logl", "fx")] <- list(x, length(x), logl, -logl / fit$dims$n)
+  out@optim$fx.group <- out@optim$logl.group <- NA
+
+  # Change optim slot (depends whether it is numFit or stoFit) -----------------
+  if (fit$method %in% c("QN", "SA-QN")) {
+    out@optim$iterations <- as.integer(fit$numFit$info[["neval"]])
+    out@optim$converged <- fit$numFit$convergence %in% c(1L, 2L) ||
+      (fit$numFit$convergence == 4L && fit$numFit$info[["maxgradient"]] < template@Options$optim.dx.tol)
+  } else {
+    out@optim$iterations <- as.integer(fit$stoFit$iterations)
+    out@optim$converged <- fit$stoFit$converged
+  }
+  if (isTRUE(out@Options$check.post)) lavaan::lavInspect(out, "post.check")
+
+  # Change vcov slot -----------------------------------------------------------
+  vcov <- NULL
+  if (!is.null(vars)) {
+    delta <- numDeriv::jacobian(function(x) par_lav(as.vector(fit$lincon$K %*% x + fit$lincon$c)),
+                                fit$theta[fit$lincon$free_idx])
+    hinv <- solve(vars$H)
+    vcov <- delta %*% hinv %*% vars$J %*% hinv %*% t(delta) / fit$dims$n
+    attr(vcov, "E.inv") <- delta %*% hinv %*% t(delta)
+    if (!is.null(vars$noise)) vcov <- vcov + delta %*% vars$noise %*% t(delta)
+    out@vcov <- list(se = out@Options$se, information = out@Options$information[1], vcov = vcov)
+    out@ParTable$se <- lavaan::lav_model_vcov_se(out@Model, out@ParTable, vcov = vcov)
+  }
+
+  # Change test slot -----------------------------------------------------------
+  plrt <- NULL
+  if (!identical(out@Options$test, "none") && !identical(fit$stoFit$check$pd, FALSE)) {
+    plrt <- compute_plrt(fit, if (is.null(vars)) compute_var(fit) else vars)
+    tests <- setdiff(out@Options$test, "standard")
+    for (t in setdiff(tests, "mean.var.adjusted")) {
+      warning(sprintf("test option %s not available for estimator PML", t), call. = FALSE)
+    }
+    pml_test <- function(x) {
+      sg <- pmax(x$stat.group, 0)
+      std <- sum(sg)
+      out_test <- list(standard = list(test = "standard", stat = std, stat.group = sg, df = x$df,
+                                       refdistr = "unknown", pvalue = NA))
+      if ("mean.var.adjusted" %in% tests) {
+        out_test$mean.var.adjusted <- list(
+          test = "mean.var.adjusted", stat = x$stat.scaled, stat.group = sg / x$scaling.factor,
+          df = x$df.scaled, pvalue = x$pvalue.scaled, scaling.factor = x$scaling.factor,
+          scaled.test.stat = std, scaled.test = "standard", label = "mean+var adjusted correction (PML)",
+          shift.parameter = NA, trace.UGamma = NA, trace.UGamma4 = NA, trace.UGamma2 = NA,
+          UGamma.eigenvalues = NA
+        )
+      }
+      attr(out_test, "info") <- list(
+        ngroups = out@Data@ngroups, group.label = out@Data@group.label, information = out@Options$information,
+        h1.information = out@Options$h1.information, observed.information = out@Options$observed.information
+      )
+      out_test
+    }
+    out@test <- pml_test(plrt$model)
+    if (isTRUE(out@Options$baseline)) out@baseline <- list(test = pml_test(plrt$baseline))
+  }
+
+  # Change timing slot ---------------------------------------------------------
+  out@timing$optim <- fit$RTime
+  out@timing$vcov <- if (is.null(vars)) 0 else vars$RTime
+  out@timing$total <- out@timing$total + fit$RTime + out@timing$vcov
+  # Include the entire output of lavaan.pl fit --------------------------------------
+  out@external <- list(lavaan.pl = fit, vars = vars, plrt = plrt)
+  # Output ---------------------------------------------------------------------
+  out@call <- template@call
+  out
+}

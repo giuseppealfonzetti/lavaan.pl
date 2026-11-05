@@ -7,7 +7,7 @@
 sa_stability(OBJ, SEEDS = 1:10)
 }
 \arguments{
-\item{OBJ}{Object of class latpl_fit, or a lavaan object from \code{\link[=cfa]{cfa()}} or \code{\link[=sem]{sem()}}, fitted by stochastic approximation.}
+\item{OBJ}{Object of class latpl_fit, or a \code{lavaan.pl} object from \code{\link[=lavaan.pl]{lavaan.pl()}}, fitted by stochastic approximation.}
 
 \item{SEEDS}{Seeds of the pair sampling.}
 }

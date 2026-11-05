@@ -21,7 +21,7 @@ fit <- fit_latpl(data, model, CONTROL = set_sa_control())
 frame <- as.data.frame(lapply(as.data.frame(items), ordered))
 names(frame) <- paste0("y", seq_len(p))
 syntax <- "f1 =~ y1 + y2 + y3 + y4 + y5 + y6\nf2 =~ y7 + y8 + y9 + y10 + y11 + y12"
-fit_lavaan <- lavaan.pl::cfa(syntax, frame, std.lv = TRUE, optim.method = "SA")
+fit_lavaan <- lavaan.pl::pmlcfa(syntax, frame, std.lv = TRUE, optim.method = "SA")
 fit_exact <- fit_latpl(data, model, CONTROL = set_qn_control())
 
 #### sa_diagnostics() reports the run, per parameter and by block ####

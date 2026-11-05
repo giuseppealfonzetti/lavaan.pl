@@ -7,7 +7,7 @@
 plot_sa(OBJ, WHAT = c("trajectory", "objective", "noise"), BLOCKS = NULL)
 }
 \arguments{
-\item{OBJ}{Object of class latpl_fit, or a lavaan object from \code{\link[=cfa]{cfa()}} or \code{\link[=sem]{sem()}}, fitted by stochastic approximation.}
+\item{OBJ}{Object of class latpl_fit, or a \code{lavaan.pl} object from \code{\link[=lavaan.pl]{lavaan.pl()}}, fitted by stochastic approximation.}
 
 \item{WHAT}{\code{"trajectory"} for the estimates across iterations by parameter block, \code{"objective"} for the pairwise
 likelihood along the burn-in (it is not monitored in the averaged phase), \code{"noise"} for the optimisation noise

@@ -425,24 +425,24 @@ local({
   mimic$x1 <- binary[, 1]
   mimic$x2 <- binary[, 2]
   syntax <- "f =~ y1 + y2 + y3 + y4 + y5 + y6\nf ~ x1 + x2"
-  fit_sem <- sem(syntax, mimic, optim.method = "QN")
+  fit_sem <- pmlsem(syntax, mimic, optim.method = "QN")
   expect_equal(fit_sem@external$lavaan.pl$dims$ngam, 2)
   expect_equal(
     unname(coef(fit_sem)[c("f~x1", "f~x2")]),
     as.vector(get_par(fit)$gamma),
     tolerance = 1e-3
   )
-  fit_direct <- sem(paste0(syntax, "\ny2 ~ x1"), mimic)
+  fit_direct <- pmlsem(paste0(syntax, "\ny2 ~ x1"), mimic)
   expect_equal(fit_direct@external$lavaan.pl$dims$nkap, 1)
   expect_equal(fit_direct@external$lavaan.pl$dims$q, 1)
   expect_true(is.finite(coef(fit_direct)["f=~y2"]))
-  expect_error(sem(syntax, mimic, conditional.x = FALSE), "conditional.x")
-  expect_error(sem(syntax, mimic, fixed.x = FALSE), "fixed.x")
+  expect_error(pmlsem(syntax, mimic, conditional.x = FALSE), "conditional.x")
+  expect_error(pmlsem(syntax, mimic, fixed.x = FALSE), "fixed.x")
   expect_error(
-    sem("f =~ y1 + y2 + y3 + y4 + y5 + y6\ny5 ~ y6", mimic),
+    pmlsem("f =~ y1 + y2 + y3 + y4 + y5 + y6\ny5 ~ y6", mimic),
     "exogenous covariates"
   )
-  fit_val <- sem(
+  fit_val <- pmlsem(
     syntax,
     mimic,
     control = set_sa_control(PAIRS_PER_ITERATION = 4),
@@ -454,7 +454,7 @@ local({
   expect_true(lavaan::lavInspect(fit_val, "converged"))
   with_missing <- mimic
   with_missing$y2[1:100] <- NA
-  fit_available <- sem(syntax, with_missing, missing = "available.cases")
+  fit_available <- pmlsem(syntax, with_missing, missing = "available.cases")
   expect_true(is.finite(fit_available@optim$logl))
   expect_equal(
     fit_available@optim$logl,
