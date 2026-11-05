@@ -2,12 +2,12 @@
 #'
 #' @param OBJ Object of class latpl_fit, or a lavaan object from [cfa()] or [sem()].
 #' @return The object of class latpl_fit.
-#' @seealso [sa_diagnostics()], [plot_sa()], [sa_compare()], [sa_stability()]
+#' @seealso [sa_diagnostics()], [plot_sa()], [sa_stability()]
 #' @keywords internal
 sa_fit <- function(OBJ) {
   fit <- if (inherits(OBJ, "lavaan")) OBJ@external$lavaan.pl else OBJ
   if (!inherits(fit, "latpl_fit")) stop("OBJ must come from fit_latpl(), cfa() or sem().", call. = FALSE)
-  if (fit$method != "SA") stop("OBJ was not fitted by stochastic approximation.", call. = FALSE)
+  if (fit$method %in% c("QN", "SA-QN")) stop("OBJ was not fitted by stochastic approximation.", call. = FALSE)
   fit
 }
 
@@ -44,7 +44,7 @@ sa_parameters <- function(FIT) {
 #' @param TARGET Largest ratio of the optimisation noise to the standard error used to suggest a number of epochs.
 #' @return An object of class `latpl_sa_diagnostics`: a list with `converged`, the checks `checks`, the summary of the
 #'   phases `phases`, the settings `settings`, the table of free parameters `parameters` from `sa_parameters()`, its
-#'   summary by block `blocks`, and the value of `EPOCHS` predicted to reach `TARGET` in `epochs_needed`.
+#'   summary by block `blocks`, and the value of `AVERAGE_EPOCHS` predicted to reach `TARGET` in `epochs_needed`.
 #' @export
 sa_diagnostics <- function(OBJ, TARGET = 0.1) {
   fit <- sa_fit(OBJ)
@@ -52,10 +52,10 @@ sa_diagnostics <- function(OBJ, TARGET = 0.1) {
   st <- fit$stoFit
   pars <- sa_parameters(fit)
   phases <- data.frame(
-    phase = c("Adam", "Newton burn-in", "Averaged"),
-    epochs = c(st$adam_epochs, st$newton_epochs, fit$control$EPOCHS),
-    iterations = c(st$adam_epochs, st$newton_epochs, fit$control$EPOCHS) * st$epoch_length,
-    seconds = unname(c(st$time[["adam"]], st$time[["newton"]], st$time[["averaging"]]))
+    phase = c("Adam", "Preconditioning", "Averaged"),
+    epochs = c(st$adam_epochs, st$precondition_epochs, fit$control$AVERAGE_EPOCHS),
+    iterations = c(st$adam_epochs, st$precondition_epochs, fit$control$AVERAGE_EPOCHS) * st$epoch_length,
+    seconds = unname(c(st$time[["adam"]], st$time[["precondition"]], st$time[["averaging"]]))
   )
   summarise <- function(x) {
     data.frame(block = x$block[1], parameters = nrow(x), median_ratio = stats::median(x$ratio), max_ratio = max(x$ratio),
@@ -67,13 +67,12 @@ sa_diagnostics <- function(OBJ, TARGET = 0.1) {
     checks = c(plateau = st$plateau, skipped = st$skipped_averaging, rejected = st$rejections, positive_definite = st$check$pd,
                distance = st$check$distance),
     phases = phases,
-    settings = list(pairs = min(fit$control$PAIRS_PER_ITERATION, fit$dims$pairs), total_pairs = fit$dims$pairs,
-                    epoch_length = st$epoch_length, gain = st$gain, averaged = st$averaged, seconds = fit$RTime,
-                    refined = isTRUE(st$refined), refine_steps = st$check$refine_steps),
+    settings = list(method = fit$method, pairs = st$pairs_per_iteration, total_pairs = fit$dims$pairs,
+                    epoch_length = st$epoch_length, gain = st$gain, averaged = st$averaged, seconds = fit$RTime),
     parameters = pars,
     blocks = do.call(rbind, lapply(split(pars, factor(pars$block, unique(pars$block))), summarise)),
     worst_ratio = worst,
-    epochs_needed = if (is.finite(worst) && worst > 0) ceiling(fit$control$EPOCHS * (worst / TARGET)^2) else NA,
+    epochs_needed = if (is.finite(worst) && worst > 0) ceiling(fit$control$AVERAGE_EPOCHS * (worst / TARGET)^2) else NA,
     target = TARGET
   )
   rownames(out$blocks) <- NULL
@@ -84,23 +83,22 @@ sa_diagnostics <- function(OBJ, TARGET = 0.1) {
 #' @export
 print.latpl_sa_diagnostics <- function(x, ...) {
   s <- x$settings
-  cat("Stochastic approximation:", if (isTRUE(x$converged)) "converged" else "NOT converged", "\n\n")
+  cat(s$method, "fit:", if (isTRUE(x$converged)) "converged" else "NOT converged", "\n\n")
   cat(" Pairs per iteration:", s$pairs, "of", s$total_pairs, "| epoch:", s$epoch_length, "iterations | gain:", s$gain, "\n")
   print(x$phases, row.names = FALSE, digits = 3)
-  cat("\n Burn-in plateau:", as.logical(x$checks[["plateau"]]), "\n",
+  cat("\n Last burn-in phase ended at a plateau:", as.logical(x$checks[["plateau"]]), "\n",
       "Skipped steps in the averaged phase:", x$checks[["skipped"]], "\n",
       "Rejected steps:", x$checks[["rejected"]], "\n",
       "Observed information positive definite:", as.logical(x$checks[["positive_definite"]]), "\n",
       "Largest predicted distance from exact PML:", signif(x$checks[["distance"]], 2), "standard errors\n")
-  if (s$refined) cat(" Refined by", s$refine_steps, "Newton steps: distance and noise below refer to the refined estimate.\n")
   if (all(is.na(x$parameters$ratio))) {
-    cat("\n No standard errors, noise or distances: use set_ucminf_control() or other starting values.\n")
+    cat("\n No standard errors, noise or distances: use set_qn_control() or other starting values.\n")
     return(invisible(x))
   }
   cat("\n Optimisation noise relative to the standard error:\n")
   print(x$blocks, row.names = FALSE, digits = 2)
   if (!is.na(x$epochs_needed) && x$worst_ratio > x$target) {
-    cat("\n EPOCHS =", x$epochs_needed, "would bring the largest ratio to about", x$target, "\n")
+    cat("\n AVERAGE_EPOCHS =", x$epochs_needed, "would bring the largest ratio to about", x$target, "\n")
   }
   invisible(x)
 }
@@ -150,56 +148,6 @@ plot_sa <- function(OBJ, WHAT = c("trajectory", "objective", "noise"), BLOCKS = 
     ))
   )
   invisible(long)
-}
-
-#' Compare stochastic approximation with the exact pairwise likelihood estimate
-#'
-#' Fits the same model and data exactly, and reports the time taken by each and the distance between the estimates.
-#'
-#' @param OBJ Object of class latpl_fit, or a lavaan object from [cfa()] or [sem()], fitted by stochastic approximation.
-#' @param CONTROL Control object from [set_ucminf_control()].
-#' @return An object of class `latpl_sa_compare`: a list with the table `parameters` of each free parameter (`name`,
-#'   `block`, estimates `sa` and `pml`, standard error `se` of the exact fit, `distance` between the estimates in standard
-#'   errors, and the distance `predicted` by [sa_diagnostics()]), the times `seconds`, and the exact fit `pml`.
-#' @export
-sa_compare <- function(OBJ, CONTROL = set_ucminf_control()) {
-  fit <- sa_fit(OBJ)
-  stopifnot(inherits(CONTROL, "latpl_ucminf_control"))
-  pml <- fit_latpl(fit$data, fit$model, CONTROL = CONTROL, NCORES = fit$cores)
-  pars <- sa_parameters(fit)
-  exact <- sqrt(compute_var(pml)$asymptotic_variance / fit$dims$n)[fit$lincon$free_idx]
-  estimates <- get_par(pml, OPTION = "transformed")[fit$lincon$free_idx]
-  out <- list(
-    parameters = data.frame(name = pars$name, block = pars$block, sa = pars$estimate, pml = estimates, se = exact,
-                            distance = ifelse(exact > 0, abs(pars$estimate - estimates) / exact, 0), predicted = pars$distance),
-    seconds = c(sa = fit$RTime, pml = pml$RTime),
-    pml = pml
-  )
-  class(out) <- "latpl_sa_compare"
-  out
-}
-
-#' @export
-print.latpl_sa_compare <- function(x, ...) {
-  cat("Stochastic approximation against exact PML\n\n",
-      "Time: SA", signif(x$seconds[["sa"]], 3), "s, PML", signif(x$seconds[["pml"]], 3), "s\n",
-      "Distance in standard errors: median", signif(stats::median(x$parameters$distance), 2),
-      ", largest", signif(max(x$parameters$distance), 2), "\n",
-      "Largest distance predicted without the exact fit:", signif(max(x$parameters$predicted), 2), "\n")
-  invisible(x)
-}
-
-#' @export
-plot.latpl_sa_compare <- function(x, ...) {
-  if (!requireNamespace("tinyplot", quietly = TRUE)) {
-    warning("{tinyplot} must be installed to plot; the data are returned.", call. = FALSE)
-    return(invisible(x$parameters))
-  }
-  do.call(tinyplot::tinyplot, list(
-    sa ~ pml | block, data = x$parameters, pch = 19, xlab = "Exact PML", ylab = "Stochastic approximation",
-    draw = quote(abline(0, 1, lty = 2, col = "lightgrey")), ...
-  ))
-  invisible(x$parameters)
 }
 
 #' Stability of the stochastic approximation across seeds

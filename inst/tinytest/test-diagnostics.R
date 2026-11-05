@@ -17,12 +17,12 @@ items <- sim_data(
 )
 data <- set_latpl_data(items)
 model <- set_latpl_model(loadings_structure)
-fit <- fit_latpl(data, model)
+fit <- fit_latpl(data, model, CONTROL = set_sa_control())
 frame <- as.data.frame(lapply(as.data.frame(items), ordered))
 names(frame) <- paste0("y", seq_len(p))
 syntax <- "f1 =~ y1 + y2 + y3 + y4 + y5 + y6\nf2 =~ y7 + y8 + y9 + y10 + y11 + y12"
-fit_lavaan <- lavaan.pl::cfa(syntax, frame, std.lv = TRUE)
-fit_exact <- fit_latpl(data, model, CONTROL = set_ucminf_control())
+fit_lavaan <- lavaan.pl::cfa(syntax, frame, std.lv = TRUE, optim.method = "SA")
+fit_exact <- fit_latpl(data, model, CONTROL = set_qn_control())
 
 #### sa_diagnostics() reports the run, per parameter and by block ####
 local({
@@ -36,8 +36,8 @@ local({
   expect_equal(max(d$parameters$distance), fit$stoFit$check$distance)
   expect_equal(sum(d$blocks$parameters), fit$dims$npar)
   expect_equal(d$settings$epoch_length, fit$stoFit$epoch_length)
-  expect_equal(d$phases$iterations[3], fit$control$EPOCHS * fit$stoFit$epoch_length)
-  expect_equal(d$epochs_needed, ceiling(fit$control$EPOCHS * (max(d$parameters$ratio) / .1)^2))
+  expect_equal(d$phases$iterations[3], fit$control$AVERAGE_EPOCHS * fit$stoFit$epoch_length)
+  expect_equal(d$epochs_needed, ceiling(fit$control$AVERAGE_EPOCHS * (max(d$parameters$ratio) / .1)^2))
   expect_stdout(print(d), "converged")
   expect_stdout(print(d), "Optimisation noise")
 })
@@ -48,7 +48,6 @@ local({
   expect_equal(nrow(d$parameters), fit_lavaan@external$lavaan.pl$dims$npar)
   expect_error(sa_diagnostics(fit_exact), "not fitted by stochastic approximation")
   expect_error(plot_sa(fit_exact), "not fitted by stochastic approximation")
-  expect_error(sa_compare(fit_exact), "not fitted by stochastic approximation")
   expect_error(sa_stability(fit_exact), "not fitted by stochastic approximation")
   expect_error(sa_diagnostics(1), "must come from")
 })
@@ -57,7 +56,7 @@ local({
 local({
   start <- fit_exact$init
   start[lavaan.pl:::theta_block(model, sum(data$cat - 1)) == "lambda"] <- 0
-  saddle <- suppressWarnings(fit_latpl(data, model, INIT = set_init(THETA = start)))
+  saddle <- suppressWarnings(fit_latpl(data, model, CONTROL = set_sa_control(), INIT = set_init(THETA = start)))
   d <- sa_diagnostics(saddle)
   expect_false(d$converged)
   expect_true(all(is.na(d$parameters$ratio)))
@@ -77,19 +76,6 @@ local({
   noise <- plot_sa(fit_lavaan, "noise")
   expect_equal(nrow(noise), fit_lavaan@external$lavaan.pl$dims$npar)
   expect_error(plot_sa(fit, "other"))
-})
-
-#### sa_compare() fits the exact estimate, and the predicted distance agrees ####
-local({
-  comparison <- sa_compare(fit)
-  expect_equal(comparison$pml$theta, fit_exact$theta, tolerance = 1e-5)
-  expect_equal(comparison$parameters$sa, get_par(fit, OPTION = "transformed")[fit$lincon$free_idx])
-  expect_true(abs(max(comparison$parameters$distance) - max(comparison$parameters$predicted)) < .1)
-  expect_equal(names(comparison$seconds), c("sa", "pml"))
-  expect_stdout(print(comparison), "exact PML")
-  grDevices::pdf(NULL)
-  on.exit(grDevices::dev.off())
-  expect_equal(plot(comparison), comparison$parameters)
 })
 
 #### sa_stability() compares the seeds with the predicted noise ####

@@ -100,12 +100,12 @@ BEGIN_RCPP
 END_RCPP
 }
 // cpp_sa
-Rcpp::List cpp_sa(const Eigen::Map<Eigen::MatrixXd> STARTS, const Eigen::Map<Eigen::MatrixXd> K, const Eigen::Map<Eigen::VectorXd> C, const Rcpp::List MODEL, const Rcpp::List DATA, const Rcpp::List VALDATA, const int PAIRS_PER_ITERATION, const double ALPHA, const int ADAM_EPOCHS, const int BURN_EPOCHS, const int EPOCHS, const double TOL, const double DECAY, const double AVG_FROM, const int GAIN, const int SEED, const bool ADAM_ONLY, const bool VERBOSE);
-RcppExport SEXP _lavaan_pl_cpp_sa(SEXP STARTSSEXP, SEXP KSEXP, SEXP CSEXP, SEXP MODELSEXP, SEXP DATASEXP, SEXP VALDATASEXP, SEXP PAIRS_PER_ITERATIONSEXP, SEXP ALPHASEXP, SEXP ADAM_EPOCHSSEXP, SEXP BURN_EPOCHSSEXP, SEXP EPOCHSSEXP, SEXP TOLSEXP, SEXP DECAYSEXP, SEXP AVG_FROMSEXP, SEXP GAINSEXP, SEXP SEEDSEXP, SEXP ADAM_ONLYSEXP, SEXP VERBOSESEXP) {
+Rcpp::List cpp_sa(const Eigen::Map<Eigen::VectorXd> START, const Eigen::Map<Eigen::MatrixXd> K, const Eigen::Map<Eigen::VectorXd> C, const Rcpp::List MODEL, const Rcpp::List DATA, const Rcpp::List VALDATA, const int PAIRS_PER_ITERATION, const double ALPHA, const int ADAM_EPOCHS, const int PRECONDITION_EPOCHS, const int MAX_PRECONDITION_EPOCHS, const int AVERAGE_EPOCHS, const double TOL, const double DECAY, const double AVG_FROM, const int GAIN, const int SEED, const bool ADAM_ONLY, const bool VERBOSE);
+RcppExport SEXP _lavaan_pl_cpp_sa(SEXP STARTSEXP, SEXP KSEXP, SEXP CSEXP, SEXP MODELSEXP, SEXP DATASEXP, SEXP VALDATASEXP, SEXP PAIRS_PER_ITERATIONSEXP, SEXP ALPHASEXP, SEXP ADAM_EPOCHSSEXP, SEXP PRECONDITION_EPOCHSSEXP, SEXP MAX_PRECONDITION_EPOCHSSEXP, SEXP AVERAGE_EPOCHSSEXP, SEXP TOLSEXP, SEXP DECAYSEXP, SEXP AVG_FROMSEXP, SEXP GAINSEXP, SEXP SEEDSEXP, SEXP ADAM_ONLYSEXP, SEXP VERBOSESEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< const Eigen::Map<Eigen::MatrixXd> >::type STARTS(STARTSSEXP);
+    Rcpp::traits::input_parameter< const Eigen::Map<Eigen::VectorXd> >::type START(STARTSEXP);
     Rcpp::traits::input_parameter< const Eigen::Map<Eigen::MatrixXd> >::type K(KSEXP);
     Rcpp::traits::input_parameter< const Eigen::Map<Eigen::VectorXd> >::type C(CSEXP);
     Rcpp::traits::input_parameter< const Rcpp::List >::type MODEL(MODELSEXP);
@@ -114,8 +114,9 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< const int >::type PAIRS_PER_ITERATION(PAIRS_PER_ITERATIONSEXP);
     Rcpp::traits::input_parameter< const double >::type ALPHA(ALPHASEXP);
     Rcpp::traits::input_parameter< const int >::type ADAM_EPOCHS(ADAM_EPOCHSSEXP);
-    Rcpp::traits::input_parameter< const int >::type BURN_EPOCHS(BURN_EPOCHSSEXP);
-    Rcpp::traits::input_parameter< const int >::type EPOCHS(EPOCHSSEXP);
+    Rcpp::traits::input_parameter< const int >::type PRECONDITION_EPOCHS(PRECONDITION_EPOCHSSEXP);
+    Rcpp::traits::input_parameter< const int >::type MAX_PRECONDITION_EPOCHS(MAX_PRECONDITION_EPOCHSSEXP);
+    Rcpp::traits::input_parameter< const int >::type AVERAGE_EPOCHS(AVERAGE_EPOCHSSEXP);
     Rcpp::traits::input_parameter< const double >::type TOL(TOLSEXP);
     Rcpp::traits::input_parameter< const double >::type DECAY(DECAYSEXP);
     Rcpp::traits::input_parameter< const double >::type AVG_FROM(AVG_FROMSEXP);
@@ -123,7 +124,7 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< const int >::type SEED(SEEDSEXP);
     Rcpp::traits::input_parameter< const bool >::type ADAM_ONLY(ADAM_ONLYSEXP);
     Rcpp::traits::input_parameter< const bool >::type VERBOSE(VERBOSESEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_sa(STARTS, K, C, MODEL, DATA, VALDATA, PAIRS_PER_ITERATION, ALPHA, ADAM_EPOCHS, BURN_EPOCHS, EPOCHS, TOL, DECAY, AVG_FROM, GAIN, SEED, ADAM_ONLY, VERBOSE));
+    rcpp_result_gen = Rcpp::wrap(cpp_sa(START, K, C, MODEL, DATA, VALDATA, PAIRS_PER_ITERATION, ALPHA, ADAM_EPOCHS, PRECONDITION_EPOCHS, MAX_PRECONDITION_EPOCHS, AVERAGE_EPOCHS, TOL, DECAY, AVG_FROM, GAIN, SEED, ADAM_ONLY, VERBOSE));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -135,7 +136,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_lavaan_pl_cpp_saturated", (DL_FUNC) &_lavaan_pl_cpp_saturated, 5},
     {"_lavaan_pl_cpp_saturated_traces", (DL_FUNC) &_lavaan_pl_cpp_saturated_traces, 8},
     {"_lavaan_pl_pairs_freq", (DL_FUNC) &_lavaan_pl_pairs_freq, 4},
-    {"_lavaan_pl_cpp_sa", (DL_FUNC) &_lavaan_pl_cpp_sa, 18},
+    {"_lavaan_pl_cpp_sa", (DL_FUNC) &_lavaan_pl_cpp_sa, 19},
     {NULL, NULL, 0}
 };
 

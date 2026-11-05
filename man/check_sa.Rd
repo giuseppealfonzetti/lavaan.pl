@@ -4,14 +4,10 @@
 \alias{check_sa}
 \title{End-of-run check of the stochastic approximation}
 \usage{
-check_sa(FIT, CONTROL, FEASIBLE)
+check_sa(FIT)
 }
 \arguments{
 \item{FIT}{Object of class latpl_fit.}
-
-\item{CONTROL}{Control object from \code{\link[=set_sa_control]{set_sa_control()}}.}
-
-\item{FEASIBLE}{Function checking that a parameter vector is in the parameter space.}
 }
 \value{
 \code{FIT}, with \code{vars} and, in \code{stoFit}, the check \code{check} and the updated \code{converged}.
@@ -20,8 +16,8 @@ check_sa(FIT, CONTROL, FEASIBLE)
 Stores the variance at the estimate, which the check needs and \code{\link[=compute_var]{compute_var()}} reuses. The fit has failed if the
 observed information is not positive definite, or if the estimate is further from the optimum of the pairwise
 likelihood than one standard error and four times the predicted noise on the worst parameter, because the noise cannot
-explain it. A larger distance that the noise explains only warns: the standard errors account for it. With
-\code{CONTROL$REFINE}, Newton steps then move the estimate to the optimum.
+explain it. A larger distance that the noise explains only warns: the standard errors account for it. Above 2000 free
+parameters there is no check, and the fit has failed if the Adam phase did not reach a plateau.
 }
 \seealso{
 \code{\link[=fit_latpl]{fit_latpl()}}, \code{\link[=compute_var]{compute_var()}}

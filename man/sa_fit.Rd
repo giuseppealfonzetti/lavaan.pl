@@ -16,6 +16,6 @@ The object of class latpl_fit.
 Fit behind a stochastic approximation object
 }
 \seealso{
-\code{\link[=sa_diagnostics]{sa_diagnostics()}}, \code{\link[=plot_sa]{plot_sa()}}, \code{\link[=sa_compare]{sa_compare()}}, \code{\link[=sa_stability]{sa_stability()}}
+\code{\link[=sa_diagnostics]{sa_diagnostics()}}, \code{\link[=plot_sa]{plot_sa()}}, \code{\link[=sa_stability]{sa_stability()}}
 }
 \keyword{internal}

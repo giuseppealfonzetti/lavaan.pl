@@ -7,7 +7,7 @@
 fit_latpl(
   DATA,
   MODEL,
-  CONTROL = set_sa_control(),
+  CONTROL = set_saqn_control(),
   INIT = set_init(),
   NCORES = 1,
   VERBOSE = FALSE
@@ -18,9 +18,8 @@ fit_latpl(
 
 \item{MODEL}{Model object from \code{\link[=set_latpl_model]{set_latpl_model()}}, or from \code{\link[=set_latpl_groups]{set_latpl_groups()}} for several groups.}
 
-\item{CONTROL}{Control object of the main optimiser: \code{\link[=set_sa_control]{set_sa_control()}} for
-stochastic approximation, \code{\link[=set_ucminf_control]{set_ucminf_control()}} for the quasi-Newton BFGS
-optimiser from the \code{ucminf} package.}
+\item{CONTROL}{Control object, which selects the method: \code{\link[=set_saqn_control]{set_saqn_control()}} for
+\code{SA-QN}, \code{\link[=set_sa_control]{set_sa_control()}} for \code{SA}, \code{\link[=set_qn_control]{set_qn_control()}} for \code{QN}.}
 
 \item{INIT}{Starting values object from \code{\link[=set_init]{set_init()}}.}
 
@@ -32,10 +31,15 @@ estimation.}
 \value{
 Object of class \code{latpl_fit}: a list with the inputs \code{data}, \code{model} and
 \code{control}, the starting values \code{init}, the estimates \code{theta} (use
-\code{\link[=get_par]{get_par()}}), the dimensions \code{dims}, the optimiser output \code{stoFit} (SA) or
-\code{numFit} (ucminf), the variance \code{vars} at the estimate (SA), and the timing \code{RTime}.
+\code{\link[=get_par]{get_par()}}), the dimensions \code{dims}, the \code{method}, the optimiser output \code{stoFit} (\code{SA},
+the burn-in of \code{SA-QN}, with the pairwise log-likelihood reached from each start in
+\code{start_logl}) or \code{numFit} (\code{QN}, \code{SA-QN}), the variance \code{vars} at the estimate (\code{SA}), and
+the timing \code{RTime}.
 }
 \description{
-Fit latent variable models using pairwise stochastic approximation (the default)
-or the exact pairwise likelihood estimate via quasi-Newton BFGS.
+Fit latent variable models with one of three methods: the pairwise likelihood estimate by
+quasi-Newton BFGS started from the burn-in of stochastic approximation and its curvature
+(\code{SA-QN}, the default), pairwise stochastic approximation with Polyak-Ruppert averaging, whose
+standard errors account for the optimisation noise (\code{SA}), or quasi-Newton BFGS from the
+starting values alone (\code{QN}).
 }

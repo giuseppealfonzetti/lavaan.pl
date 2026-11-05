@@ -383,20 +383,20 @@ set_init <- function(METHOD = c("standard", "SA"), THETA = NULL, CONTROL = set_s
   out
 }
 
-#' Control options for the ucminf optimiser
+#' Control options of the quasi-Newton method
 #'
-#' The route to the exact pairwise likelihood estimate, as an alternative to [set_sa_control()].
+#' The `QN` method: the exact pairwise likelihood estimate, by the BFGS optimiser of the \code{ucminf} package.
 #'
 #' @param GRTOL Tolerance on the largest absolute gradient element.
 #' @param XTOL Tolerance on the relative step length.
 #' @param STEPMAX Initial maximal step length of the trust region.
 #' @param MAXEVAL Maximum number of function evaluations.
 #'
-#' @return An object of class `latpl_ucminf_control` to be passed to [fit_latpl()] via `CONTROL`
-#'   when `METHOD = "ucminf"`, or to [cfa()] via `control`.
+#' @return An object of class `latpl_qn_control` to be passed to [fit_latpl()] via `CONTROL`, or to
+#'   [cfa()] via `control`.
 #'
 #' @export
-set_ucminf_control <- function(
+set_qn_control <- function(
   GRTOL = 1e-6,
   XTOL = 1e-12,
   STEPMAX = 1,
@@ -409,34 +409,36 @@ set_ucminf_control <- function(
     is.numeric(MAXEVAL), length(MAXEVAL) == 1, MAXEVAL >= 1
   )
   out <- list(GRTOL = GRTOL, XTOL = XTOL, STEPMAX = STEPMAX, MAXEVAL = as.integer(MAXEVAL))
-  class(out) <- "latpl_ucminf_control"
+  class(out) <- "latpl_qn_control"
   out
 }
 
-#' Control options for the pairwise stochastic approximation
+#' Control options of the pairwise stochastic approximation
 #'
-#' The algorithm draws `PAIRS_PER_ITERATION` item pairs at each iteration, uniformly and
-#' independently across iterations, and runs in three phases: Adam, a stochastic Newton burn-in
-#' and stochastic gradient updates with a frozen gain and Polyak-Ruppert averaging. An epoch is
-#' the number of iterations needed to draw as many pairs as there are in the model.
+#' The `SA` method. It draws item pairs at each iteration, uniformly and independently across iterations, and runs in
+#' three phases: Adam, preconditioning, and stochastic gradient updates with a frozen gain and Polyak-Ruppert averaging. An
+#' epoch is the number of iterations needed to draw as many pairs as there are in the model, one pass over the pairs.
 #'
 #' @param PAIRS_PER_ITERATION Number of item pairs drawn at each iteration.
 #' @param ALPHA Step length of the Adam phase, divided by the square root of the number of
 #'   iterations per epoch.
-#' @param ADAM_EPOCHS Maximum number of epochs of the Adam phase, or as many as make 150 iterations if
-#'   more.
-#' @param BURN_EPOCHS Maximum number of epochs of the stochastic Newton burn-in.
-#' @param EPOCHS Number of epochs of the averaged phase.
-#' @param TOL Improvement of the pairwise log-likelihood at the epoch average, per free parameter,
-#'   below which, at two consecutive epochs, a burn-in phase ends.
+#' @param ADAM_EPOCHS Maximum number of epochs of the Adam phase. If `NULL`, 5, or as many as make 150 iterations on small
+#'   models, whose epochs are short.
+#' @param PRECONDITION_EPOCHS Number of epochs of the preconditioning phase, which draws each pair once per epoch,
+#'   recomputes the observed information as the gain after each epoch, and takes stochastic Newton steps with it. The
+#'   gain is then frozen, unless the observed information is not positive definite. With `0`, the gain is computed at
+#'   the end of the Adam phase.
+#' @param MAX_PRECONDITION_EPOCHS Maximum number of epochs of the preconditioning phase while the observed information
+#'   is not positive definite.
+#' @param AVERAGE_EPOCHS Number of epochs of the averaged phase, at least 1 to fit with [fit_latpl()].
+#' @param TOL Absolute change of the pairwise log-likelihood at the epoch average, per free parameter, below which, at
+#'   two consecutive epochs, the Adam or the preconditioning phase ends before its maximum.
 #' @param DECAY Exponent of the step length decay in the averaged phase, in \eqn{(1/2, 1)}.
 #' @param AVG_FROM Fraction of the averaged phase discarded before averaging.
-#' @param GAIN Gain of the burn-in and averaged phases: `"hessian"` (inverse observed information),
-#'   `"diagonal"` (Adam's diagonal preconditioner, no Newton burn-in), or `"auto"` (`"hessian"` up
-#'   to 2000 free parameters).
+#' @param GAIN Gain of the preconditioning and averaged phases: `"hessian"` (inverse observed information),
+#'   `"diagonal"` (Adam's diagonal preconditioner, no preconditioning phase), or `"auto"` (`"hessian"` up to 2000 free
+#'   parameters).
 #' @param SEED Seed of the pair sampling.
-#' @param REFINE If `TRUE`, finish with Newton steps on the full pairwise likelihood, which take the
-#'   average to the exact optimum at the cost of a few evaluations of the Hessian.
 #'
 #' @return An object of class `latpl_sa_control` to be passed to [fit_latpl()] via `CONTROL`, or to
 #'   [cfa()] via `control`.
@@ -445,48 +447,102 @@ set_ucminf_control <- function(
 set_sa_control <- function(
   PAIRS_PER_ITERATION = 16,
   ALPHA = 0.2,
-  ADAM_EPOCHS = 5,
-  BURN_EPOCHS = 30,
-  EPOCHS = 50,
+  ADAM_EPOCHS = NULL,
+  PRECONDITION_EPOCHS = 3,
+  MAX_PRECONDITION_EPOCHS = 20,
+  AVERAGE_EPOCHS = 50,
   TOL = 0.05,
   DECAY = 0.75,
   AVG_FROM = 0.25,
   GAIN = c("auto", "hessian", "diagonal"),
-  SEED = 123,
-  REFINE = FALSE
+  SEED = 123
 ) {
   GAIN <- match.arg(GAIN)
   num <- function(x) is.numeric(x) && length(x) == 1 && is.finite(x)
   stopifnot(
     num(PAIRS_PER_ITERATION), PAIRS_PER_ITERATION >= 1,
     num(ALPHA), ALPHA > 0,
-    num(ADAM_EPOCHS), ADAM_EPOCHS >= 1,
-    num(BURN_EPOCHS), BURN_EPOCHS >= 0,
-    num(EPOCHS), EPOCHS >= 0,
+    is.null(ADAM_EPOCHS) || (num(ADAM_EPOCHS) && ADAM_EPOCHS >= 1),
+    num(PRECONDITION_EPOCHS), PRECONDITION_EPOCHS >= 0,
+    num(MAX_PRECONDITION_EPOCHS), MAX_PRECONDITION_EPOCHS >= 0,
+    num(AVERAGE_EPOCHS), AVERAGE_EPOCHS >= 0,
     num(TOL), TOL > 0,
     num(DECAY), DECAY > 0.5, DECAY < 1,
     num(AVG_FROM), AVG_FROM >= 0, AVG_FROM < 1,
-    num(SEED), SEED > 0,
-    isTRUE(REFINE) || isFALSE(REFINE)
+    num(SEED), SEED > 0
   )
-  out <- list(PAIRS_PER_ITERATION = as.integer(PAIRS_PER_ITERATION), ALPHA = ALPHA, ADAM_EPOCHS = as.integer(ADAM_EPOCHS),
-              BURN_EPOCHS = as.integer(BURN_EPOCHS), EPOCHS = as.integer(EPOCHS), TOL = TOL, DECAY = DECAY,
-              AVG_FROM = AVG_FROM, GAIN = GAIN, SEED = as.integer(SEED), REFINE = REFINE)
+  out <- list(PAIRS_PER_ITERATION = as.integer(PAIRS_PER_ITERATION), ALPHA = ALPHA,
+              ADAM_EPOCHS = if (!is.null(ADAM_EPOCHS)) as.integer(ADAM_EPOCHS), PRECONDITION_EPOCHS = as.integer(PRECONDITION_EPOCHS),
+              MAX_PRECONDITION_EPOCHS = as.integer(MAX_PRECONDITION_EPOCHS), AVERAGE_EPOCHS = as.integer(AVERAGE_EPOCHS),
+              TOL = TOL, DECAY = DECAY, AVG_FROM = AVG_FROM, GAIN = GAIN,
+              SEED = as.integer(SEED))
   class(out) <- "latpl_sa_control"
   out
+}
+
+#' Control options of quasi-Newton from the burn-in of stochastic approximation
+#'
+#' The `SA-QN` method: the Adam and preconditioning phases of [set_sa_control()], without the averaged phase, followed by
+#' [set_qn_control()] from their end point, with the inverse of the observed information as the initial inverse Hessian.
+#' Above 2000 free parameters, it starts from the end of the Adam phase, without curvature.
+#'
+#' @inheritParams set_sa_control
+#' @inheritParams set_qn_control
+#' @param NSTARTS Number of full runs from the same starting values, with seeds `SEED`, `SEED + 1` and so on. The highest
+#'   pairwise log-likelihood is kept, with a warning if the runs disagree. Each run adds its full cost.
+#'
+#' @return An object of class `latpl_saqn_control` to be passed to [fit_latpl()] via `CONTROL`, or to [cfa()] via
+#'   `control`.
+#'
+#' @export
+set_saqn_control <- function(
+  PAIRS_PER_ITERATION = 16,
+  ALPHA = 0.2,
+  ADAM_EPOCHS = NULL,
+  PRECONDITION_EPOCHS = 3,
+  MAX_PRECONDITION_EPOCHS = 20,
+  TOL = 0.05,
+  SEED = 123,
+  NSTARTS = 1,
+  GRTOL = 1e-6,
+  XTOL = 1e-12,
+  STEPMAX = 1,
+  MAXEVAL = 500
+) {
+  stopifnot(is.numeric(NSTARTS), length(NSTARTS) == 1, is.finite(NSTARTS), NSTARTS >= 1)
+  out <- c(
+    set_sa_control(PAIRS_PER_ITERATION = PAIRS_PER_ITERATION, ALPHA = ALPHA, ADAM_EPOCHS = ADAM_EPOCHS,
+                   PRECONDITION_EPOCHS = PRECONDITION_EPOCHS, MAX_PRECONDITION_EPOCHS = MAX_PRECONDITION_EPOCHS,
+                   AVERAGE_EPOCHS = 0, TOL = TOL, SEED = SEED),
+    set_qn_control(GRTOL = GRTOL, XTOL = XTOL, STEPMAX = STEPMAX, MAXEVAL = MAXEVAL),
+    list(NSTARTS = as.integer(NSTARTS))
+  )
+  class(out) <- c("latpl_saqn_control", "latpl_qn_control", "latpl_sa_control")
+  out
+}
+
+#' Method of a control object
+#'
+#' @param CONTROL Control object from [set_saqn_control()], [set_sa_control()] or [set_qn_control()].
+#' @return `"SA-QN"`, `"SA"` or `"QN"`.
+#' @seealso [fit_latpl()], [cfa()]
+#' @keywords internal
+control_method <- function(CONTROL) {
+  if (inherits(CONTROL, "latpl_saqn_control")) return("SA-QN")
+  if (inherits(CONTROL, "latpl_sa_control")) "SA" else "QN"
 }
 
 #' Control options for the stochastic approximation initialisation
 #'
 #' Only the Adam phase of [set_sa_control()] runs, and its end point is the starting value of
-#' [set_ucminf_control()].
+#' [set_qn_control()].
 #'
 #' @inheritParams set_sa_control
 #'
 #' @return An object of class `latpl_sa_control` to be passed to [set_init()] via `CONTROL`.
 #'
 #' @export
-set_sa_init_control <- function(PAIRS_PER_ITERATION = 16, ALPHA = 0.2, ADAM_EPOCHS = 5, TOL = 0.05, SEED = 123) {
+set_sa_init_control <- function(PAIRS_PER_ITERATION = 16, ALPHA = 0.2, ADAM_EPOCHS = NULL, TOL = 0.05, SEED = 123) {
   set_sa_control(PAIRS_PER_ITERATION = PAIRS_PER_ITERATION, ALPHA = ALPHA, ADAM_EPOCHS = ADAM_EPOCHS,
-                 EPOCHS = 0, TOL = TOL, SEED = SEED)
+                 AVERAGE_EPOCHS = 0, TOL = TOL, SEED = SEED)
 }

@@ -7,7 +7,7 @@
 set_sa_init_control(
   PAIRS_PER_ITERATION = 16,
   ALPHA = 0.2,
-  ADAM_EPOCHS = 5,
+  ADAM_EPOCHS = NULL,
   TOL = 0.05,
   SEED = 123
 )
@@ -18,11 +18,11 @@ set_sa_init_control(
 \item{ALPHA}{Step length of the Adam phase, divided by the square root of the number of
 iterations per epoch.}
 
-\item{ADAM_EPOCHS}{Maximum number of epochs of the Adam phase, or as many as make 150 iterations if
-more.}
+\item{ADAM_EPOCHS}{Maximum number of epochs of the Adam phase. If \code{NULL}, 5, or as many as make 150 iterations on small
+models, whose epochs are short.}
 
-\item{TOL}{Improvement of the pairwise log-likelihood at the epoch average, per free parameter,
-below which, at two consecutive epochs, a burn-in phase ends.}
+\item{TOL}{Absolute change of the pairwise log-likelihood at the epoch average, per free parameter, below which, at
+two consecutive epochs, the Adam or the preconditioning phase ends before its maximum.}
 
 \item{SEED}{Seed of the pair sampling.}
 }
@@ -31,5 +31,5 @@ An object of class \code{latpl_sa_control} to be passed to \code{\link[=set_init
 }
 \description{
 Only the Adam phase of \code{\link[=set_sa_control]{set_sa_control()}} runs, and its end point is the starting value of
-\code{\link[=set_ucminf_control]{set_ucminf_control()}}.
+\code{\link[=set_qn_control]{set_qn_control()}}.
 }

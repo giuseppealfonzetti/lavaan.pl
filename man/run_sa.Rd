@@ -4,10 +4,10 @@
 \alias{run_sa}
 \title{Stochastic approximation}
 \usage{
-run_sa(STARTS, DATA, ENGINE, LINCON, CONTROL, ADAM_ONLY, VERBOSE)
+run_sa(START, DATA, ENGINE, LINCON, CONTROL, ADAM_ONLY, VERBOSE)
 }
 \arguments{
-\item{STARTS}{List of starting parameter vectors.}
+\item{START}{Starting parameter vector.}
 
 \item{DATA}{Data object from \code{\link[=set_latpl_data]{set_latpl_data()}}.}
 

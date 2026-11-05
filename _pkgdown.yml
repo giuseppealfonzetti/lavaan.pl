@@ -44,7 +44,6 @@ reference:
     contents:
       - sa_diagnostics
       - plot_sa
-      - sa_compare
       - sa_stability
 
   - title: Inputs and controls

@@ -2,20 +2,20 @@
 % Please edit documentation in R/control.R
 \name{set_sa_control}
 \alias{set_sa_control}
-\title{Control options for the pairwise stochastic approximation}
+\title{Control options of the pairwise stochastic approximation}
 \usage{
 set_sa_control(
   PAIRS_PER_ITERATION = 16,
   ALPHA = 0.2,
-  ADAM_EPOCHS = 5,
-  BURN_EPOCHS = 30,
-  EPOCHS = 50,
+  ADAM_EPOCHS = NULL,
+  PRECONDITION_EPOCHS = 3,
+  MAX_PRECONDITION_EPOCHS = 20,
+  AVERAGE_EPOCHS = 50,
   TOL = 0.05,
   DECAY = 0.75,
   AVG_FROM = 0.25,
   GAIN = c("auto", "hessian", "diagonal"),
-  SEED = 123,
-  REFINE = FALSE
+  SEED = 123
 )
 }
 \arguments{
@@ -24,36 +24,38 @@ set_sa_control(
 \item{ALPHA}{Step length of the Adam phase, divided by the square root of the number of
 iterations per epoch.}
 
-\item{ADAM_EPOCHS}{Maximum number of epochs of the Adam phase, or as many as make 150 iterations if
-more.}
+\item{ADAM_EPOCHS}{Maximum number of epochs of the Adam phase. If \code{NULL}, 5, or as many as make 150 iterations on small
+models, whose epochs are short.}
 
-\item{BURN_EPOCHS}{Maximum number of epochs of the stochastic Newton burn-in.}
+\item{PRECONDITION_EPOCHS}{Number of epochs of the preconditioning phase, which draws each pair once per epoch,
+recomputes the observed information as the gain after each epoch, and takes stochastic Newton steps with it. The
+gain is then frozen, unless the observed information is not positive definite. With \code{0}, the gain is computed at
+the end of the Adam phase.}
 
-\item{EPOCHS}{Number of epochs of the averaged phase.}
+\item{MAX_PRECONDITION_EPOCHS}{Maximum number of epochs of the preconditioning phase while the observed information
+is not positive definite.}
 
-\item{TOL}{Improvement of the pairwise log-likelihood at the epoch average, per free parameter,
-below which, at two consecutive epochs, a burn-in phase ends.}
+\item{AVERAGE_EPOCHS}{Number of epochs of the averaged phase, at least 1 to fit with \code{\link[=fit_latpl]{fit_latpl()}}.}
+
+\item{TOL}{Absolute change of the pairwise log-likelihood at the epoch average, per free parameter, below which, at
+two consecutive epochs, the Adam or the preconditioning phase ends before its maximum.}
 
 \item{DECAY}{Exponent of the step length decay in the averaged phase, in \eqn{(1/2, 1)}.}
 
 \item{AVG_FROM}{Fraction of the averaged phase discarded before averaging.}
 
-\item{GAIN}{Gain of the burn-in and averaged phases: \code{"hessian"} (inverse observed information),
-\code{"diagonal"} (Adam's diagonal preconditioner, no Newton burn-in), or \code{"auto"} (\code{"hessian"} up
-to 2000 free parameters).}
+\item{GAIN}{Gain of the preconditioning and averaged phases: \code{"hessian"} (inverse observed information),
+\code{"diagonal"} (Adam's diagonal preconditioner, no preconditioning phase), or \code{"auto"} (\code{"hessian"} up to 2000 free
+parameters).}
 
 \item{SEED}{Seed of the pair sampling.}
-
-\item{REFINE}{If \code{TRUE}, finish with Newton steps on the full pairwise likelihood, which take the
-average to the exact optimum at the cost of a few evaluations of the Hessian.}
 }
 \value{
 An object of class \code{latpl_sa_control} to be passed to \code{\link[=fit_latpl]{fit_latpl()}} via \code{CONTROL}, or to
 \code{\link[=cfa]{cfa()}} via \code{control}.
 }
 \description{
-The algorithm draws \code{PAIRS_PER_ITERATION} item pairs at each iteration, uniformly and
-independently across iterations, and runs in three phases: Adam, a stochastic Newton burn-in
-and stochastic gradient updates with a frozen gain and Polyak-Ruppert averaging. An epoch is
-the number of iterations needed to draw as many pairs as there are in the model.
+The \code{SA} method. It draws item pairs at each iteration, uniformly and independently across iterations, and runs in
+three phases: Adam, preconditioning, and stochastic gradient updates with a frozen gain and Polyak-Ruppert averaging. An
+epoch is the number of iterations needed to draw as many pairs as there are in the model, one pass over the pairs.
 }

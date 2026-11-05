@@ -2,14 +2,16 @@
 #'
 #'@description
 #'
-#'Fit latent variable models using pairwise stochastic approximation (the default)
-#'or the exact pairwise likelihood estimate via quasi-Newton BFGS.
+#'Fit latent variable models with one of three methods: the pairwise likelihood estimate by
+#'quasi-Newton BFGS started from the burn-in of stochastic approximation and its curvature
+#'(`SA-QN`, the default), pairwise stochastic approximation with Polyak-Ruppert averaging, whose
+#'standard errors account for the optimisation noise (`SA`), or quasi-Newton BFGS from the
+#'starting values alone (`QN`).
 #'
 #'@param DATA Data object from [set_latpl_data()].
 #'@param MODEL Model object from [set_latpl_model()], or from [set_latpl_groups()] for several groups.
-#'@param CONTROL Control object of the main optimiser: [set_sa_control()] for
-#'  stochastic approximation, [set_ucminf_control()] for the quasi-Newton BFGS
-#'  optimiser from the \code{ucminf} package.
+#'@param CONTROL Control object, which selects the method: [set_saqn_control()] for
+#'  `SA-QN`, [set_sa_control()] for `SA`, [set_qn_control()] for `QN`.
 #'@param INIT Starting values object from [set_init()].
 #'@param NCORES Integer value setting the number of threads to carry out the
 #'  estimation.
@@ -17,13 +19,15 @@
 #'
 #'@return Object of class `latpl_fit`: a list with the inputs `data`, `model` and
 #'  `control`, the starting values `init`, the estimates `theta` (use
-#'  [get_par()]), the dimensions `dims`, the optimiser output `stoFit` (SA) or
-#'  `numFit` (ucminf), the variance `vars` at the estimate (SA), and the timing `RTime`.
+#'  [get_par()]), the dimensions `dims`, the `method`, the optimiser output `stoFit` (`SA`,
+#'  the burn-in of `SA-QN`, with the pairwise log-likelihood reached from each start in
+#'  `start_logl`) or `numFit` (`QN`, `SA-QN`), the variance `vars` at the estimate (`SA`), and
+#'  the timing `RTime`.
 #'@export
 fit_latpl <- function(
   DATA,
   MODEL,
-  CONTROL = set_sa_control(),
+  CONTROL = set_saqn_control(),
   INIT = set_init(),
   NCORES = 1,
   VERBOSE = FALSE
@@ -32,7 +36,7 @@ fit_latpl <- function(
   stopifnot(
     inherits(DATA, "latpl_data"),
     inherits(MODEL, c("latpl_model", "latpl_groups")),
-    inherits(CONTROL, c("latpl_ucminf_control", "latpl_sa_control")),
+    inherits(CONTROL, c("latpl_qn_control", "latpl_sa_control")),
     inherits(INIT, "latpl_init"),
     DATA$p == MODEL$p
   )
@@ -46,7 +50,10 @@ fit_latpl <- function(
   }
   direct <- vapply(models, function(x) corrflag_code(x) == 2, logical(1))
   nthr <- sum(DATA$cat - 1)
-  METHOD <- if (inherits(CONTROL, "latpl_sa_control")) "SA" else "ucminf"
+  METHOD <- control_method(CONTROL)
+  if (METHOD == "SA" && CONTROL$AVERAGE_EPOCHS == 0) {
+    stop("The SA method needs AVERAGE_EPOCHS of at least 1: use set_saqn_control() to skip the averaged phase.")
+  }
   dims <- latpl_dims(DATA, MODEL)
   lc <- lincon(MODEL, nthr)
   dims$npar <- length(lc$free_idx)
@@ -81,12 +88,12 @@ fit_latpl <- function(
   }
   std <- standardise_covariates(DATA, MODEL, lc, nthr)
   eng_std <- if (is.null(std$model)) eng else engine(std$data, std$model)
-  if (METHOD == "ucminf" && INIT$METHOD == "SA") {
+  if (METHOD == "QN" && INIT$METHOD == "SA") {
     if (VERBOSE) {
       message("- Initialising with the SA Adam phase...")
     }
     fit$init <- std$from(run_sa(
-      list(std$to(fit$init)),
+      std$to(fit$init),
       std$data,
       eng_std,
       lc,
@@ -123,7 +130,7 @@ fit_latpl <- function(
     )
   }
 
-  if (METHOD == "ucminf" && any(direct) && pd(fit$init)) {
+  if (METHOD == "QN" && any(direct) && pd(fit$init)) {
     block <- theta_block(MODEL, nthr)
     uncov <- function(C, B) {
       keep <- rowSums(C$A[, B == "corr", drop = FALSE] != 0) == 0
@@ -173,10 +180,14 @@ fit_latpl <- function(
   }
   fit$init <- full(fit$init[lc$free_idx])
 
-  if (METHOD == "ucminf") {
-    if (VERBOSE) {
-      message("- Optimising with ucminf...")
-    }
+  if (METHOD %in% c("QN", "SA-QN")) {
+    x0 <- std$to(fit$init)
+    qn_control <- list(
+      grtol = CONTROL$GRTOL,
+      xtol = CONTROL$XTOL,
+      stepmax = CONTROL$STEPMAX,
+      maxeval = CONTROL$MAXEVAL
+    )
     fn <- function(x) {
       theta <- full(x)
       val <- if (pd(theta)) -cpp_pl(theta, eng_std$model, eng_std$data)$pl / dims$n else Inf
@@ -195,18 +206,48 @@ fit_latpl <- function(
       }
       if (all(is.finite(g))) g else 0 * x
     }
-    fit$numFit <- ucminf::ucminf(
-      std$to(fit$init)[lc$free_idx],
-      fn,
-      gr,
-      hessian = 0,
-      control = list(
-        grtol = CONTROL$GRTOL,
-        xtol = CONTROL$XTOL,
-        stepmax = CONTROL$STEPMAX,
-        maxeval = CONTROL$MAXEVAL
+    nstarts <- if (METHOD == "SA-QN") CONTROL$NSTARTS else 1L
+    values <- numeric(nstarts)
+    for (s in seq_len(nstarts)) {
+      start <- x0
+      start_control <- qn_control
+      if (METHOD == "SA-QN") {
+        if (VERBOSE) {
+          message("- Burn-in via pairwise stochastic approximation...")
+        }
+        burn_control <- CONTROL
+        burn_control$SEED <- CONTROL$SEED + s - 1L
+        burn <- run_sa(x0, std$data, eng_std, lc, burn_control, FALSE, VERBOSE)
+        start <- burn$theta
+        if (length(burn$invh) > 0) start_control$invhessian.lt <- burn$invh[lower.tri(burn$invh, diag = TRUE)]
+      }
+      if (VERBOSE) {
+        message("- Optimising with ucminf...")
+      }
+      opt <- ucminf::ucminf(
+        start[lc$free_idx],
+        fn,
+        gr,
+        hessian = 0,
+        control = start_control
       )
-    )
+      values[s] <- opt$value
+      if (s == 1 || opt$value < fit$numFit$value) {
+        fit$numFit <- opt
+        if (METHOD == "SA-QN") fit$stoFit <- burn[setdiff(names(burn), c("theta", "theta_last", "theta_burn", "invh", "path"))]
+      }
+    }
+    if (METHOD == "SA-QN") fit$stoFit$start_logl <- -values * dims$n
+    if (dims$n * diff(range(values)) > 1e-3) {
+      warning(
+        "The ",
+        nstarts,
+        " starts ended at pairwise log-likelihoods up to ",
+        signif(dims$n * diff(range(values)), 3),
+        " apart, so the pairwise likelihood may have several optima: the highest is returned.",
+        call. = FALSE
+      )
+    }
     fit$theta <- std$from(full(fit$numFit$par))
     fit$numFit$par <- fit$theta[lc$free_idx]
     if (!fit$numFit$convergence %in% 1:2 && fit$numFit$info[["maxgradient"]] > 1e-3) {
@@ -221,15 +262,9 @@ fit_latpl <- function(
     if (VERBOSE) {
       message("- Optimising via pairwise stochastic approximation...")
     }
-    opt <- run_sa(list(std$to(fit$init)), std$data, eng_std, lc, CONTROL, FALSE, VERBOSE)
+    opt <- run_sa(std$to(fit$init), std$data, eng_std, lc, CONTROL, FALSE, VERBOSE)
     opt[c("theta", "theta_last", "theta_burn")] <- lapply(opt[c("theta", "theta_last", "theta_burn")], std$from)
     opt$path$theta <- lapply(opt$path$theta, std$from)
-    if (!opt$plateau) {
-      warning(
-        "The SA burn-in did not reach a plateau of the pairwise likelihood: increase BURN_EPOCHS, or check the estimates against set_ucminf_control().",
-        call. = FALSE
-      )
-    }
     if (opt$skipped_averaging > 0) {
       warning(
         opt$skipped_averaging,
@@ -237,12 +272,10 @@ fit_latpl <- function(
         call. = FALSE
       )
     }
-    opt$converged <- opt$plateau &&
-      opt$skipped_averaging == 0 &&
-      all(is.finite(opt$theta))
-    fit$stoFit <- opt[setdiff(names(opt), "theta")]
+    opt$converged <- opt$skipped_averaging == 0 && all(is.finite(opt$theta))
+    fit$stoFit <- opt[setdiff(names(opt), c("theta", "invh"))]
     fit$theta <- opt$theta
-    fit <- check_sa(fit, CONTROL, pd)
+    fit <- check_sa(fit)
   }
   fit$RTime <- as.numeric(difftime(Sys.time(), start_time, units = "secs"))
   if (VERBOSE) {
@@ -257,74 +290,53 @@ fit_latpl <- function(
 #' Stores the variance at the estimate, which the check needs and [compute_var()] reuses. The fit has failed if the
 #' observed information is not positive definite, or if the estimate is further from the optimum of the pairwise
 #' likelihood than one standard error and four times the predicted noise on the worst parameter, because the noise cannot
-#' explain it. A larger distance that the noise explains only warns: the standard errors account for it. With
-#' `CONTROL$REFINE`, Newton steps then move the estimate to the optimum.
+#' explain it. A larger distance that the noise explains only warns: the standard errors account for it. Above 2000 free
+#' parameters there is no check, and the fit has failed if the Adam phase did not reach a plateau.
 #'
 #' @param FIT Object of class latpl_fit.
-#' @param CONTROL Control object from [set_sa_control()].
-#' @param FEASIBLE Function checking that a parameter vector is in the parameter space.
 #' @return `FIT`, with `vars` and, in `stoFit`, the check `check` and the updated `converged`.
 #' @seealso [fit_latpl()], [compute_var()]
 #' @keywords internal
-check_sa <- function(FIT, CONTROL, FEASIBLE) {
-  FIT$stoFit$check <- list(done = FALSE, pd = NA, distance = NA, noise = NA, refine_steps = 0)
-  if (FIT$dims$npar > 2000) return(FIT)
-  pl <- function(theta) cpp_pl(theta, FIT$engine$model, FIT$engine$data)$pl
+check_sa <- function(FIT) {
+  FIT$stoFit$check <- list(done = FALSE, pd = NA, distance = NA, noise = NA)
+  if (FIT$dims$npar > 2000) {
+    if (!FIT$stoFit$plateau) {
+      FIT$stoFit$converged <- FALSE
+      warning("The Adam phase did not reach a plateau of the pairwise likelihood: increase ADAM_EPOCHS.", call. = FALSE)
+    }
+    return(FIT)
+  }
   vars <- tryCatch(compute_var(FIT), latpl_not_pd = function(e) NULL)
   FIT$stoFit$check$done <- TRUE
   FIT$stoFit$check$pd <- !is.null(vars)
   if (is.null(vars)) {
     FIT$stoFit$converged <- FALSE
     warning(
-      "The observed information is not positive definite at the SA estimate, which is not an optimum of the pairwise likelihood: use set_ucminf_control() or other starting values.",
+      "The observed information is not positive definite at the SA estimate, which is not an optimum of the pairwise likelihood: use set_saqn_control() or other starting values.",
       call. = FALSE
     )
     return(FIT)
   }
-  distance <- max(vars$distance)
   relative_noise <- function(v) {
     se <- sqrt(v$asymptotic_variance / FIT$dims$n)
-    r <- (sqrt(pmax(v$optimisation_noise, 0)) / se)[se > 0]
-    if (FIT$stoFit$averaged > 0) max(r) else 0
+    max((sqrt(pmax(v$optimisation_noise, 0)) / se)[se > 0])
   }
-  FIT$stoFit$check$distance <- distance
+  FIT$stoFit$check$distance <- max(vars$distance)
   FIT$stoFit$check$noise <- relative_noise(vars)
-  if (isTRUE(CONTROL$REFINE)) {
-    FIT$stoFit$theta_average <- FIT$theta
-    FIT$stoFit$refined <- TRUE
-    current <- pl(FIT$theta)
-    for (i in seq_len(10)) {
-      if (max(vars$distance) < 0.01) break
-      a <- 1
-      repeat {
-        candidate <- as.vector(FIT$theta + FIT$lincon$K %*% (a * vars$step))
-        value <- if (FEASIBLE(candidate)) pl(candidate) else NA
-        if (isTRUE(value >= current) || a < 1e-3) break
-        a <- a / 2
-      }
-      if (!isTRUE(value >= current)) break
-      FIT$theta <- candidate
-      current <- value
-      FIT$stoFit$check$refine_steps <- i
-      vars <- tryCatch(compute_var(FIT), latpl_not_pd = function(e) NULL)
-      if (is.null(vars)) break
-    }
-    distance <- if (is.null(vars)) Inf else max(vars$distance)
-  }
-  explained <- if (is.null(vars)) 0 else relative_noise(vars)
-  if (distance > max(1, 4 * explained)) {
+  distance <- max(vars$distance)
+  if (distance > max(1, 4 * relative_noise(vars))) {
     FIT$stoFit$converged <- FALSE
     warning(
       "The SA estimate is ",
       signif(distance, 3),
-      " standard errors from the optimum of the pairwise likelihood on its worst parameter, more than the optimisation noise explains: use other starting values or set_ucminf_control().",
+      " standard errors from the optimum of the pairwise likelihood on its worst parameter, more than the optimisation noise explains: use other starting values or set_saqn_control().",
       call. = FALSE
     )
   } else if (distance > 1) {
     warning(
       "The SA estimate is ",
       signif(distance, 3),
-      " standard errors from the optimum of the pairwise likelihood on its worst parameter, because of the optimisation noise, which the standard errors account for. For more precision, increase EPOCHS or use REFINE = TRUE; see sa_diagnostics().",
+      " standard errors from the optimum of the pairwise likelihood on its worst parameter, because of the optimisation noise, which the standard errors account for. For more precision, increase AVERAGE_EPOCHS or use set_saqn_control(); see sa_diagnostics().",
       call. = FALSE
     )
   }
@@ -614,7 +626,7 @@ implied_variance <- function(MODEL, THETA) {
 
 #' Stochastic approximation
 #'
-#' @param STARTS List of starting parameter vectors.
+#' @param START Starting parameter vector.
 #' @param DATA Data object from [set_latpl_data()].
 #' @param ENGINE Output of [engine()].
 #' @param LINCON Output of [lincon()].
@@ -626,7 +638,7 @@ implied_variance <- function(MODEL, THETA) {
 #'   `time`.
 #' @seealso [fit_latpl()], [set_sa_control()]
 #' @keywords internal
-run_sa <- function(STARTS, DATA, ENGINE, LINCON, CONTROL, ADAM_ONLY, VERBOSE) {
+run_sa <- function(START, DATA, ENGINE, LINCON, CONTROL, ADAM_ONLY, VERBOSE) {
   valdata <- ENGINE$data
   if (!is.null(DATA$val)) {
     valdata <- lapply(seq_len(DATA$ngroups) - 1, function(g) {
@@ -643,7 +655,10 @@ run_sa <- function(STARTS, DATA, ENGINE, LINCON, CONTROL, ADAM_ONLY, VERBOSE) {
     })
   }
   npar <- length(LINCON$free_idx)
-  free <- npar < length(STARTS[[1]])
+  free <- npar < length(START)
+  pairs <- DATA$ngroups * DATA$p * (DATA$p - 1) / 2
+  adam_epochs <- CONTROL$ADAM_EPOCHS
+  if (is.null(adam_epochs)) adam_epochs <- max(5L, ceiling(150 / ceiling(pairs / min(CONTROL$PAIRS_PER_ITERATION, pairs))))
   gain <- switch(
     CONTROL$GAIN,
     auto = as.integer(npar <= 2000),
@@ -651,10 +666,7 @@ run_sa <- function(STARTS, DATA, ENGINE, LINCON, CONTROL, ADAM_ONLY, VERBOSE) {
     diagonal = 0L
   )
   out <- cpp_sa(
-    STARTS = matrix(
-      vapply(STARTS, function(x) x[LINCON$free_idx], numeric(npar)),
-      npar
-    ),
+    START = START[LINCON$free_idx],
     K = if (free) LINCON$K else matrix(0, 0, 0),
     C = LINCON$c,
     MODEL = ENGINE$model,
@@ -662,9 +674,10 @@ run_sa <- function(STARTS, DATA, ENGINE, LINCON, CONTROL, ADAM_ONLY, VERBOSE) {
     VALDATA = valdata,
     PAIRS_PER_ITERATION = CONTROL$PAIRS_PER_ITERATION,
     ALPHA = CONTROL$ALPHA,
-    ADAM_EPOCHS = CONTROL$ADAM_EPOCHS,
-    BURN_EPOCHS = CONTROL$BURN_EPOCHS,
-    EPOCHS = CONTROL$EPOCHS,
+    ADAM_EPOCHS = as.integer(adam_epochs),
+    PRECONDITION_EPOCHS = CONTROL$PRECONDITION_EPOCHS,
+    MAX_PRECONDITION_EPOCHS = CONTROL$MAX_PRECONDITION_EPOCHS,
+    AVERAGE_EPOCHS = CONTROL$AVERAGE_EPOCHS,
     TOL = CONTROL$TOL,
     DECAY = CONTROL$DECAY,
     AVG_FROM = CONTROL$AVG_FROM,

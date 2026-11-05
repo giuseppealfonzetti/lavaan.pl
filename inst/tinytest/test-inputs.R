@@ -6,28 +6,34 @@ two_factors[4:6, 2] <- NA
 
 #### Control constructors return classed lists with defaults ####
 local({
-  ucminf_control <- set_ucminf_control()
+  ucminf_control <- set_qn_control()
   sa_control <- set_sa_control()
   sa_init_control <- set_sa_init_control()
-  expect_inherits(ucminf_control, "latpl_ucminf_control")
+  expect_inherits(ucminf_control, "latpl_qn_control")
   expect_inherits(sa_control, "latpl_sa_control")
   expect_inherits(sa_init_control, "latpl_sa_control")
   expect_equal(
     unclass(ucminf_control),
     list(GRTOL = 1e-6, XTOL = 1e-12, STEPMAX = 1, MAXEVAL = 500L)
   )
-  expect_identical(sa_control$EPOCHS, 50L)
+  expect_identical(sa_control$AVERAGE_EPOCHS, 50L)
   expect_identical(sa_control$GAIN, "auto")
-  expect_identical(sa_init_control$EPOCHS, 0L)
-  expect_false("BURN_EPOCHS" %in% names(formals(set_sa_init_control)))
+  expect_identical(sa_init_control$AVERAGE_EPOCHS, 0L)
+  expect_false("PRECONDITION_EPOCHS" %in% names(formals(set_sa_init_control)))
   expect_identical(names(sa_control), names(sa_init_control))
 })
 
 #### Control constructors validate their arguments ####
 local({
-  expect_error(set_ucminf_control(MAXEVAL = 0))
-  expect_error(set_ucminf_control(GRTOL = -1))
-  expect_error(set_sa_control(BURN_EPOCHS = -1))
+  expect_error(set_qn_control(MAXEVAL = 0))
+  expect_error(set_qn_control(GRTOL = -1))
+  expect_error(set_sa_control(PRECONDITION_EPOCHS = -1))
+  expect_error(set_sa_control(MAX_PRECONDITION_EPOCHS = -1))
+  expect_error(set_saqn_control(MAXEVAL = 0))
+  expect_error(set_saqn_control(ALPHA = 0))
+  expect_error(set_saqn_control(NSTARTS = 0))
+  expect_identical(set_saqn_control(NSTARTS = 2)$NSTARTS, 2L)
+  expect_identical(lavaan.pl:::control_method(set_saqn_control()), "SA-QN")
   expect_error(set_sa_control(DECAY = 0.4))
   expect_error(set_sa_control(AVG_FROM = 1))
   expect_error(set_sa_control(GAIN = "full"))
@@ -40,7 +46,7 @@ local({
   expect_identical(set_init()$METHOD, "standard")
   expect_error(set_init(METHOD = "custom"))
   expect_error(set_init(THETA = c(1, Inf)))
-  expect_error(set_init(CONTROL = set_ucminf_control()))
+  expect_error(set_init(CONTROL = set_qn_control()))
 })
 
 #### set_latpl_data() computes the frequencies and validates the data ####

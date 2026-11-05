@@ -4,7 +4,7 @@
 
 // [[Rcpp::export]]
 Rcpp::List cpp_sa(
-    const Eigen::Map<Eigen::MatrixXd> STARTS,
+    const Eigen::Map<Eigen::VectorXd> START,
     const Eigen::Map<Eigen::MatrixXd> K,
     const Eigen::Map<Eigen::VectorXd> C,
     const Rcpp::List MODEL,
@@ -13,8 +13,9 @@ Rcpp::List cpp_sa(
     const int PAIRS_PER_ITERATION,
     const double ALPHA,
     const int ADAM_EPOCHS,
-    const int BURN_EPOCHS,
-    const int EPOCHS,
+    const int PRECONDITION_EPOCHS,
+    const int MAX_PRECONDITION_EPOCHS,
+    const int AVERAGE_EPOCHS,
     const double TOL,
     const double DECAY,
     const double AVG_FROM,
@@ -34,7 +35,7 @@ Rcpp::List cpp_sa(
     val.emplace_back(Rcpp::as<Rcpp::List>(VALDATA[g]));
   }
   const double n = GS.n;
-  const int P = GS.P, nu = std::min(PAIRS_PER_ITERATION, P), E = (P + nu - 1) / nu, df = STARTS.rows();
+  const int P = GS.P, nu = std::min(PAIRS_PER_ITERATION, P), E = (P + nu - 1) / nu, df = START.size();
   const bool constrained = K.size() > 0;
   const Eigen::SparseMatrix<double> Ks = K.sparseView();
   const double b1 = .9, b2 = .999, alpha = ALPHA / std::sqrt(static_cast<double>(E));
@@ -85,12 +86,25 @@ Rcpp::List cpp_sa(
   std::vector<int> pool(P), drawn(nu);
   std::vector<std::vector<int>> dg(G);
   std::iota(pool.begin(), pool.end(), 0);
+  bool shuffled = false;
+  int cursor = P;
   auto draw = [&](){
     for(int g = 0; g < G; g++) dg[g].clear();
+    if(shuffled && cursor + nu > P){
+      for(int i = 0; i < P - 1; i++){
+        std::uniform_int_distribution<int> u(i, P - 1);
+        std::swap(pool[i], pool[u(rng)]);
+      }
+      cursor = 0;
+    }
     for(int i = 0; i < nu; i++){
-      std::uniform_int_distribution<int> u(i, P - 1);
-      std::swap(pool[i], pool[u(rng)]);
-      drawn[i] = pool[i];
+      if(shuffled){
+        drawn[i] = pool[cursor++];
+      }else{
+        std::uniform_int_distribution<int> u(i, P - 1);
+        std::swap(pool[i], pool[u(rng)]);
+        drawn[i] = pool[i];
+      }
       int g = G - 1;
       while(GS.poff[g] > drawn[i]) g--;
       dg[g].push_back(drawn[i] - GS.poff[g]);
@@ -139,6 +153,7 @@ Rcpp::List cpp_sa(
     return std::isfinite(ll) ? -ll / n : R_PosInf;
   };
 
+  bool pd = false;
   auto hessian_gain = [&](const Eigen::VectorXd &X, Eigen::MatrixXd &GM, const double DAMP){
     const std::vector<model::Setup> STS = GS.setup(full(X));
     Eigen::MatrixXd H = Eigen::MatrixXd::Zero(GS.d, GS.d);
@@ -157,6 +172,7 @@ Rcpp::List cpp_sa(
     if(!H.allFinite()) return false;
     const Eigen::VectorXd s = H.diagonal().cwiseAbs().cwiseMax(1e-12).cwiseSqrt().cwiseInverse();
     Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(s.asDiagonal() * (0.5 * (H + H.transpose())) * s.asDiagonal());
+    pd = es.eigenvalues().minCoeff() > 1e-6;
     Eigen::VectorXd ev = es.eigenvalues().cwiseAbs();
     ev = ev.cwiseMax(DAMP * ev.maxCoeff());
     GM = s.asDiagonal() * es.eigenvectors() * ev.cwiseInverse().asDiagonal() * es.eigenvectors().transpose() * s.asDiagonal();
@@ -169,7 +185,7 @@ Rcpp::List cpp_sa(
     return out;
   };
 
-  Eigen::VectorXd x = STARTS.col(0), g;
+  Eigen::VectorXd x = START, g;
   std::unique_ptr<std::vector<model::Setup>> cur;
   auto setx = [&](const Eigen::VectorXd &X){
     std::unique_ptr<std::vector<model::Setup>> st(new std::vector<model::Setup>(GS.setup(full(X))));
@@ -211,7 +227,7 @@ Rcpp::List cpp_sa(
     }
   };
 
-  double t_adam = 0, t_newton = 0, t_hess = 0, t_avg = 0, t_mon = 0, prev_f = 0, best_f = 0;
+  double t_adam = 0, t_precondition = 0, t_hess = 0, t_avg = 0, t_mon = 0, prev_f = 0, best_f = 0;
   Eigen::VectorXd best;
   int calm = 0;
   bool plateau = false;
@@ -236,51 +252,28 @@ Rcpp::List cpp_sa(
   };
 
   Eigen::VectorXd m = Eigen::VectorXd::Zero(df), v = Eigen::VectorXd::Zero(df);
-  int ta = 0, adam_epochs = 0, newton_epochs = 0, n_hess = 0;
+  int ta = 0, adam_epochs = 0, precondition_epochs = 0, n_hess = 0;
   auto adam = [&](const Eigen::VectorXd &G){
     ta++;
     m = b1 * m + (1 - b1) * G;
     v = b2 * v + (1 - b2) * G.cwiseAbs2();
     return Eigen::VectorXd(alpha * (m / (1 - std::pow(b1, ta))).array() / ((v / (1 - std::pow(b2, ta))).array().sqrt() + 1e-8));
   };
-  const int min_adam = std::max(ADAM_EPOCHS, (150 + E - 1) / E);
-  const int max_adam = ADAM_ONLY || GAIN == 1 ? min_adam : min_adam + BURN_EPOCHS;
-  Eigen::VectorXd xw, vw;
-  double fw = R_PosInf;
-  int taw = 0;
-  bool pw = false;
   clk::time_point t0 = clk::now();
-  for(int j = 0; j < STARTS.cols(); j++){
-    if(!setx(STARTS.col(j))) Rcpp::stop("The starting values are outside the parameter space.");
-    clk::time_point tm = clk::now();
-    prev_f = objective(x);
-    t_mon += secs(tm);
-    if(!std::isfinite(prev_f)) Rcpp::stop("The starting values are outside the parameter space.");
-    record(x, prev_f, 0);
-    best = x;
-    best_f = prev_f;
-    m.setZero();
-    v.setZero();
-    ta = calm = 0;
-    plateau = false;
-    for(int e = 0; e < max_adam && !plateau; e++){
-      plateau = burn_epoch(adam, 1);
-      adam_epochs++;
-    }
-    if(best_f < fw){
-      xw = best;
-      fw = best_f;
-      vw = v;
-      taw = ta;
-      pw = plateau;
-    }
+  if(!setx(START)) Rcpp::stop("The starting values are outside the parameter space.");
+  clk::time_point tm = clk::now();
+  prev_f = objective(x);
+  t_mon += secs(tm);
+  if(!std::isfinite(prev_f)) Rcpp::stop("The starting values are outside the parameter space.");
+  record(x, prev_f, 0);
+  best = x;
+  best_f = prev_f;
+  for(int e = 0; e < ADAM_EPOCHS && !plateau; e++){
+    plateau = burn_epoch(adam, 1);
+    adam_epochs++;
   }
-  setx(xw);
-  best = xw;
-  prev_f = best_f = fw;
-  v = vw;
-  ta = taw;
-  plateau = pw;
+  setx(best);
+  prev_f = best_f;
   t_adam = secs(t0) - t_mon;
 
   Eigen::MatrixXd Gm;
@@ -293,37 +286,33 @@ Rcpp::List cpp_sa(
   if(hessian){
     calm = 0;
     plateau = false;
-    while(newton_epochs < BURN_EPOCHS && !plateau){
-      clk::time_point th = clk::now();
-      if(!hessian_gain(x, Gm, damp)){
-        hessian = false;
-        break;
-      }
-      t_hess += secs(th);
-      n_hess++;
-      const double before = best_f;
-      plateau = burn_epoch([&](const Eigen::VectorXd &G){ return Eigen::VectorXd(kappa * gain_times(Gm, G)); }, 2);
-      damp = best_f < before ? std::max(damp / 10, 1e-6) : std::min(damp * 10, 1.0);
-      newton_epochs++;
-      setx(best);
-    }
-    if(hessian){
+    shuffled = true;
+    while(true){
       clk::time_point th = clk::now();
       hessian = hessian_gain(x, Gm, damp);
       t_hess += secs(th);
       n_hess++;
+      if(!hessian) break;
+      const bool enough = plateau || precondition_epochs >= PRECONDITION_EPOCHS;
+      if((enough && pd) || precondition_epochs >= std::max(PRECONDITION_EPOCHS, MAX_PRECONDITION_EPOCHS)) break;
+      const double before = best_f;
+      plateau = burn_epoch([&](const Eigen::VectorXd &G){ return Eigen::VectorXd(kappa * gain_times(Gm, G)); }, 2);
+      damp = best_f < before ? std::max(damp / 10, 1e-6) : std::min(damp * 10, 1.0);
+      precondition_epochs++;
+      setx(best);
     }
+    shuffled = false;
   }
   if(!hessian){
     Gd = alpha * (1 - b1) * ((v / (1 - std::pow(b2, std::max(ta, 1)))).array().sqrt() + 1e-8).inverse();
     kappa = 1;
   }
-  t_newton = secs(t0) - (t_mon - mon0);
+  t_precondition = secs(t0) - (t_mon - mon0);
   const Eigen::VectorXd x_burn = x;
 
   const int skipped_burn = skipped, rejections_burn = rejections;
   Eigen::VectorXd avg = x;
-  const int T2 = ADAM_ONLY ? 0 : EPOCHS * E, T0 = static_cast<int>(AVG_FROM * T2);
+  const int T2 = ADAM_ONLY ? 0 : AVERAGE_EPOCHS * E, T0 = static_cast<int>(AVG_FROM * T2);
   t0 = clk::now();
   for(int s = 1; s <= T2; s++){
     const double gam = kappa * std::pow(1.0 + static_cast<double>(s) / E, -DECAY);
@@ -349,13 +338,15 @@ Rcpp::List cpp_sa(
     Rcpp::Named("theta_last") = full(x),
     Rcpp::Named("theta_burn") = full(x_burn),
     Rcpp::Named("epoch_length") = E,
+    Rcpp::Named("pairs_per_iteration") = nu,
     Rcpp::Named("adam_epochs") = adam_epochs,
-    Rcpp::Named("newton_epochs") = newton_epochs,
+    Rcpp::Named("precondition_epochs") = precondition_epochs,
     Rcpp::Named("plateau") = plateau,
     Rcpp::Named("iterations") = iter,
     Rcpp::Named("averaged") = T2 - T0,
     Rcpp::Named("gain") = hessian ? "hessian" : "diagonal",
     Rcpp::Named("n_hessian") = n_hess,
+    Rcpp::Named("invh") = hessian && T2 == 0 ? Gm : Eigen::MatrixXd(),
     Rcpp::Named("rejections") = rejections,
     Rcpp::Named("skipped") = skipped,
     Rcpp::Named("rejections_averaging") = rejections - rejections_burn,
@@ -364,7 +355,7 @@ Rcpp::List cpp_sa(
       Rcpp::Named("iter") = path_iter, Rcpp::Named("phase") = path_phase,
       Rcpp::Named("theta") = path_theta, Rcpp::Named("nll") = path_nll),
     Rcpp::Named("time") = Rcpp::NumericVector::create(
-      Rcpp::Named("adam") = t_adam, Rcpp::Named("newton") = t_newton, Rcpp::Named("hessian") = t_hess,
+      Rcpp::Named("adam") = t_adam, Rcpp::Named("precondition") = t_precondition, Rcpp::Named("hessian") = t_hess,
       Rcpp::Named("averaging") = t_avg, Rcpp::Named("monitor") = t_mon)
   );
 }

@@ -1,7 +1,7 @@
 #### Fitting functions ####
 lavaan_pl_fitters <- list(
-  cfa = function(...) lavaan.pl::cfa(..., control = set_ucminf_control()),
-  sem = function(...) lavaan.pl::sem(..., control = set_ucminf_control())
+  cfa = function(...) lavaan.pl::cfa(..., control = set_qn_control()),
+  sem = function(...) lavaan.pl::sem(..., control = set_qn_control())
 )
 lavaan_pml_fitters <- list(
   cfa = function(...) lavaan::cfa(..., estimator = "PML"),

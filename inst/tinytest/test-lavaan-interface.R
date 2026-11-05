@@ -31,8 +31,8 @@ local({
 
 #### std.lv gives the same fit ####
 local({
-  fit_marker <- cfa(three_factors, bfi, std.lv = FALSE, control = set_ucminf_control())
-  fit_stdlv <- cfa(three_factors, bfi, std.lv = TRUE, control = set_ucminf_control())
+  fit_marker <- cfa(three_factors, bfi, std.lv = FALSE, control = set_qn_control())
+  fit_stdlv <- cfa(three_factors, bfi, std.lv = TRUE, control = set_qn_control())
   expect_equal(
     fit_marker@external$lavaan.pl$numFit$value,
     fit_stdlv@external$lavaan.pl$numFit$value
@@ -148,11 +148,11 @@ local({
       std.lv = TRUE,
       control = list(ctrl = list(maxeval = 5))
     ),
-    "set_ucminf_control"
+    "set_qn_control"
   )
   expect_error(
     cfa(lsat_model, LSAT, std.lv = TRUE, estimator.args = list(method = "SA")),
-    "set_sa_control"
+    "optim.method"
   )
   expect_error(
     cfa(
@@ -186,7 +186,7 @@ local({
     LSAT,
     std.lv = TRUE,
     se = "none",
-    control = set_ucminf_control(MAXEVAL = 5)
+    control = set_qn_control(MAXEVAL = 5)
   )
   expect_true(fit@external$lavaan.pl$numFit$info[["neval"]] <= 5)
 })
@@ -254,13 +254,13 @@ local({
     three_factors_four_items,
     bfi_sample,
     std.lv = TRUE,
-    control = set_ucminf_control()
+    control = set_qn_control()
   )
   fit_higher_order <- sem(
     paste(three_factors_four_items, "\nG =~ A + C + E"),
     bfi_sample,
     std.lv = TRUE,
-    control = set_ucminf_control()
+    control = set_qn_control()
   )
   expect_equal(
     fit_higher_order@optim$logl,
@@ -286,4 +286,34 @@ local({
   difference <- lavTestLRT(fit_residual, fit_correlated)
   expect_true(difference[2, "Df diff"] > 0)
   expect_true(difference[2, "Chisq diff"] > 0)
+})
+
+#### optim.method selects the algorithm, and is shown by lavaan ####
+local({
+  fits <- list(
+    `SA-QN` = cfa(lsat_model, LSAT, std.lv = TRUE),
+    SA = cfa(lsat_model, LSAT, std.lv = TRUE, optim.method = "SA"),
+    QN = cfa(lsat_model, LSAT, std.lv = TRUE, optim.method = "QN")
+  )
+  for (method in names(fits)) {
+    expect_identical(fits[[method]]@external$lavaan.pl$method, method)
+    expect_identical(fits[[method]]@Options$optim.method, method)
+    expect_true(any(grepl(method, capture.output(summary(fits[[method]])), fixed = TRUE)))
+  }
+  expect_equal(unname(coef(fits$`SA-QN`)), unname(coef(fits$QN)), tolerance = 1e-4)
+  expect_identical(
+    cfa(lsat_model, LSAT, std.lv = TRUE, optim.method = "SA", control = set_sa_control(AVERAGE_EPOCHS = 5))@external$lavaan.pl$control$AVERAGE_EPOCHS,
+    5L
+  )
+  expect_identical(
+    cfa(lsat_model, LSAT, std.lv = TRUE, control = set_sa_control())@external$lavaan.pl$method,
+    "SA"
+  )
+  expect_error(cfa(lsat_model, LSAT, std.lv = TRUE, optim.method = "nlminb"), "must be")
+  expect_error(cfa(lsat_model, LSAT, std.lv = TRUE, optim.method = "QN", control = set_sa_control()), "is for SA")
+  expect_error(cfa(lsat_model, LSAT, std.lv = TRUE, control = list()), "must be created")
+  expect_identical(
+    lavaan::lavInspect(cfa(lsat_model, LSAT, estimator = "DWLS", optim.method = "nlminb"), "options")$optim.method,
+    "nlminb"
+  )
 })

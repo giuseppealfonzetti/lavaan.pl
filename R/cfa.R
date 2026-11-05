@@ -2,13 +2,17 @@
 #'
 #' Fit a Confirmatory Factor Analysis (CFA) model, or a Structural Equation Model (SEM) with
 #' regressions among the latent variables and residual covariances of the items, using the
-#' `lavaan.pl()` engine within the [`lavaan`] framework. By default, the pairwise stochastic
-#' approximation algorithm is used. For the exact pairwise likelihood estimate, use a quasi-Newton
-#' BFGS optimiser from the [`ucminf`] package with `control = set_ucminf_control()`.
+#' `lavaan.pl()` engine within the [`lavaan`] framework. Three algorithms are available through
+#' `optim.method`: the pairwise likelihood estimate by a quasi-Newton BFGS optimiser from the
+#' [`ucminf`] package, started from the burn-in of stochastic approximation and its curvature
+#' (`"SA-QN"`, the default), pairwise stochastic approximation with Polyak-Ruppert averaging, whose
+#' standard errors account for the optimisation noise (`"SA"`), and the same optimiser from the
+#' starting values alone (`"QN"`).
 #'
 #' @details Not all [`lavaan`] options can be used at present. Some options of
 #'   interest are:
 #' \describe{
+#'   \item{\code{optim.method}}{`"SA-QN"` (default), `"SA"` or `"QN"`. Use `control` to tune them.}
 #'   \item{\code{information}}{The information matrix to use. Only `"observed"` is currently supported.}
 #'   \item{\code{se}}{The standard error method to use. Only `"robust.huber.white"` is currently supported.}
 #'   \item{\code{test}}{Default `"none"`. `"standard"` and `"mean.var.adjusted"` are computed by [compute_plrt()].}
@@ -35,16 +39,15 @@
 #' @param estimator.args A list of arguments for [fit_latpl()]--see the help file
 #'   for more details. Possible options are:
 #'   \describe{
-#'     \item{\code{init}}{Starting values object from [set_init()], by default `set_init(METHOD = "SA")`. Its `THETA` is taken from `start` or from the lavaan starting values.}
+#'     \item{\code{init}}{Starting values object from [set_init()], by default `set_init()`. Its `THETA` is taken from `start` or from the lavaan starting values.}
 #'     \item{\code{ncores}}{The number of cores to use for parallel computation.}
 #'     \item{\code{valdata}}{Validation data.}
 #'     \item{\code{valgroup}}{Group of each row of `valdata`, with the values of the `group` variable. Required with `valdata` and several groups.}
 #'     \item{\code{valx}}{Covariates of `valdata`. Required with `valdata` and covariates.}
 #'     \item{\code{computevar_numderiv}}{If `TRUE`, the asymptotic variance-covariance matrix is computed using numerical derivatives.}
 #'   }
-#' @param control Control object of the estimation algorithm: [set_sa_control()] for
-#'   stochastic approximation (default), [set_ucminf_control()] for the quasi-Newton
-#'   BFGS optimiser.
+#' @param control Control object of the algorithm: [set_saqn_control()] for `"SA-QN"`, [set_sa_control()] for `"SA"`,
+#'   [set_qn_control()] for `"QN"`. If `NULL`, the defaults of the algorithm in `optim.method`.
 #' @param verbose If `TRUE`, print additional information during the estimation
 #'   process.
 #' @param ... Additional arguments to be passed to [lavaan()].
@@ -84,7 +87,7 @@ cfa <- function(
     std.lv = FALSE,
     estimator = "PML",
     estimator.args = list(
-      init = set_init(METHOD = "SA"),
+      init = set_init(),
       ncores = 1,
       valdata = NULL,
       computevar_numderiv = FALSE
@@ -105,7 +108,7 @@ sem <- function(
     std.lv = FALSE,
     estimator = "PML",
     estimator.args = list(
-      init = set_init(METHOD = "SA"),
+      init = set_init(),
       ncores = 1,
       valdata = NULL,
       computevar_numderiv = FALSE
@@ -130,17 +133,26 @@ fit_lavaan_pml <- function(LAVFUN, CALL, model, data, std.lv, estimator, estimat
 
   # Validate arguments ---------------------------------------------------------
   if (!is.null(estimator.args$method)) {
-    stop("`estimator.args$method` is no longer supported; the method follows `control`, e.g. `control = set_sa_control()`.", call. = FALSE)
+    stop("`estimator.args$method` is no longer supported; use `optim.method`, e.g. `optim.method = \"QN\"`.", call. = FALSE)
   }
   if (any(c("init_method", "init_control", "cpp_control_init") %in% names(estimator.args))) {
     stop("`estimator.args$init_method`, `init_control` and `cpp_control_init` are no longer supported; use `init = set_init(...)`.", call. = FALSE)
   }
-  if (is.null(control)) control <- set_sa_control()
-  if (!inherits(control, c("latpl_ucminf_control", "latpl_sa_control"))) {
-    stop("`control` must be created with `set_ucminf_control()` or `set_sa_control()`.", call. = FALSE)
+  method <- if (estimator == "PML") list(...)$optim.method
+  if (!is.null(method) && !(length(method) == 1 && method %in% c("SA-QN", "SA", "QN"))) {
+    stop("With estimator = \"PML\", `optim.method` must be \"SA-QN\", \"SA\" or \"QN\".", call. = FALSE)
+  }
+  if (is.null(control)) {
+    control <- switch(if (is.null(method)) "SA-QN" else method, `SA-QN` = set_saqn_control(), SA = set_sa_control(), QN = set_qn_control())
+  }
+  if (!inherits(control, c("latpl_qn_control", "latpl_sa_control"))) {
+    stop("`control` must be created with `set_saqn_control()`, `set_sa_control()` or `set_qn_control()`.", call. = FALSE)
+  }
+  if (!is.null(method) && !identical(method, control_method(control))) {
+    stop("`control` is for ", control_method(control), ", but `optim.method` is ", method, ".", call. = FALSE)
   }
   init <- estimator.args$init
-  if (is.null(init)) init <- set_init(METHOD = "SA")
+  if (is.null(init)) init <- set_init()
   if (!inherits(init, "latpl_init")) {
     stop("`estimator.args$init` must be created with `set_init()`.", call. = FALSE)
   }
@@ -164,6 +176,7 @@ fit_lavaan_pml <- function(LAVFUN, CALL, model, data, std.lv, estimator, estimat
   lavargs$do.fit <- FALSE
 
   if (estimator == "PML") {
+    lavargs$optim.method <- NULL
     if ("information" %in% names(lavargs)) {
       if (lavargs$information != "observed") {
         stop("Only 'observed' information is currently supported.", call. = FALSE)
@@ -207,7 +220,7 @@ fit_lavaan_pml <- function(LAVFUN, CALL, model, data, std.lv, estimator, estimat
   if (lavargs$se != "none") {
     vars <- tryCatch(
       compute_var(OBJ = fit, NUMDERIV = computevar_numderiv, VERBOSE = verbose),
-      latpl_not_pd = function(e) if (fit$method == "SA") NULL else stop(e)
+      latpl_not_pd = function(e) if (!fit$method %in% c("QN", "SA-QN")) NULL else stop(e)
     )
   }
 
@@ -587,10 +600,10 @@ as_lavaan <- function(fit, vars = NULL, template) {
     out@optim$fx <- -out@optim$logl / fit$dims$n
   }
   out@Options[c("optim.method", "se", "test", "baseline")] <-
-    list(if (fit$method == "SA") "SA" else "ucminf", template@Options$se, template@Options$test, template@Options$baseline)
+    list(fit$method, template@Options$se, template@Options$test, template@Options$baseline)
 
   # Change Fit slot (depends whether it is numFit or stoFit) -------------------
-  if (fit$method == "ucminf") {
+  if (fit$method %in% c("QN", "SA-QN")) {
     out@optim$iterations <- out@Fit@iterations <- as.integer(fit$numFit$info[["neval"]])
     out@optim$converged <- out@Fit@converged <- fit$numFit$convergence %in% c(1L, 2L) ||
       (fit$numFit$convergence == 4L && fit$numFit$info[["maxgradient"]] < template@Options$optim.dx.tol)

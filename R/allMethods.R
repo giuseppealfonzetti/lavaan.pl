@@ -22,10 +22,13 @@ print.latpl_fit <- function(x, ...){
        "  - Effects of covariates:", x$dims$ngam + x$dims$nkap, "\n",
        "  - Total:", x$dims$npar, "\n\n")
 
-  if(x$method == 'ucminf'){
+  if(x$method %in% c('QN', 'SA-QN')){
 
+    if(x$method == 'SA-QN') cat(
+      "- Burn-in epochs: Adam", x$stoFit$adam_epochs, "| preconditioning", x$stoFit$precondition_epochs, "\n"
+    )
     cat(
-      "- Numerical estimate obtained via ucminf.\n\n",
+      "- Estimate from the", x$method, "method (ucminf).\n\n",
       "   Estimation time:", round(x$RTime, 2), "s\n",
       "   Data reduction:", round(x$data$freqTime,2), "s (in set_latpl_data())\n",
       "   Cores used:", x$cores, "\n",
@@ -35,13 +38,13 @@ print.latpl_fit <- function(x, ...){
     )
   }else{
     cat(
-      "- Stochastic estimate\n\n",
-      "    Pairs per iteration:", x$control$PAIRS_PER_ITERATION, " out of ", x$dims$pairs, "\n",
-      "    Epochs: Adam", x$stoFit$adam_epochs, "| Newton", x$stoFit$newton_epochs, "| averaged", x$control$EPOCHS,
+      "- Estimate from the ", x$method, " method\n\n",
+      "    Pairs per iteration:", x$stoFit$pairs_per_iteration, " out of ", x$dims$pairs, "\n",
+      "    Epochs: Adam", x$stoFit$adam_epochs, "| preconditioning", x$stoFit$precondition_epochs, "| averaged", x$control$AVERAGE_EPOCHS,
       "(", x$stoFit$epoch_length, "iterations each, gain:", x$stoFit$gain, ")\n",
       "    Rejected steps:", x$stoFit$rejections, "(", x$stoFit$rejections_averaging, "in the averaged phase )\n",
       "    Converged:", x$stoFit$converged, "\n",
-      "    Largest distance from the optimum:", if (x$stoFit$check$done) signif(x$stoFit$check$distance, 2) else "not checked", "standard errors\n",
+      "    Largest distance from the optimum:", if (isTRUE(x$stoFit$check$pd)) signif(x$stoFit$check$distance, 2) else "not available", "standard errors\n",
       "    Estimation time:", round(x$RTime, 2), "s\n",
       "    Data reduction:", round(x$data$freqTime,2), "s (in set_latpl_data())\n",
       "    Cores used:", x$cores, "\n",
@@ -168,7 +171,7 @@ compute_var.latpl_fit <- function(OBJ, NUMDERIV = FALSE, VERBOSE = FALSE) {
   trJacob <- trJacob %*% lc$K
   RcppParallel::setThreadOptions(numThreads = OBJ$cores)
   on.exit(RcppParallel::setThreadOptions(numThreads = 1))
-  HJ <- cpp_HJ(OBJ$theta, OBJ$engine$model, OBJ$engine$data, OBJ$method == "SA")
+  HJ <- cpp_HJ(OBJ$theta, OBJ$engine$model, OBJ$engine$data, !OBJ$method %in% c("QN", "SA-QN"))
   H <- crossprod(lc$K, HJ$H %*% lc$K)
   J <- crossprod(lc$K, HJ$J %*% lc$K)
   if (NUMDERIV) {
@@ -182,13 +185,13 @@ compute_var.latpl_fit <- function(OBJ, NUMDERIV = FALSE, VERBOSE = FALSE) {
   vcov <- trJacob %*% invH %*% J %*% invH %*% t(trJacob)
   opt_noise <- NA
   noise <- NULL
-  if (OBJ$method == "SA") {
+  if (!OBJ$method %in% c("QN", "SA-QN")) {
     P <- OBJ$dims$pairs
-    ppi <- min(OBJ$control$PAIRS_PER_ITERATION, P)
+    ppi <- OBJ$stoFit$pairs_per_iteration
     n <- OBJ$dims$n
     G <- crossprod(lc$K, HJ$gradient) / n
     V <- (P - ppi) / (ppi * (P - 1)) * (P * crossprod(lc$K, HJ$pairvar %*% lc$K) / n^2 - tcrossprod(G))
-    noise <- invH %*% V %*% invH / OBJ$stoFit$averaged * !isTRUE(OBJ$stoFit$refined)
+    noise <- invH %*% V %*% invH / OBJ$stoFit$averaged
     opt_noise <- diag(trJacob %*% noise %*% t(trJacob))
   }
   step <- as.vector(invH %*% crossprod(lc$K, HJ$gradient)) / OBJ$dims$n

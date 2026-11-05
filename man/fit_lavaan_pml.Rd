@@ -42,7 +42,7 @@ then \code{\link[lavaan:cfa]{lavaan::cfa()}} (or \code{\link[lavaan:sem]{lavaan:
 \item{estimator.args}{A list of arguments for \code{\link[=fit_latpl]{fit_latpl()}}--see the help file
 for more details. Possible options are:
 \describe{
-\item{\code{init}}{Starting values object from \code{\link[=set_init]{set_init()}}, by default \code{set_init(METHOD = "SA")}. Its \code{THETA} is taken from \code{start} or from the lavaan starting values.}
+\item{\code{init}}{Starting values object from \code{\link[=set_init]{set_init()}}, by default \code{set_init()}. Its \code{THETA} is taken from \code{start} or from the lavaan starting values.}
 \item{\code{ncores}}{The number of cores to use for parallel computation.}
 \item{\code{valdata}}{Validation data.}
 \item{\code{valgroup}}{Group of each row of \code{valdata}, with the values of the \code{group} variable. Required with \code{valdata} and several groups.}
@@ -54,9 +54,8 @@ for more details. Possible options are:
 (as returned by \code{coef()}). If not provided, those of \code{\link[=set_init]{set_init()}} are used
 and refined according to \code{estimator.args$init}.}
 
-\item{control}{Control object of the estimation algorithm: \code{\link[=set_sa_control]{set_sa_control()}} for
-stochastic approximation (default), \code{\link[=set_ucminf_control]{set_ucminf_control()}} for the quasi-Newton
-BFGS optimiser.}
+\item{control}{Control object of the algorithm: \code{\link[=set_saqn_control]{set_saqn_control()}} for \code{"SA-QN"}, \code{\link[=set_sa_control]{set_sa_control()}} for \code{"SA"},
+\code{\link[=set_qn_control]{set_qn_control()}} for \code{"QN"}. If \code{NULL}, the defaults of the algorithm in \code{optim.method}.}
 
 \item{verbose}{If \code{TRUE}, print additional information during the estimation
 process.}

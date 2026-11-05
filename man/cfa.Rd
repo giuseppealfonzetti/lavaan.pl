@@ -10,7 +10,7 @@ cfa(
   data,
   std.lv = FALSE,
   estimator = "PML",
-  estimator.args = list(init = set_init(METHOD = "SA"), ncores = 1, valdata = NULL,
+  estimator.args = list(init = set_init(), ncores = 1, valdata = NULL,
     computevar_numderiv = FALSE),
   start = NULL,
   control = NULL,
@@ -23,7 +23,7 @@ sem(
   data,
   std.lv = FALSE,
   estimator = "PML",
-  estimator.args = list(init = set_init(METHOD = "SA"), ncores = 1, valdata = NULL,
+  estimator.args = list(init = set_init(), ncores = 1, valdata = NULL,
     computevar_numderiv = FALSE),
   start = NULL,
   control = NULL,
@@ -51,7 +51,7 @@ then \code{\link[lavaan:cfa]{lavaan::cfa()}} (or \code{\link[lavaan:sem]{lavaan:
 \item{estimator.args}{A list of arguments for \code{\link[=fit_latpl]{fit_latpl()}}--see the help file
 for more details. Possible options are:
 \describe{
-\item{\code{init}}{Starting values object from \code{\link[=set_init]{set_init()}}, by default \code{set_init(METHOD = "SA")}. Its \code{THETA} is taken from \code{start} or from the lavaan starting values.}
+\item{\code{init}}{Starting values object from \code{\link[=set_init]{set_init()}}, by default \code{set_init()}. Its \code{THETA} is taken from \code{start} or from the lavaan starting values.}
 \item{\code{ncores}}{The number of cores to use for parallel computation.}
 \item{\code{valdata}}{Validation data.}
 \item{\code{valgroup}}{Group of each row of \code{valdata}, with the values of the \code{group} variable. Required with \code{valdata} and several groups.}
@@ -63,9 +63,8 @@ for more details. Possible options are:
 (as returned by \code{coef()}). If not provided, those of \code{\link[=set_init]{set_init()}} are used
 and refined according to \code{estimator.args$init}.}
 
-\item{control}{Control object of the estimation algorithm: \code{\link[=set_sa_control]{set_sa_control()}} for
-stochastic approximation (default), \code{\link[=set_ucminf_control]{set_ucminf_control()}} for the quasi-Newton
-BFGS optimiser.}
+\item{control}{Control object of the algorithm: \code{\link[=set_saqn_control]{set_saqn_control()}} for \code{"SA-QN"}, \code{\link[=set_sa_control]{set_sa_control()}} for \code{"SA"},
+\code{\link[=set_qn_control]{set_qn_control()}} for \code{"QN"}. If \code{NULL}, the defaults of the algorithm in \code{optim.method}.}
 
 \item{verbose}{If \code{TRUE}, print additional information during the estimation
 process.}
@@ -81,14 +80,18 @@ variance components, from \code{\link[=compute_var]{compute_var()}}, and its tes
 \description{
 Fit a Confirmatory Factor Analysis (CFA) model, or a Structural Equation Model (SEM) with
 regressions among the latent variables and residual covariances of the items, using the
-\code{lavaan.pl()} engine within the \code{\link[lavaan:lavaan]{lavaan}} framework. By default, the pairwise stochastic
-approximation algorithm is used. For the exact pairwise likelihood estimate, use a quasi-Newton
-BFGS optimiser from the \code{\link[ucminf:ucminf]{ucminf}} package with \code{control = set_ucminf_control()}.
+\code{lavaan.pl()} engine within the \code{\link[lavaan:lavaan]{lavaan}} framework. Three algorithms are available through
+\code{optim.method}: the pairwise likelihood estimate by a quasi-Newton BFGS optimiser from the
+\code{\link[ucminf:ucminf]{ucminf}} package, started from the burn-in of stochastic approximation and its curvature
+(\code{"SA-QN"}, the default), pairwise stochastic approximation with Polyak-Ruppert averaging, whose
+standard errors account for the optimisation noise (\code{"SA"}), and the same optimiser from the
+starting values alone (\code{"QN"}).
 }
 \details{
 Not all \code{\link[lavaan:lavaan]{lavaan}} options can be used at present. Some options of
 interest are:
 \describe{
+\item{\code{optim.method}}{\code{"SA-QN"} (default), \code{"SA"} or \code{"QN"}. Use \code{control} to tune them.}
 \item{\code{information}}{The information matrix to use. Only \code{"observed"} is currently supported.}
 \item{\code{se}}{The standard error method to use. Only \code{"robust.huber.white"} is currently supported.}
 \item{\code{test}}{Default \code{"none"}. \code{"standard"} and \code{"mean.var.adjusted"} are computed by \code{\link[=compute_plrt]{compute_plrt()}}.}

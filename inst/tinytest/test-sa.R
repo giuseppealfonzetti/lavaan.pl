@@ -18,7 +18,7 @@ items <- sim_data(
 )
 data <- set_latpl_data(items)
 model <- set_latpl_model(loadings_structure)
-fit_pml <- fit_latpl(data, model, CONTROL = set_ucminf_control())
+fit_pml <- fit_latpl(data, model, CONTROL = set_qn_control())
 fit_sa <- fit_latpl(data, model, CONTROL = set_sa_control())
 epoch_length <- fit_sa$stoFit$epoch_length
 
@@ -37,7 +37,7 @@ local({
   fit_marker_pml <- fit_latpl(
     data,
     set_latpl_model(loadings_structure, STDLV = FALSE),
-    CONTROL = set_ucminf_control()
+    CONTROL = set_qn_control()
   )
   fit_marker_sa <- fit_latpl(
     data,
@@ -62,7 +62,7 @@ local({
     CONTROL = set_sa_control(GAIN = "diagonal")
   )
   expect_identical(fit_diagonal$stoFit$gain, "diagonal")
-  expect_identical(fit_diagonal$stoFit$newton_epochs, 0L)
+  expect_identical(fit_diagonal$stoFit$precondition_epochs, 0L)
   expect_true(distance_in_se(fit_diagonal, fit_pml) < 1)
 })
 
@@ -78,16 +78,16 @@ local({
   ))
 })
 
-#### The averaged phase lasts EPOCHS epochs and averages from AVG_FROM of it ####
+#### The averaged phase lasts AVERAGE_EPOCHS epochs and averages from AVG_FROM of it ####
 local({
   expect_equal(epoch_length, ceiling(fit_sa$dims$pairs / 16))
   expect_equal(
     fit_sa$stoFit$averaged,
-    fit_sa$control$EPOCHS * epoch_length - floor(0.25 * fit_sa$control$EPOCHS * epoch_length)
+    fit_sa$control$AVERAGE_EPOCHS * epoch_length - floor(0.25 * fit_sa$control$AVERAGE_EPOCHS * epoch_length)
   )
   expect_equal(
     fit_sa$stoFit$iterations,
-    (fit_sa$stoFit$adam_epochs + fit_sa$stoFit$newton_epochs + fit_sa$control$EPOCHS) *
+    (fit_sa$stoFit$adam_epochs + fit_sa$stoFit$precondition_epochs + fit_sa$control$AVERAGE_EPOCHS) *
       epoch_length
   )
   expect_equal(tail(fit_sa$stoFit$path$phase, 1), 3)
@@ -129,7 +129,7 @@ local({
 local({
   data_two_groups <- set_latpl_data(items, GROUP = rep(1:2, each = n / 2))
   model_two_groups <- set_latpl_groups(list(model, model))
-  optimum <- fit_latpl(data_two_groups, model_two_groups, CONTROL = set_ucminf_control())$theta
+  optimum <- fit_latpl(data_two_groups, model_two_groups, CONTROL = set_qn_control())$theta
   fits <- lapply(1:10, function(seed) {
     fit_latpl(
       data_two_groups,
@@ -169,7 +169,7 @@ local({
   )
   expect_equal(as.vector(constraints %*% fit_constrained$theta), c(0, 0.25))
   expect_true(
-    distance_in_se(fit_constrained, fit_latpl(data, model_constrained, CONTROL = set_ucminf_control())) < 1
+    distance_in_se(fit_constrained, fit_latpl(data, model_constrained, CONTROL = set_qn_control())) < 1
   )
 })
 
@@ -192,7 +192,7 @@ local({
     expect_true(
       distance_in_se(
         fit_latpl(data, other_model, CONTROL = set_sa_control()),
-        fit_latpl(data, other_model, CONTROL = set_ucminf_control())
+        fit_latpl(data, other_model, CONTROL = set_qn_control())
       ) <
         1
     )
@@ -215,7 +215,7 @@ local({
   expect_true(
     distance_in_se(
       fit_two_groups,
-      fit_latpl(data_two_groups, model_two_groups, CONTROL = set_ucminf_control())
+      fit_latpl(data_two_groups, model_two_groups, CONTROL = set_qn_control())
     ) <
       1
   )
@@ -249,7 +249,7 @@ local({
   expect_true(
     distance_in_se(
       fit_two_groups,
-      fit_latpl(data_two_groups, model_two_groups, CONTROL = set_ucminf_control())
+      fit_latpl(data_two_groups, model_two_groups, CONTROL = set_qn_control())
     ) <
       1
   )
@@ -271,37 +271,9 @@ local({
 #### The Adam phase initialises ucminf ####
 local({
   expect_equal(
-    fit_latpl(data, model, INIT = set_init(METHOD = "SA"), CONTROL = set_ucminf_control())$theta,
+    fit_latpl(data, model, INIT = set_init(METHOD = "SA"), CONTROL = set_qn_control())$theta,
     fit_pml$theta,
     tolerance = 1e-4
-  )
-})
-
-#### From several starts, SA continues from the best and counts the epochs of all ####
-local({
-  negative_pl <- function(theta) {
-    -lavaan.pl:::cpp_pl(theta, fit_sa$engine$model, fit_sa$engine$data)$pl
-  }
-  starts <- list(fit_sa$init, fit_pml$theta)
-  run_sa <- function(starts, control, adam_only) {
-    lavaan.pl:::run_sa(
-      starts,
-      data,
-      fit_sa$engine,
-      fit_sa$lincon,
-      control,
-      adam_only,
-      FALSE
-    )
-  }
-  one_start <- run_sa(starts[1], set_sa_init_control(), TRUE)
-  two_starts <- run_sa(starts, set_sa_init_control(), TRUE)
-  full_run <- run_sa(starts, set_sa_control(), FALSE)
-  expect_true(negative_pl(two_starts$theta) <= negative_pl(one_start$theta))
-  expect_equal(sum(two_starts$path$phase == 0), 2)
-  expect_equal(
-    full_run$iterations,
-    (full_run$adam_epochs + full_run$newton_epochs + set_sa_control()$EPOCHS) * epoch_length
   )
 })
 
@@ -363,23 +335,23 @@ local({
   expect_true(
     distance_in_se(
       fit_latpl(data_missing, model, CONTROL = set_sa_control()),
-      fit_latpl(data_missing, model, CONTROL = set_ucminf_control())
+      fit_latpl(data_missing, model, CONTROL = set_qn_control())
     ) <
       1
   )
 })
 
-#### SA is the default of fit_latpl(), cfa() and sem() ####
+#### SA-QN is the default of fit_latpl(), cfa() and sem() ####
 local({
-  expect_identical(fit_latpl(data, model)$method, "SA")
+  expect_identical(fit_latpl(data, model)$method, "SA-QN")
   mimic <- as.data.frame(lapply(as.data.frame(items[, 1:6]), ordered))
   names(mimic) <- paste0("y", 1:6)
   for (fit in list(
     lavaan.pl::cfa("f =~ y1 + y2 + y3 + y4 + y5 + y6", mimic),
     lavaan.pl::sem("f =~ y1 + y2 + y3 + y4 + y5 + y6", mimic)
   )) {
-    expect_identical(fit@external$lavaan.pl$method, "SA")
-    expect_identical(fit@Options$optim.method, "SA")
+    expect_identical(fit@external$lavaan.pl$method, "SA-QN")
+    expect_identical(fit@Options$optim.method, "SA-QN")
     expect_true(lavaan::lavInspect(fit, "converged"))
   }
 })
@@ -392,11 +364,8 @@ local({
   expect_identical(vars, fit_sa$vars)
   expect_equal(max(vars$distance), fit_sa$stoFit$check$distance)
   moved_vars <- compute_var(replace(fit_sa, "theta", list(fit_sa$theta + 0.02)))
-  gradient <- numDeriv::grad(
-    function(x) lavaan.pl:::cpp_pl(x, fit_sa$engine$model, fit_sa$engine$data)$pl,
-    fit_sa$theta + 0.02
-  )
-  expect_equal(moved_vars$step, as.vector(solve(moved_vars$H, gradient)) / n, tolerance = 1e-5)
+  gradient <- lavaan.pl:::cpp_pl(fit_sa$theta + 0.02, fit_sa$engine$model, fit_sa$engine$data, 1L)$gradient
+  expect_equal(moved_vars$step, as.vector(solve(moved_vars$H, gradient)) / n, tolerance = 1e-8)
   se_pml <- sqrt(compute_var(fit_pml)$asymptotic_variance / n)
   true_distance <- abs(get_par(fit_sa, OPTION = "transformed") - get_par(fit_pml, OPTION = "transformed")) / se_pml
   expect_true(abs(max(vars$distance) - max(true_distance[se_pml > 0])) < .05)
@@ -408,46 +377,63 @@ local({
 #### The noise vanishes when every iteration uses all the pairs ####
 local({
   small <- set_latpl_data(items[, 1:5])
-  fit_all <- fit_latpl(small, set_latpl_model(build_constr_mat(5, 1, "simple")))
+  fit_all <- fit_latpl(small, set_latpl_model(build_constr_mat(5, 1, "simple")), CONTROL = set_sa_control())
   expect_equal(fit_all$stoFit$epoch_length, 1)
   expect_equal(compute_var(fit_all)$optimisation_noise, rep(0, length(fit_all$theta)))
 })
 
-#### The Adam phase has a budget in iterations when epochs are short ####
+#### The maximum epochs of each phase are respected, and the default Adam budget is in iterations ####
 local({
   small <- set_latpl_data(items[, 1:6])
   model_small <- set_latpl_model(build_constr_mat(6, 1, "simple"))
-  start <- suppressWarnings(fit_latpl(small, model_small, CONTROL = set_ucminf_control(MAXEVAL = 1)))$init
+  start <- suppressWarnings(fit_latpl(small, model_small, CONTROL = set_qn_control(MAXEVAL = 1)))$init
   start[lavaan.pl:::theta_block(model_small, sum(small$cat - 1)) == "lambda"] <- .01
-  fit_short <- fit_latpl(
+  fit_default <- fit_latpl(small, model_small, CONTROL = set_sa_control(TOL = 1e-8), INIT = set_init(THETA = start))
+  expect_equal(fit_default$stoFit$pairs_per_iteration, 15)
+  expect_equal(fit_default$stoFit$epoch_length, 1)
+  expect_equal(fit_default$stoFit$adam_epochs, 150)
+  fit_capped <- suppressWarnings(fit_latpl(
     small,
     model_small,
-    CONTROL = set_sa_control(ADAM_EPOCHS = 2, TOL = 1e-8, BURN_EPOCHS = 0),
+    CONTROL = set_sa_control(ADAM_EPOCHS = 2, PRECONDITION_EPOCHS = 1, MAX_PRECONDITION_EPOCHS = 1, AVERAGE_EPOCHS = 2, TOL = 1e-8),
     INIT = set_init(THETA = start)
-  )
-  expect_true(fit_short$stoFit$adam_epochs > 2)
-  expect_true(fit_short$stoFit$adam_epochs <= 150)
-})
-
-#### REFINE takes the average to the exact estimate and keeps it ####
-local({
-  fit_refined <- fit_latpl(data, model, CONTROL = set_sa_control(REFINE = TRUE))
-  expect_equal(fit_refined$theta, fit_pml$theta, tolerance = 1e-3)
-  expect_equal(fit_refined$stoFit$theta_average, fit_sa$theta)
-  expect_true(fit_refined$stoFit$check$refine_steps > 0)
-  expect_true(max(compute_var(fit_refined)$distance) < .01)
-  expect_equal(compute_var(fit_refined)$optimisation_noise, rep(0, length(fit_sa$theta)))
-  expect_true(fit_refined$stoFit$converged)
+  ))
+  expect_equal(fit_capped$stoFit$adam_epochs, 2)
+  expect_equal(fit_capped$stoFit$precondition_epochs, 1)
+  expect_equal(sum(fit_capped$stoFit$path$phase == 3), 2)
+  fit_large <- fit_latpl(data, model, CONTROL = set_sa_control(TOL = 1e-8))
+  expect_equal(fit_large$stoFit$adam_epochs, 5)
+  fit_none <- suppressWarnings(fit_latpl(
+    data,
+    model,
+    CONTROL = set_sa_control(PRECONDITION_EPOCHS = 0)
+  ))
+  expect_equal(fit_none$stoFit$precondition_epochs, 0)
+  expect_identical(fit_none$stoFit$gain, "hessian")
+  expect_true(fit_none$stoFit$converged)
+  flat <- fit_latpl(small, model_small, CONTROL = set_qn_control())$theta
+  flat[lavaan.pl:::theta_block(model_small, sum(small$cat - 1)) == "lambda"] <- 0
+  still <- function(cap) suppressWarnings(fit_latpl(
+    small,
+    model_small,
+    CONTROL = set_sa_control(
+      ALPHA = 1e-4, ADAM_EPOCHS = 1, PRECONDITION_EPOCHS = 0, MAX_PRECONDITION_EPOCHS = cap, AVERAGE_EPOCHS = 1
+    ),
+    INIT = set_init(THETA = flat)
+  ))$stoFit$precondition_epochs
+  expect_equal(still(0), 0)
+  expect_true(still(20) > 0)
+  expect_true(still(20) <= 20)
 })
 
 #### A saddle point is reported, and cfa() returns without standard errors ####
 local({
   small <- set_latpl_data(items[, 1:6])
   model_small <- set_latpl_model(build_constr_mat(6, 1, "simple"))
-  start <- suppressWarnings(fit_latpl(small, model_small, CONTROL = set_ucminf_control(MAXEVAL = 1)))$init
+  start <- suppressWarnings(fit_latpl(small, model_small, CONTROL = set_qn_control(MAXEVAL = 1)))$init
   start[lavaan.pl:::theta_block(model_small, sum(small$cat - 1)) == "lambda"] <- 0
   expect_warning(
-    fit_saddle <- fit_latpl(small, model_small, INIT = set_init(THETA = start)),
+    fit_saddle <- fit_latpl(small, model_small, CONTROL = set_sa_control(), INIT = set_init(THETA = start)),
     "not positive definite"
   )
   expect_false(fit_saddle$stoFit$converged)
@@ -460,7 +446,7 @@ local({
   template <- lavaan::cfa(syntax, frame, estimator = "PML", std.lv = TRUE, do.fit = FALSE)
   zero_loadings <- replace(lavaan::coef(template), grepl("=~", names(lavaan::coef(template))), 0)
   expect_warning(
-    fit_lavaan <- lavaan.pl::cfa(syntax, frame, std.lv = TRUE, start = zero_loadings, test = "mean.var.adjusted"),
+    fit_lavaan <- lavaan.pl::cfa(syntax, frame, std.lv = TRUE, start = zero_loadings, test = "mean.var.adjusted", optim.method = "SA"),
     "not positive definite"
   )
   expect_false(lavaan::lavInspect(fit_lavaan, "converged"))
@@ -474,15 +460,15 @@ local({
   data_reversed <- set_latpl_data(reversed)
   structure_one <- build_constr_mat(8, 1, "simple")
   block <- lavaan.pl:::theta_block(set_latpl_model(structure_one), sum(data_reversed$cat - 1))
-  start_std <- fit_latpl(data_reversed, set_latpl_model(structure_one), CONTROL = set_ucminf_control())$init
+  start_std <- fit_latpl(data_reversed, set_latpl_model(structure_one), CONTROL = set_qn_control())$init
   expect_equal(sign(start_std[block == "lambda"]), c(1, -1, 1, 1, -1, 1, 1, 1))
   model_marker <- set_latpl_model(structure_one, STDLV = FALSE)
   block_marker <- lavaan.pl:::theta_block(model_marker, sum(data_reversed$cat - 1))
-  start_marker <- fit_latpl(data_reversed, model_marker, CONTROL = set_ucminf_control())$init
+  start_marker <- fit_latpl(data_reversed, model_marker, CONTROL = set_qn_control())$init
   expect_equal(sign(start_marker[block_marker == "lambda"]), c(-1, 1, 1, -1, 1, 1, 1))
   expect_true(start_marker[block_marker == "logsd"] > log(.25))
-  fit_exact <- fit_latpl(data_reversed, set_latpl_model(structure_one), CONTROL = set_ucminf_control())
-  fit_stochastic <- fit_latpl(data_reversed, set_latpl_model(structure_one))
+  fit_exact <- fit_latpl(data_reversed, set_latpl_model(structure_one), CONTROL = set_qn_control())
+  fit_stochastic <- fit_latpl(data_reversed, set_latpl_model(structure_one), CONTROL = set_sa_control())
   expect_true(fit_stochastic$stoFit$converged)
   expect_equal(sign(fit_stochastic$theta[block == "lambda"]), sign(fit_exact$theta[block == "lambda"]))
 })
@@ -499,13 +485,13 @@ local({
     suppressWarnings(fit_latpl(
       data_misfit,
       set_latpl_model(structure_many),
-      CONTROL = set_sa_control(SEED = seed, EPOCHS = 2)
+      CONTROL = set_sa_control(SEED = seed, AVERAGE_EPOCHS = 2)
     ))
   })
   for (fit in fits) {
     expect_identical(
       fit$stoFit$converged,
-      fit$stoFit$plateau && fit$stoFit$skipped_averaging == 0 && isTRUE(fit$stoFit$check$pd) &&
+      fit$stoFit$skipped_averaging == 0 && isTRUE(fit$stoFit$check$pd) &&
         fit$stoFit$check$distance <= max(1, 4 * fit$stoFit$check$noise)
     )
   }
@@ -518,17 +504,50 @@ local({
   )
   small <- set_latpl_data(items[, 1:8])
   model_small <- set_latpl_model(build_constr_mat(8, 1, "simple"))
-  far <- fit_latpl(small, model_small, CONTROL = set_ucminf_control())$theta
+  far <- fit_latpl(small, model_small, CONTROL = set_qn_control())$theta
   thresholds <- lavaan.pl:::theta_block(model_small, sum(small$cat - 1)) == "tau"
   far[thresholds] <- far[thresholds] + .3
   expect_warning(
     fit_far <- fit_latpl(
       small,
       model_small,
-      CONTROL = set_sa_control(ALPHA = 1e-4, ADAM_EPOCHS = 1, BURN_EPOCHS = 0, EPOCHS = 0),
+      CONTROL = set_sa_control(ALPHA = 1e-4, ADAM_EPOCHS = 1, PRECONDITION_EPOCHS = 0, AVERAGE_EPOCHS = 1),
       INIT = set_init(THETA = far)
     ),
     "more than the optimisation noise explains"
   )
   expect_false(fit_far$stoFit$converged)
+})
+
+#### SA-QN starts the exact optimiser from the burn-in and its curvature ####
+local({
+  fit_saqn <- fit_latpl(data, model, CONTROL = set_saqn_control())
+  expect_identical(fit_saqn$method, "SA-QN")
+  expect_equal(fit_saqn$theta, fit_pml$theta, tolerance = 1e-4)
+  expect_equal(fit_latpl(data, model, CONTROL = set_saqn_control(SEED = 7))$theta, fit_saqn$theta, tolerance = 1e-4)
+  expect_null(compute_var(fit_saqn)$noise)
+  expect_null(fit_saqn$stoFit$invh)
+  expect_error(sa_diagnostics(fit_saqn), "not fitted by stochastic approximation")
+  burn <- lavaan.pl:::run_sa(fit_saqn$init, data, fit_saqn$engine, fit_saqn$lincon, set_saqn_control(), FALSE, FALSE)
+  expect_equal(dim(burn$invh), rep(length(fit_saqn$theta), 2))
+  fit_flat <- fit_latpl(data, model, CONTROL = set_qn_control(), INIT = set_init(THETA = burn$theta))
+  expect_true(fit_saqn$numFit$info[["neval"]] < fit_flat$numFit$info[["neval"]])
+  expect_equal(length(lavaan.pl:::run_sa(fit_saqn$init, data, fit_saqn$engine, fit_saqn$lincon, set_sa_control(AVERAGE_EPOCHS = 1), FALSE, FALSE)$invh), 0)
+})
+
+#### Several SA-QN starts keep the highest pairwise log-likelihood of the runs with those seeds ####
+local({
+  logl <- function(fit) lavaan.pl:::cpp_pl(fit$theta, fit$engine$model, fit$engine$data)$pl
+  runs <- lapply(5:7, function(seed) fit_latpl(data, model, CONTROL = set_saqn_control(SEED = seed)))
+  fit_three <- fit_latpl(data, model, CONTROL = set_saqn_control(SEED = 5, NSTARTS = 3))
+  expect_equal(fit_three$stoFit$start_logl, vapply(runs, logl, numeric(1)))
+  expect_equal(logl(fit_three), max(vapply(runs, logl, numeric(1))))
+  expect_equal(fit_three$theta, runs[[which.max(vapply(runs, logl, numeric(1)))]]$theta)
+  expect_identical(length(runs[[1]]$stoFit$start_logl), 1L)
+})
+
+#### SA needs the averaged phase, whose noise enters the variance ####
+local({
+  expect_error(fit_latpl(data, model, CONTROL = set_sa_control(AVERAGE_EPOCHS = 0)), "AVERAGE_EPOCHS")
+  expect_error(fit_latpl(data, model, CONTROL = set_sa_init_control()), "AVERAGE_EPOCHS")
 })
