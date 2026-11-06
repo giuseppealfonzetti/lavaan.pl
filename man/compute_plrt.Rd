@@ -24,3 +24,4 @@ saturated and independence fits \code{saturated} and \code{independence}, and th
 \description{
 Pairwise likelihood ratio test
 }
+\keyword{internal}

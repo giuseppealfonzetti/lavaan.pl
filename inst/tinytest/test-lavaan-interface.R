@@ -82,7 +82,7 @@ local({
   expect_equal(
     fit@external$lavaan.pl$data$valfreq,
     unlist(lapply(group_labels, function(label) {
-      pairs_freq(
+      lavaan.pl:::pairs_freq(
         validation[validation_group == label, ],
         fit@external$lavaan.pl$data$cat
       )
@@ -354,4 +354,15 @@ local({
     pmlcfa("eta =~ y1 + a*y2 + a*y3 + y4 + y5", LSAT, std.lv = TRUE, ceq.simple = TRUE),
     "ceq.simple"
   )
+})
+
+#### samplestats = FALSE gives the same fit ####
+local({
+  for (group in list(NULL, "gender")) {
+    full <- pmlcfa(three_factors, bfi_sample, std.lv = TRUE, group = group)
+    fast <- pmlcfa(three_factors, bfi_sample, std.lv = TRUE, group = group, samplestats = FALSE)
+    expect_equal(coef(fast), coef(full))
+    expect_equal(vcov(fast), vcov(full))
+    expect_equal(logLik(fast), logLik(full))
+  }
 })

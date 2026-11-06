@@ -18,29 +18,37 @@ litedown::reactor(
 library(lavaan.pl)
 ```
 
-Example taken from test files. Need to edit.
+Ordinal data for a factor model with many items can be simulated with `lavaan::simulateData()`, writing the population model with `paste()`.
 
 ```{r}
 # p = number of items, q = number of latent variables, n = number of observations
-p <- 30; q <- 8; n <- 1000
+p <- 30; q <- 5; n <- 1000
+items <- paste0("y", 1:p)
+factors <- paste0("F", 1:q)
+factor_of <- rep(seq_len(q), each = p / q)
 
-# Thresholds of each item
+# Random loadings and latent correlations, the same thresholds for every item
+set.seed(123)
+loadings <- runif(p, .4, .8)
+R <- cov2cor(crossprod(matrix(rnorm(q * q), q)) + diag(q))
 thr <- c(-1.5, 0, 1.5)
 
-# Simple loading structure, identified by marker loadings
-model <- set_latpl_model(build_constr_mat(P = p, Q = q, STRUCT = "simple"), STDLV = FALSE)
+pairs <- which(upper.tri(R), arr.ind = TRUE)
+population <- c(
+  paste(factors, "=~", tapply(paste0(loadings, "*", items), factor_of, paste, collapse = " + ")),
+  paste0(factors[pairs[, 1]], " ~~ ", R[pairs], "*", factors[pairs[, 2]]),
+  paste0(factors, " ~~ 1*", factors),
+  paste0(items, " | ", paste0(thr, "*t", seq_along(thr), collapse = " + "))
+)
+dat <- lavaan::simulateData(population, sample.nobs = n, seed = 123)
+head(dat[, 1:6])
+```
 
-# Random loadings, latent correlations and latent standard deviations
-set.seed(123)
-Load <- gen_loadings(CONSTRMAT = model$CONSTRMAT, STDLV = FALSE)
-R <- cov2cor(crossprod(matrix(rnorm(q * q), q)) + diag(q))
-D <- diag(exp(rnorm(q, -.25, .1)))
-S <- D %*% R %*% D
+The model to fit has the same structure, with free parameters.
 
-# True parameter vector, in the order of theta_names()
-theta <- par2theta(model, list(thresholds = rep(thr, p), loadings = Load, latent_correlations = S))
-length(theta)
-
-dat <- sim_data(SAMPLE_SIZE = n, LOADINGS = Load, THRESHOLDS = thr, LATENT_COV = S)
-head(dat)
+```{r}
+model <- paste(factors, "=~", tapply(items, factor_of, paste, collapse = " + "))
+fit <- pmlcfa(model, dat, std.lv = TRUE, ordered = TRUE)
+pe <- parameterEstimates(fit)
+head(data.frame(pe[pe$op == "=~", c("lhs", "op", "rhs", "est", "se")], true = loadings))
 ```

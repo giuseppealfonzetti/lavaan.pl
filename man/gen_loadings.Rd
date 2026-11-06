@@ -26,3 +26,4 @@ them randomly from Unif(0,1)}
 \description{
 Construct loading matrix
 }
+\keyword{internal}

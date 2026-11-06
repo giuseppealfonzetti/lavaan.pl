@@ -21,3 +21,4 @@ It is assumed to be the same for all the items.}
 \description{
 Simulate data given the values of the parameters for thresholds, loadings and latent correlations
 }
+\keyword{internal}

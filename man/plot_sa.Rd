@@ -7,13 +7,13 @@
 plot_sa(OBJ, WHAT = c("trajectory", "objective", "noise"), BLOCKS = NULL)
 }
 \arguments{
-\item{OBJ}{Object of class latpl_fit, or a \code{lavaan.pl} object from \code{\link[=lavaan.pl]{lavaan.pl()}}, fitted by stochastic approximation.}
+\item{OBJ}{A \code{lavaan.pl} object from \code{\link[=lavaan.pl]{lavaan.pl()}}, fitted by stochastic approximation.}
 
 \item{WHAT}{\code{"trajectory"} for the estimates across iterations by parameter block, \code{"objective"} for the pairwise
 likelihood along the burn-in (it is not monitored in the averaged phase), \code{"noise"} for the optimisation noise
 relative to the standard error of each parameter.}
 
-\item{BLOCKS}{Parameter blocks to show, as in \code{\link[=theta_names]{theta_names()}}. If \code{NULL}, all of them.}
+\item{BLOCKS}{Parameter blocks to show, such as \code{"lambda"} or \code{"tau"}. If \code{NULL}, all of them.}
 }
 \value{
 The plotted data, invisibly. Without the tinyplot package, a warning and the data.

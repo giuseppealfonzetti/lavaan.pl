@@ -10,11 +10,11 @@ get_latpl_fit(object)
 \item{object}{An object of class \code{lavaan.pl}.}
 }
 \value{
-The object of class \code{latpl_fit} from \code{\link[=fit_latpl]{fit_latpl()}}.
+The internal fit, a list of class \code{latpl_fit}.
 }
 \description{
 lavaan.pl fit of a lavaan.pl object
 }
 \seealso{
-\code{\link[=lavaan.pl]{lavaan.pl()}}, \code{\link[=fit_latpl]{fit_latpl()}}
+\code{\link[=lavaan.pl]{lavaan.pl()}}
 }

@@ -98,3 +98,4 @@ Print method for \code{latpl_model} objects
 
 Factor model for pairwise likelihood estimation
 }
+\keyword{internal}

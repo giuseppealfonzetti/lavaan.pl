@@ -1,8 +1,8 @@
 #' lavaan.pl fit of a lavaan.pl object
 #'
 #' @param object An object of class `lavaan.pl`.
-#' @return The object of class `latpl_fit` from [fit_latpl()].
-#' @seealso [lavaan.pl()], [fit_latpl()]
+#' @return The internal fit, a list of class `latpl_fit`.
+#' @seealso [lavaan.pl()]
 #' @export
 get_latpl_fit <- function(object) {
   if (!inherits(object, "lavaan.pl")) {

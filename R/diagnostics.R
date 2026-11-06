@@ -40,7 +40,7 @@ sa_parameters <- function(FIT) {
 #' pairs sampled, on top of the statistical variability; the distance is how far the estimate is from the exact pairwise
 #' likelihood estimate, predicted from the gradient without fitting it.
 #'
-#' @param OBJ Object of class latpl_fit, or a `lavaan.pl` object from [lavaan.pl()], fitted by stochastic approximation.
+#' @param OBJ A `lavaan.pl` object from [lavaan.pl()], fitted by stochastic approximation.
 #' @param TARGET Largest ratio of the optimisation noise to the standard error used to suggest a number of epochs.
 #' @return An object of class `latpl_sa_diagnostics`: a list with `converged`, the checks `checks`, the summary of the
 #'   phases `phases`, the settings `settings`, the table of free parameters `parameters` from `sa_parameters()`, its
@@ -105,11 +105,11 @@ print.latpl_sa_diagnostics <- function(x, ...) {
 
 #' Plots of the stochastic approximation
 #'
-#' @param OBJ Object of class latpl_fit, or a `lavaan.pl` object from [lavaan.pl()], fitted by stochastic approximation.
+#' @param OBJ A `lavaan.pl` object from [lavaan.pl()], fitted by stochastic approximation.
 #' @param WHAT `"trajectory"` for the estimates across iterations by parameter block, `"objective"` for the pairwise
 #'   likelihood along the burn-in (it is not monitored in the averaged phase), `"noise"` for the optimisation noise
 #'   relative to the standard error of each parameter.
-#' @param BLOCKS Parameter blocks to show, as in [theta_names()]. If `NULL`, all of them.
+#' @param BLOCKS Parameter blocks to show, such as `"lambda"` or `"tau"`. If `NULL`, all of them.
 #' @return The plotted data, invisibly. Without the tinyplot package, a warning and the data.
 #' @export
 plot_sa <- function(OBJ, WHAT = c("trajectory", "objective", "noise"), BLOCKS = NULL) {
@@ -153,9 +153,9 @@ plot_sa <- function(OBJ, WHAT = c("trajectory", "objective", "noise"), BLOCKS = 
 #' Stability of the stochastic approximation across seeds
 #'
 #' Fits the same model and data with other seeds of the pair sampling, and compares the spread of the estimates with the
-#' optimisation noise predicted by [compute_var()] from a single fit.
+#' optimisation noise predicted from a single fit.
 #'
-#' @param OBJ Object of class latpl_fit, or a `lavaan.pl` object from [lavaan.pl()], fitted by stochastic approximation.
+#' @param OBJ A `lavaan.pl` object from [lavaan.pl()], fitted by stochastic approximation.
 #' @param SEEDS Seeds of the pair sampling.
 #' @return An object of class `latpl_sa_stability`: a list with the table `parameters` of each free parameter (`name`,
 #'   `block`, standard error `se`, standard deviation across seeds `observed`, predicted noise `predicted`), the estimates

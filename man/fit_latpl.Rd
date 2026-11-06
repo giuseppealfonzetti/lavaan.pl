@@ -43,3 +43,4 @@ quasi-Newton BFGS started from the burn-in of stochastic approximation and its c
 standard errors account for the optimisation noise (\code{SA}), or quasi-Newton BFGS from the
 starting values alone (\code{QN}).
 }
+\keyword{internal}

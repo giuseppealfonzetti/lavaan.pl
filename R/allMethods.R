@@ -1,6 +1,7 @@
 #' Show method for the output of fit_latpl()
 #' @param x Object of class latpl_fit
 #' @param ... Additional arguments
+#' @keywords internal
 #' @export
 print.latpl_fit <- function(x, ...){
 
@@ -106,7 +107,7 @@ print.latpl_model <- function(x, ...) {
 #'
 #' @param OBJ Object of class latpl_fit.
 #' @param ... Additional arguments
-#' @export
+#' @keywords internal
 get_par <- function(OBJ, ...) UseMethod('get_par')
 
 #' Extract parameters
@@ -121,6 +122,7 @@ get_par <- function(OBJ, ...) UseMethod('get_par')
 #'    \code{'list'} \tab The model matrices, as returned by [theta2par()]. \cr
 #' }
 #' @param ... Additional arguments
+#' @keywords internal
 #' @export
 get_par.latpl_fit <- function(OBJ, OPTION = c("list", "raw", "transformed"), ...) {
   OPTION <- match.arg(OPTION)
@@ -149,7 +151,7 @@ get_par.latpl_fit <- function(OBJ, OPTION = c("list", "raw", "transformed"), ...
 #'   fits only), the optimisation noise matrix `noise` on the optimisation scale
 #'   (SA fits only), the Newton step to the optimum `step`, its size in standard errors of
 #'   each parameter `distance`, the estimates `theta` and the timing `RTime`.
-#' @export
+#' @keywords internal
 compute_var <- function(OBJ, NUMDERIV = FALSE, VERBOSE = FALSE) UseMethod('compute_var')
 
 #' @rdname compute_var

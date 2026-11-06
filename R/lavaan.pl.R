@@ -22,15 +22,16 @@
 #'   latent variable is determined by fixing the factor loading of the first
 #'   indicator to 1.0.
 #' @param estimator The estimator, which must be `"PML"`.
-#' @param estimator.args A list of arguments for [fit_latpl()]: `init` (from [set_init()]), `ncores`, `valdata`,
+#' @param estimator.args A list with `init` (from [set_init()]), `ncores`, `valdata`,
 #'   `valgroup`, `valx` and `computevar_numderiv`.
 #' @param start A vector of starting values in lavaan's free-parameter order.
 #' @param control Control object from [set_saqn_control()], [set_sa_control()] or [set_qn_control()], or `NULL`.
 #' @param verbose If `TRUE`, print additional information during the estimation
 #'   process.
-#' @param ... Additional arguments for [lavaan::lavaan()], including `optim.method` (`"SA-QN"`, `"SA"` or `"QN"`).
+#' @param ... Additional arguments for [lavaan::lavaan()], including `optim.method` (`"SA-QN"`, `"SA"` or `"QN"`)
+#'   and `samplestats = FALSE`, which skips lavaan's sample statistics (faster, for simulations).
 #' @return An object of class [`lavaan.pl`][lavaan.pl-class].
-#' @seealso [lavaan.pl-class], [fit_latpl()]
+#' @seealso [lavaan.pl-class]
 #'
 #' @references
 #'
@@ -139,6 +140,7 @@ lavaan.pl <- function(
     lavargs$test <- "none"
   }
   if (is.null(lavargs$ceq.simple)) lavargs$ceq.simple <- FALSE
+  if (isFALSE(lavargs$samplestats)) lavargs$slot_cache <- list()
   template <- do.call(get(model.type, envir = asNamespace("lavaan")), lavargs)
 
   # Fit lavaan.pl -------------------------------------------------------------------

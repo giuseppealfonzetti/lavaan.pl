@@ -9,7 +9,7 @@
 #' 'triangular', 'simple' and 'crossed'.
 #' @param CROSS Integer referring to the number of items latent i shares with latent i+1
 #'
-#' @export
+#' @keywords internal
 build_constr_mat <- function(P, Q, STRUCT = c('simple', 'triangular', 'crossed'), CROSS = NULL){
   stopifnot(P > 1, Q > 0)
   p <- as.integer(P)
@@ -70,7 +70,7 @@ build_constr_mat <- function(P, Q, STRUCT = c('simple', 'triangular', 'crossed')
 #' @param LB Lower bound for uniform random generator. Default set to 0.
 #' @param UB Upper bound for uniform random generator. Default set to 1.
 #' @param STDLV  Logical indicator. Set it to `TRUE` to fix latent variables scale. Set it `FALSE` to fix loadings scale.
-#' @export
+#' @keywords internal
 gen_loadings <- function(CONSTRMAT, FIXED = NULL,  SEED = 123, LB = 0, UB = 1, STDLV=TRUE){
   out <- t(set_latpl_model(CONSTRMAT, STDLV = STDLV)$CONSTRMAT)
   set.seed(SEED)
@@ -89,7 +89,7 @@ gen_loadings <- function(CONSTRMAT, FIXED = NULL,  SEED = 123, LB = 0, UB = 1, S
 #' @param LATENT_COV Latent correlation matrix. Dimension \eqn{q*q}.
 #' @param SEED Numeric seed for random generation.
 #'
-#'@export
+#' @keywords internal
 sim_data <- function(SAMPLE_SIZE, LOADINGS, THRESHOLDS, LATENT_COV, SEED = 123){
 
   stopifnot(SAMPLE_SIZE > 0, is.matrix(LOADINGS), all(is.finite(LOADINGS)), nrow(LOADINGS) > ncol(LOADINGS),

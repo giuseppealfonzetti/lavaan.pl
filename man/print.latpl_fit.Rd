@@ -14,3 +14,4 @@
 \description{
 Show method for the output of fit_latpl()
 }
+\keyword{internal}

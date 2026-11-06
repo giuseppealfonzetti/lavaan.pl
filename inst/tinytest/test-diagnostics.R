@@ -5,24 +5,24 @@ if (!at_home()) {
 #### Data and models ####
 p <- 12
 n <- 800
-loadings_structure <- build_constr_mat(p, 2, "simple")
+loadings_structure <- lavaan.pl:::build_constr_mat(p, 2, "simple")
 latent_correlations <- matrix(.3, 2, 2)
 diag(latent_correlations) <- 1
-items <- sim_data(
+items <- lavaan.pl:::sim_data(
   n,
-  gen_loadings(loadings_structure, SEED = 1, LB = .4, UB = .8),
+  lavaan.pl:::gen_loadings(loadings_structure, SEED = 1, LB = .4, UB = .8),
   c(-1, 0, 1),
   latent_correlations,
   SEED = 2
 )
-data <- set_latpl_data(items)
-model <- set_latpl_model(loadings_structure)
-fit <- fit_latpl(data, model, CONTROL = set_sa_control())
+data <- lavaan.pl:::set_latpl_data(items)
+model <- lavaan.pl:::set_latpl_model(loadings_structure)
+fit <- lavaan.pl:::fit_latpl(data, model, CONTROL = set_sa_control())
 frame <- as.data.frame(lapply(as.data.frame(items), ordered))
 names(frame) <- paste0("y", seq_len(p))
 syntax <- "f1 =~ y1 + y2 + y3 + y4 + y5 + y6\nf2 =~ y7 + y8 + y9 + y10 + y11 + y12"
 fit_lavaan <- lavaan.pl::pmlcfa(syntax, frame, std.lv = TRUE, optim.method = "SA")
-fit_exact <- fit_latpl(data, model, CONTROL = set_qn_control())
+fit_exact <- lavaan.pl:::fit_latpl(data, model, CONTROL = set_qn_control())
 
 #### sa_diagnostics() reports the run, per parameter and by block ####
 local({
@@ -30,8 +30,8 @@ local({
   expect_inherits(d, "latpl_sa_diagnostics")
   expect_identical(d$converged, fit$stoFit$converged)
   expect_equal(nrow(d$parameters), fit$dims$npar)
-  expect_equal(d$parameters$name, theta_names(data, model)[fit$lincon$free_idx])
-  expect_equal(d$parameters$se, sqrt(compute_var(fit)$asymptotic_variance / n)[fit$lincon$free_idx])
+  expect_equal(d$parameters$name, lavaan.pl:::theta_names(data, model)[fit$lincon$free_idx])
+  expect_equal(d$parameters$se, sqrt(lavaan.pl:::compute_var(fit)$asymptotic_variance / n)[fit$lincon$free_idx])
   expect_equal(d$parameters$ratio, d$parameters$noise / d$parameters$se)
   expect_equal(max(d$parameters$distance), fit$stoFit$check$distance)
   expect_equal(sum(d$blocks$parameters), fit$dims$npar)
@@ -56,7 +56,7 @@ local({
 local({
   start <- fit_exact$init
   start[lavaan.pl:::theta_block(model, sum(data$cat - 1)) == "lambda"] <- 0
-  saddle <- suppressWarnings(fit_latpl(data, model, CONTROL = set_sa_control(), INIT = set_init(THETA = start)))
+  saddle <- suppressWarnings(lavaan.pl:::fit_latpl(data, model, CONTROL = set_sa_control(), INIT = set_init(THETA = start)))
   d <- sa_diagnostics(saddle)
   expect_false(d$converged)
   expect_true(all(is.na(d$parameters$ratio)))

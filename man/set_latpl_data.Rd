@@ -81,3 +81,4 @@ Print method for \code{latpl_data} objects
 
 Ordinal and numeric data for pairwise likelihood estimation
 }
+\keyword{internal}

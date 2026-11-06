@@ -24,3 +24,4 @@ With \code{STRATA}, the tables of each stratum one after the other.
 \description{
 Pairwise frequencies
 }
+\keyword{internal}

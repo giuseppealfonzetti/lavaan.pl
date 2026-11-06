@@ -57,8 +57,11 @@ create_lav_from_latpl <- function(fit, vars = NULL, template) {
   # Change vcov slot -----------------------------------------------------------
   vcov <- NULL
   if (!is.null(vars)) {
-    delta <- numDeriv::jacobian(function(x) par_lav(as.vector(fit$lincon$K %*% x + fit$lincon$c)),
-                                fit$theta[fit$lincon$free_idx])
+    lat <- theta_block(fit$model, sum(fit$data$cat - 1)) %in% c("corr", "logsd", "scale")
+    delta <- matrix(0, length(x), length(fit$theta))
+    delta[, !lat] <- numDeriv::jacobian(function(t) par_lav(replace(fit$theta, !lat, t)), fit$theta[!lat], method = "simple")
+    if (any(lat)) delta[, lat] <- numDeriv::jacobian(function(t) par_lav(replace(fit$theta, lat, t)), fit$theta[lat])
+    delta <- delta %*% fit$lincon$K
     hinv <- solve(vars$H)
     vcov <- delta %*% hinv %*% vars$J %*% hinv %*% t(delta) / fit$dims$n
     attr(vcov, "E.inv") <- delta %*% hinv %*% t(delta)

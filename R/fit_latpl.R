@@ -23,7 +23,7 @@
 #'  the burn-in of `SA-QN`, with the pairwise log-likelihood reached from each start in
 #'  `start_logl`) or `numFit` (`QN`, `SA-QN`), the variance `vars` at the estimate (`SA`), and
 #'  the timing `RTime`.
-#'@export
+#' @keywords internal
 fit_latpl <- function(
   DATA,
   MODEL,

@@ -23,8 +23,7 @@ pairwise stochastic approximation (\code{\link[=set_sa_init_control]{set_sa_init
 \item{CONTROL}{Control object from \code{\link[=set_sa_init_control]{set_sa_init_control()}}, used when \code{METHOD = "SA"}.}
 }
 \value{
-An object of class \code{latpl_init} to be passed to \code{\link[=fit_latpl]{fit_latpl()}} via \code{INIT}, or to \code{\link[=pmlcfa]{pmlcfa()}}
-via \code{estimator.args$init}.
+An object of class \code{latpl_init} to be passed to \code{\link[=lavaan.pl]{lavaan.pl()}} via \code{estimator.args$init}.
 }
 \description{
 Starting values for pairwise likelihood estimation

@@ -64,7 +64,7 @@ indicator to 1.0.}
 
 \item{estimator}{The estimator, which must be \code{"PML"}.}
 
-\item{estimator.args}{A list of arguments for \code{\link[=fit_latpl]{fit_latpl()}}: \code{init} (from \code{\link[=set_init]{set_init()}}), \code{ncores}, \code{valdata},
+\item{estimator.args}{A list with \code{init} (from \code{\link[=set_init]{set_init()}}), \code{ncores}, \code{valdata},
 \code{valgroup}, \code{valx} and \code{computevar_numderiv}.}
 
 \item{start}{A vector of starting values in lavaan's free-parameter order.}
@@ -74,7 +74,8 @@ indicator to 1.0.}
 \item{verbose}{If \code{TRUE}, print additional information during the estimation
 process.}
 
-\item{...}{Additional arguments for \code{\link[lavaan:lavaan]{lavaan::lavaan()}}, including \code{optim.method} (\code{"SA-QN"}, \code{"SA"} or \code{"QN"}).}
+\item{...}{Additional arguments for \code{\link[lavaan:lavaan]{lavaan::lavaan()}}, including \code{optim.method} (\code{"SA-QN"}, \code{"SA"} or \code{"QN"})
+and \code{samplestats = FALSE}, which skips lavaan's sample statistics (faster, for simulations).}
 }
 \value{
 An object of class \code{\link[=lavaan.pl-class]{lavaan.pl}}.
@@ -110,5 +111,5 @@ data. \emph{British Journal of Mathematical and Statistical Psychology}, \emph{7
 22--43. \url{https://doi.org/10.1111/bmsp.12347}
 }
 \seealso{
-\link[=lavaan.pl-class]{lavaan.pl}, \code{\link[=fit_latpl]{fit_latpl()}}
+\link[=lavaan.pl-class]{lavaan.pl}
 }

@@ -37,7 +37,7 @@
 #'   groups or strata, `freq`, `ufreq` and `valfreq` stack the tables of each group and, within it, of
 #'   each stratum.
 #'
-#' @export
+#' @keywords internal
 set_latpl_data <- function(DATA, VALDATA = NULL, MISSING = c("listwise", "pairwise", "available.cases"),
                           WEIGHTS = NULL, WEIGHTS_TYPE = c("design", "frequency"), CLUSTER = NULL, GROUP = NULL,
                           VALGROUP = NULL, WEIGHTS_NORMALIZATION = c("total", "group"), X = NULL, VALX = NULL, NUMERIC = NULL) {
@@ -263,7 +263,7 @@ use_tables <- function(STRATA, Y, CAT, STRATUM) {
 #'   standard deviations `CONSTRLOGSCALE` (`NA` when free), the covariate effects `GAMMA` and `KAPPA`,
 #'   the indicator of numeric items `NUMERIC`, and the numbers of items `p` and latent variables `q`.
 #'
-#' @export
+#' @keywords internal
 set_latpl_model <- function(CONSTRMAT, CONSTRVAR = NULL, CORRFLAG = TRUE, STDLV = TRUE, CONSTRAINTS = NULL,
                            LATCOV = c("lkj", "direct"), REGMAT = NULL, RESCOV = NULL,
                            PARAMETERIZATION = c("delta", "theta"), INTERCEPTS = NULL, MEANS = NULL, SCALES = NULL,
@@ -340,7 +340,7 @@ set_latpl_model <- function(CONSTRMAT, CONSTRVAR = NULL, CORRFLAG = TRUE, STDLV 
 #' @return An object of class `latpl_groups` with `MODELS`, `CONSTRAINTS`, the number of items `p`
 #'   and the number of groups `ngroups`, to be passed to [fit_latpl()] via `MODEL`.
 #'
-#' @export
+#' @keywords internal
 set_latpl_groups <- function(MODELS, CONSTRAINTS = NULL) {
   stopifnot(
     is.list(MODELS), length(MODELS) > 0, all(vapply(MODELS, inherits, logical(1), "latpl_model")),
@@ -368,8 +368,7 @@ set_latpl_groups <- function(MODELS, CONSTRAINTS = NULL) {
 #' @param THETA Initialising vector. If `NULL`, the `standard` initialisation point is used.
 #' @param CONTROL Control object from [set_sa_init_control()], used when `METHOD = "SA"`.
 #'
-#' @return An object of class `latpl_init` to be passed to [fit_latpl()] via `INIT`, or to [pmlcfa()]
-#'   via `estimator.args$init`.
+#' @return An object of class `latpl_init` to be passed to [lavaan.pl()] via `estimator.args$init`.
 #'
 #' @export
 set_init <- function(METHOD = c("standard", "SA"), THETA = NULL, CONTROL = set_sa_init_control()) {
@@ -392,8 +391,7 @@ set_init <- function(METHOD = c("standard", "SA"), THETA = NULL, CONTROL = set_s
 #' @param STEPMAX Initial maximal step length of the trust region.
 #' @param MAXEVAL Maximum number of function evaluations.
 #'
-#' @return An object of class `latpl_qn_control` to be passed to [fit_latpl()] via `CONTROL`, or to
-#'   [pmlcfa()] via `control`.
+#' @return An object of class `latpl_qn_control` to be passed to [lavaan.pl()] via `control`.
 #'
 #' @export
 set_qn_control <- function(
@@ -430,7 +428,7 @@ set_qn_control <- function(
 #'   the end of the Adam phase.
 #' @param MAX_PRECONDITION_EPOCHS Maximum number of epochs of the preconditioning phase while the observed information
 #'   is not positive definite.
-#' @param AVERAGE_EPOCHS Number of epochs of the averaged phase, at least 1 to fit with [fit_latpl()].
+#' @param AVERAGE_EPOCHS Number of epochs of the averaged phase, at least 1.
 #' @param TOL Absolute change of the pairwise log-likelihood at the epoch average, per free parameter, below which, at
 #'   two consecutive epochs, the Adam or the preconditioning phase ends before its maximum.
 #' @param DECAY Exponent of the step length decay in the averaged phase, in \eqn{(1/2, 1)}.
@@ -440,8 +438,7 @@ set_qn_control <- function(
 #'   parameters).
 #' @param SEED Seed of the pair sampling.
 #'
-#' @return An object of class `latpl_sa_control` to be passed to [fit_latpl()] via `CONTROL`, or to
-#'   [pmlcfa()] via `control`.
+#' @return An object of class `latpl_sa_control` to be passed to [lavaan.pl()] via `control`.
 #'
 #' @export
 set_sa_control <- function(
@@ -491,8 +488,7 @@ set_sa_control <- function(
 #' @param NSTARTS Number of full runs from the same starting values, with seeds `SEED`, `SEED + 1` and so on. The highest
 #'   pairwise log-likelihood is kept, with a warning if the runs disagree. Each run adds its full cost.
 #'
-#' @return An object of class `latpl_saqn_control` to be passed to [fit_latpl()] via `CONTROL`, or to [pmlcfa()] via
-#'   `control`.
+#' @return An object of class `latpl_saqn_control` to be passed to [lavaan.pl()] via `control`.
 #'
 #' @export
 set_saqn_control <- function(

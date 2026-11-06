@@ -23,3 +23,4 @@ deviations, scale factors and residual variances. \cr
 \description{
 Extract parameters
 }
+\keyword{internal}

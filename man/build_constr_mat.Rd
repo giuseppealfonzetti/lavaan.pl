@@ -25,3 +25,4 @@ build_constr_mat(
 build_constr_mat() creates a binary matrix with entries equal to 1
 when referring to free loadings, and 0 entries otherwise.
 }
+\keyword{internal}

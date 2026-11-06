@@ -18,18 +18,18 @@ set.seed(1)
 binary <- cbind(rbinom(n, 1, .5), rbinom(n, 1, .3))
 items <- simulate_mimic(n, p, binary, c(.5, -.3), 2)
 loadings_structure <- matrix(NA, p, 1)
-data <- set_latpl_data(items, X = binary)
-model <- set_latpl_model(
+data <- lavaan.pl:::set_latpl_data(items, X = binary)
+model <- lavaan.pl:::set_latpl_model(
   loadings_structure,
   STDLV = FALSE,
   GAMMA = matrix(NA, 1, 2)
 )
-fit <- fit_latpl(data, model, CONTROL = set_qn_control())
+fit <- lavaan.pl:::fit_latpl(data, model, CONTROL = set_qn_control())
 
 #### Covariates define the strata of the frequency tables ####
 local({
   expect_equal(nrow(data$strata[[1]]), 4)
-  expect_equal(length(data$freq), 4 * length(pairs_freq(items, data$cat)))
+  expect_equal(length(data$freq), 4 * length(lavaan.pl:::pairs_freq(items, data$cat)))
   expect_equal(sum(data$freq), n * p * (p - 1) / 2)
   expect_equal(
     data$strata[[1]][data$stratum + 1, , drop = FALSE],
@@ -38,13 +38,13 @@ local({
   )
   first <- data$stratum == 0
   expect_equal(
-    data$freq[seq_along(pairs_freq(items, data$cat))],
-    pairs_freq(items[first, ], data$cat)
+    data$freq[seq_along(lavaan.pl:::pairs_freq(items, data$cat))],
+    lavaan.pl:::pairs_freq(items[first, ], data$cat)
   )
   expect_equal(fit$dims$nx, 2)
   expect_equal(fit$dims$ngam, 2)
   expect_equal(
-    tail(theta_names(data, model), 2),
+    tail(lavaan.pl:::theta_names(data, model), 2),
     c("gamma[1,1]", "gamma[1,2]")
   )
 })
@@ -54,14 +54,14 @@ local({
   key <- paste(binary[, 1], binary[, 2])
   patterns <- c("0 0", "1 0", "0 1", "1 1")
   ordering <- order(match(key, patterns))
-  data_groups <- set_latpl_data(items[ordering, ], GROUP = key[ordering])
-  groups <- set_latpl_groups(list(
-    set_latpl_model(loadings_structure, STDLV = FALSE, MEANS = 0),
-    set_latpl_model(loadings_structure, STDLV = FALSE, MEANS = NA),
-    set_latpl_model(loadings_structure, STDLV = FALSE, MEANS = NA),
-    set_latpl_model(loadings_structure, STDLV = FALSE, MEANS = NA)
+  data_groups <- lavaan.pl:::set_latpl_data(items[ordering, ], GROUP = key[ordering])
+  groups <- lavaan.pl:::set_latpl_groups(list(
+    lavaan.pl:::set_latpl_model(loadings_structure, STDLV = FALSE, MEANS = 0),
+    lavaan.pl:::set_latpl_model(loadings_structure, STDLV = FALSE, MEANS = NA),
+    lavaan.pl:::set_latpl_model(loadings_structure, STDLV = FALSE, MEANS = NA),
+    lavaan.pl:::set_latpl_model(loadings_structure, STDLV = FALSE, MEANS = NA)
   ))
-  names_groups <- theta_names(data_groups, groups)
+  names_groups <- lavaan.pl:::theta_names(data_groups, groups)
   shared <- names_groups[!grepl("\\.g|^alpha", names_groups)]
   constraint <- function(names, values) {
     replace(numeric(length(names_groups)), match(names, names_groups), values)
@@ -79,9 +79,9 @@ local({
     A = unname(rbind(equalities, additive)),
     b = numeric(nrow(equalities) + 1)
   )
-  fit_groups <- fit_latpl(data_groups, groups, CONTROL = set_qn_control())
-  par_groups <- theta2par(groups, fit_groups$theta)
-  par <- get_par(fit)
+  fit_groups <- lavaan.pl:::fit_latpl(data_groups, groups, CONTROL = set_qn_control())
+  par_groups <- lavaan.pl:::theta2par(groups, fit_groups$theta)
+  par <- lavaan.pl:::get_par(fit)
   expect_equal(par$thresholds, par_groups[[1]]$thresholds, tolerance = 1e-4)
   expect_equal(par$loadings, par_groups[[1]]$loadings, tolerance = 1e-4)
   expect_equal(
@@ -103,16 +103,16 @@ local({
 
 #### Covariates in the data with no effect in the model leave the fit unchanged ####
 local({
-  plain <- fit_latpl(set_latpl_data(items), set_latpl_model(loadings_structure), CONTROL = set_qn_control())
-  ignored <- fit_latpl(data, set_latpl_model(loadings_structure), CONTROL = set_qn_control())
+  plain <- lavaan.pl:::fit_latpl(lavaan.pl:::set_latpl_data(items), lavaan.pl:::set_latpl_model(loadings_structure), CONTROL = set_qn_control())
+  ignored <- lavaan.pl:::fit_latpl(data, lavaan.pl:::set_latpl_model(loadings_structure), CONTROL = set_qn_control())
   expect_equal(ignored$theta, plain$theta, tolerance = 1e-5)
 })
 
 #### The effects of the covariates are recovered ####
 local({
-  gamma <- as.vector(get_par(fit)$gamma)
-  se <- sqrt(compute_var(fit)$asymptotic_variance / n)
-  expect_true(all(abs(tail(get_par(fit, OPTION = "transformed"), 2) - gamma) < 1e-12))
+  gamma <- as.vector(lavaan.pl:::get_par(fit)$gamma)
+  se <- sqrt(lavaan.pl:::compute_var(fit)$asymptotic_variance / n)
+  expect_true(all(abs(tail(lavaan.pl:::get_par(fit, OPTION = "transformed"), 2) - gamma) < 1e-12))
   expect_true(all(gamma / tail(se, 2) * sign(c(.5, -.3)) > 3))
 })
 
@@ -122,9 +122,9 @@ local({
   shifted[, 1] <- pmin(pmax(shifted[, 1] + binary[, 2], 0), 3)
   kappa <- matrix(0, p, 2)
   kappa[1, 2] <- NA
-  fit_direct <- fit_latpl(
-    set_latpl_data(shifted, X = binary),
-    set_latpl_model(
+  fit_direct <- lavaan.pl:::fit_latpl(
+    lavaan.pl:::set_latpl_data(shifted, X = binary),
+    lavaan.pl:::set_latpl_model(
       loadings_structure,
       STDLV = FALSE,
       GAMMA = matrix(NA, 1, 2),
@@ -132,7 +132,7 @@ local({
     ),
     CONTROL = set_qn_control()
   )
-  par <- get_par(fit_direct)
+  par <- lavaan.pl:::get_par(fit_direct)
   expect_true(par$kappa[1, 2] > .5)
   expect_equal(sum(par$kappa != 0), 1)
 })
@@ -142,13 +142,13 @@ local({
   with_missing <- binary
   with_missing[1:20, 1] <- NA
   expect_message(
-    data_missing <- set_latpl_data(items, X = with_missing),
+    data_missing <- lavaan.pl:::set_latpl_data(items, X = with_missing),
     "20 observations"
   )
   expect_equal(data_missing$n, n - 20)
   expect_equal(
     data_missing$freq,
-    set_latpl_data(items[-(1:20), ], X = binary[-(1:20), ])$freq
+    lavaan.pl:::set_latpl_data(items[-(1:20), ], X = binary[-(1:20), ])$freq
   )
 })
 
@@ -156,13 +156,13 @@ local({
 local({
   times <- rep(1:3, length.out = n)
   rows <- rep(seq_len(n), times)
-  fit_replicated <- fit_latpl(
-    set_latpl_data(items[rows, ], X = binary[rows, ]),
+  fit_replicated <- lavaan.pl:::fit_latpl(
+    lavaan.pl:::set_latpl_data(items[rows, ], X = binary[rows, ]),
     model,
     CONTROL = set_qn_control()
   )
-  fit_weighted <- fit_latpl(
-    set_latpl_data(
+  fit_weighted <- lavaan.pl:::fit_latpl(
+    lavaan.pl:::set_latpl_data(
       items,
       X = binary,
       WEIGHTS = times,
@@ -176,40 +176,40 @@ local({
 
 #### Inputs are validated ####
 local({
-  expect_error(set_latpl_data(items, X = binary[1:10, ]))
+  expect_error(lavaan.pl:::set_latpl_data(items, X = binary[1:10, ]))
   expect_error(
-    set_latpl_data(items, X = binary, VALDATA = items[1:10, ]),
+    lavaan.pl:::set_latpl_data(items, X = binary, VALDATA = items[1:10, ]),
     "VALX"
   )
   expect_error(
-    fit_latpl(
-      set_latpl_data(items),
-      set_latpl_model(loadings_structure, GAMMA = matrix(NA, 1, 2)),
+    lavaan.pl:::fit_latpl(
+      lavaan.pl:::set_latpl_data(items),
+      lavaan.pl:::set_latpl_model(loadings_structure, GAMMA = matrix(NA, 1, 2)),
       CONTROL = set_qn_control()
     ),
     "one column per covariate"
   )
-  expect_error(set_latpl_model(loadings_structure, GAMMA = matrix(NA, 2, 2)))
+  expect_error(lavaan.pl:::set_latpl_model(loadings_structure, GAMMA = matrix(NA, 2, 2)))
 })
 
 #### SA with covariates agrees with PML, with and without validation data ####
 local({
-  se <- sqrt(compute_var(fit)$asymptotic_variance / n)
+  se <- sqrt(lavaan.pl:::compute_var(fit)$asymptotic_variance / n)
   distance <- function(x) {
-    max(abs(get_par(x, OPTION = "transformed") - get_par(fit, OPTION = "transformed")) / se)
+    max(abs(lavaan.pl:::get_par(x, OPTION = "transformed") - lavaan.pl:::get_par(fit, OPTION = "transformed")) / se)
   }
-  fit_sa <- fit_latpl(data, model, CONTROL = set_sa_control(PAIRS_PER_ITERATION = 4))
+  fit_sa <- lavaan.pl:::fit_latpl(data, model, CONTROL = set_sa_control(PAIRS_PER_ITERATION = 4))
   expect_true(fit_sa$stoFit$converged)
   expect_true(distance(fit_sa) < 1)
-  vars_sa <- compute_var(fit_sa)
+  vars_sa <- lavaan.pl:::compute_var(fit_sa)
   expect_true(all(vars_sa$optimisation_noise >= 0))
-  data_val <- set_latpl_data(
+  data_val <- lavaan.pl:::set_latpl_data(
     items,
     X = binary,
     VALDATA = items[1:500, ],
     VALX = binary[1:500, ]
   )
-  fit_val <- fit_latpl(data_val, model, CONTROL = set_sa_control(PAIRS_PER_ITERATION = 4))
+  fit_val <- lavaan.pl:::fit_latpl(data_val, model, CONTROL = set_sa_control(PAIRS_PER_ITERATION = 4))
   expect_true(distance(fit_val) < 1)
 })
 
@@ -222,31 +222,31 @@ local({
   kappa <- matrix(0, p, 2)
   kappa[2, 1] <- NA
   cases <- list(
-    list(data = set_latpl_data(items), model = set_latpl_model(loadings_structure)),
-    list(data = data, model = set_latpl_model(loadings_structure, GAMMA = gamma, KAPPA = kappa)),
+    list(data = lavaan.pl:::set_latpl_data(items), model = lavaan.pl:::set_latpl_model(loadings_structure)),
+    list(data = data, model = lavaan.pl:::set_latpl_model(loadings_structure, GAMMA = gamma, KAPPA = kappa)),
     list(
-      data = set_latpl_data(simulated_missing, MISSING = "available.cases", X = binary),
-      model = set_latpl_model(loadings_structure, STDLV = FALSE, GAMMA = gamma)
+      data = lavaan.pl:::set_latpl_data(simulated_missing, MISSING = "available.cases", X = binary),
+      model = lavaan.pl:::set_latpl_model(loadings_structure, STDLV = FALSE, GAMMA = gamma)
     ),
     list(
-      data = set_latpl_data(
+      data = lavaan.pl:::set_latpl_data(
         items,
         X = binary,
         WEIGHTS = rep(1:3, length.out = n),
         CLUSTER = rep(seq_len(n / 10), each = 10)
       ),
-      model = set_latpl_model(loadings_structure, GAMMA = gamma)
+      model = lavaan.pl:::set_latpl_model(loadings_structure, GAMMA = gamma)
     ),
     list(
-      data = set_latpl_data(items, X = binary, GROUP = rep(c("a", "b"), length.out = n)),
-      model = set_latpl_groups(list(
-        set_latpl_model(loadings_structure, GAMMA = gamma),
-        set_latpl_model(loadings_structure, STDLV = FALSE, KAPPA = kappa)
+      data = lavaan.pl:::set_latpl_data(items, X = binary, GROUP = rep(c("a", "b"), length.out = n)),
+      model = lavaan.pl:::set_latpl_groups(list(
+        lavaan.pl:::set_latpl_model(loadings_structure, GAMMA = gamma),
+        lavaan.pl:::set_latpl_model(loadings_structure, STDLV = FALSE, KAPPA = kappa)
       ))
     )
   )
   for (case in cases) {
-    start <- suppressWarnings(fit_latpl(
+    start <- suppressWarnings(lavaan.pl:::fit_latpl(
       case$data,
       case$model,
       CONTROL = set_qn_control(MAXEVAL = 1)
@@ -307,42 +307,42 @@ local({
   set.seed(11)
   continuous <- cbind(rnorm(n), rbinom(n, 1, .5))
   items_continuous <- simulate_mimic(n, p, continuous, c(.5, -.3), 12)
-  data_continuous <- set_latpl_data(items_continuous, X = continuous)
+  data_continuous <- lavaan.pl:::set_latpl_data(items_continuous, X = continuous)
   expect_false(data_continuous$tables)
   expect_true(data$tables)
   expect_equal(length(data_continuous$freq), 0)
-  model_continuous <- set_latpl_model(
+  model_continuous <- lavaan.pl:::set_latpl_model(
     loadings_structure,
     STDLV = FALSE,
     GAMMA = matrix(NA, 1, 2)
   )
-  fit_continuous <- fit_latpl(data_continuous, model_continuous, CONTROL = set_qn_control())
-  vars <- compute_var(fit_continuous)
+  fit_continuous <- lavaan.pl:::fit_latpl(data_continuous, model_continuous, CONTROL = set_qn_control())
+  vars <- lavaan.pl:::compute_var(fit_continuous)
   se <- sqrt(vars$asymptotic_variance / n)
-  gamma <- as.vector(get_par(fit_continuous)$gamma)
+  gamma <- as.vector(lavaan.pl:::get_par(fit_continuous)$gamma)
   expect_true(all(gamma / tail(se, 2) * sign(c(.5, -.3)) > 3))
-  fit_sa <- fit_latpl(
+  fit_sa <- lavaan.pl:::fit_latpl(
     data_continuous,
     model_continuous,
     CONTROL = set_sa_control(PAIRS_PER_ITERATION = 4)
   )
   expect_true(fit_sa$stoFit$converged)
   expect_true(max(abs(
-    get_par(fit_sa, OPTION = "transformed") - get_par(fit_continuous, OPTION = "transformed")
+    lavaan.pl:::get_par(fit_sa, OPTION = "transformed") - lavaan.pl:::get_par(fit_continuous, OPTION = "transformed")
   ) / se) < 1)
-  data_val <- set_latpl_data(
+  data_val <- lavaan.pl:::set_latpl_data(
     items_continuous,
     X = continuous,
     VALDATA = items_continuous[1:500, ],
     VALX = continuous[1:500, ]
   )
-  fit_val <- fit_latpl(
+  fit_val <- lavaan.pl:::fit_latpl(
     data_val,
     model_continuous,
     CONTROL = set_sa_control(PAIRS_PER_ITERATION = 4)
   )
   expect_true(max(abs(
-    get_par(fit_val, OPTION = "transformed") - get_par(fit_continuous, OPTION = "transformed")
+    lavaan.pl:::get_par(fit_val, OPTION = "transformed") - lavaan.pl:::get_par(fit_continuous, OPTION = "transformed")
   ) / se) < 1)
 })
 
@@ -351,10 +351,10 @@ local({
   with_missing <- items
   set.seed(13)
   with_missing[sample(length(items), 400)] <- NA
-  model_gamma <- set_latpl_model(loadings_structure, GAMMA = matrix(NA, 1, 2))
-  data_available <- set_latpl_data(with_missing, MISSING = "available.cases", X = binary)
-  data_pairwise <- set_latpl_data(with_missing, MISSING = "pairwise", X = binary)
-  theta <- suppressWarnings(fit_latpl(
+  model_gamma <- lavaan.pl:::set_latpl_model(loadings_structure, GAMMA = matrix(NA, 1, 2))
+  data_available <- lavaan.pl:::set_latpl_data(with_missing, MISSING = "available.cases", X = binary)
+  data_pairwise <- lavaan.pl:::set_latpl_data(with_missing, MISSING = "pairwise", X = binary)
+  theta <- suppressWarnings(lavaan.pl:::fit_latpl(
     data_available,
     model_gamma,
     CONTROL = set_qn_control(MAXEVAL = 1)
@@ -363,7 +363,7 @@ local({
     engine <- lavaan.pl:::engine(x, model_gamma)
     lavaan.pl:::cpp_pl(theta, engine$model, engine$data)$pl
   }
-  par <- theta2par(model_gamma, theta)
+  par <- lavaan.pl:::theta2par(model_gamma, theta)
   slopes <- par$loadings %*% par$gamma
   cuts <- split(par$thresholds, rep(seq_len(p), data_available$cat - 1))
   univariate <- sum(sapply(seq_len(p), function(j) {
@@ -375,7 +375,7 @@ local({
     sum(data_available$uweights[observed] * log(probability))
   }))
   expect_equal(pl(data_available) - pl(data_pairwise), univariate, tolerance = 1e-8)
-  fit_available <- fit_latpl(data_available, model_gamma, CONTROL = set_qn_control())
+  fit_available <- lavaan.pl:::fit_latpl(data_available, model_gamma, CONTROL = set_qn_control())
   expect_true(max(abs(
     lavaan.pl:::cpp_pl(fit_available$theta, fit_available$engine$model, fit_available$engine$data, 1L)$gradient
   )) / n < 1e-4)
@@ -383,35 +383,35 @@ local({
 
 #### Tests against the saturated and nested models ####
 local({
-  vars <- compute_var(fit)
-  test <- compute_plrt(fit, vars)
+  vars <- lavaan.pl:::compute_var(fit)
+  test <- lavaan.pl:::compute_plrt(fit, vars)
   expect_equal(test$model$df, sum(data$cat - 1) + p * 2 + p * (p - 1) / 2 - fit$dims$npar)
   expect_equal(test$baseline$df, p * (p - 1) / 2)
   expect_true(test$saturated$logl >= lavaan.pl:::cpp_pl(fit$theta, fit$engine$model, fit$engine$data)$pl)
   gamma_fixed <- matrix(c(NA, 0), 1, 2)
-  fit_nested <- fit_latpl(
+  fit_nested <- lavaan.pl:::fit_latpl(
     data,
-    set_latpl_model(loadings_structure, STDLV = FALSE, GAMMA = gamma_fixed),
+    lavaan.pl:::set_latpl_model(loadings_structure, STDLV = FALSE, GAMMA = gamma_fixed),
     CONTROL = set_qn_control()
   )
-  difference <- compute_plrt(fit_nested, H1 = fit)$model
+  difference <- lavaan.pl:::compute_plrt(fit_nested, H1 = fit)$model
   pl <- function(x) lavaan.pl:::cpp_pl(x$theta, x$engine$model, x$engine$data)$pl
   expect_equal(difference$stat, 2 * (pl(fit) - pl(fit_nested)))
   expect_equal(difference$df, 1)
   expect_true(difference$pvalue.scaled < .05)
-  fit_without <- fit_latpl(data, set_latpl_model(loadings_structure, STDLV = FALSE), CONTROL = set_qn_control())
+  fit_without <- lavaan.pl:::fit_latpl(data, lavaan.pl:::set_latpl_model(loadings_structure, STDLV = FALSE), CONTROL = set_qn_control())
   expect_equal(
-    compute_plrt(fit_without, H1 = fit_nested)$model$df,
+    lavaan.pl:::compute_plrt(fit_without, H1 = fit_nested)$model$df,
     1
   )
-  data_units <- set_latpl_data(items, X = cbind(binary, rnorm(n)))
-  fit_units <- fit_latpl(
+  data_units <- lavaan.pl:::set_latpl_data(items, X = cbind(binary, rnorm(n)))
+  fit_units <- lavaan.pl:::fit_latpl(
     data_units,
-    set_latpl_model(loadings_structure, GAMMA = matrix(NA, 1, 3)),
+    lavaan.pl:::set_latpl_model(loadings_structure, GAMMA = matrix(NA, 1, 3)),
     CONTROL = set_qn_control()
   )
   expect_false(data_units$tables)
-  test_units <- compute_plrt(fit_units, compute_var(fit_units))
+  test_units <- lavaan.pl:::compute_plrt(fit_units, lavaan.pl:::compute_var(fit_units))
   expect_equal(test_units$model$df, sum(data$cat - 1) + p * 3 + p * (p - 1) / 2 - fit_units$dims$npar)
   expect_true(is.finite(test_units$model$stat.scaled))
   expect_true(is.finite(test_units$baseline$stat.scaled))
@@ -429,7 +429,7 @@ local({
   expect_equal(fit_sem@external$lavaan.pl$dims$ngam, 2)
   expect_equal(
     unname(coef(fit_sem)[c("f~x1", "f~x2")]),
-    as.vector(get_par(fit)$gamma),
+    as.vector(lavaan.pl:::get_par(fit)$gamma),
     tolerance = 1e-3
   )
   fit_direct <- pmlsem(paste0(syntax, "\ny2 ~ x1"), mimic)
@@ -471,15 +471,15 @@ local({
   set.seed(21)
   age <- round(rnorm(n, 40, 10))
   items_age <- simulate_mimic(n, p, cbind(age - 40), -.05, 22)
-  model_age <- set_latpl_model(loadings_structure, GAMMA = matrix(NA, 1, 1))
-  fit_raw <- fit_latpl(set_latpl_data(items_age, X = cbind(age)), model_age, CONTROL = set_qn_control())
-  fit_centred <- fit_latpl(set_latpl_data(items_age, X = cbind(age - 40)), model_age, CONTROL = set_qn_control())
-  fit_scaled <- fit_latpl(set_latpl_data(items_age, X = cbind(1000 * age)), model_age, CONTROL = set_qn_control())
-  par_raw <- get_par(fit_raw)
-  par_centred <- get_par(fit_centred)
+  model_age <- lavaan.pl:::set_latpl_model(loadings_structure, GAMMA = matrix(NA, 1, 1))
+  fit_raw <- lavaan.pl:::fit_latpl(lavaan.pl:::set_latpl_data(items_age, X = cbind(age)), model_age, CONTROL = set_qn_control())
+  fit_centred <- lavaan.pl:::fit_latpl(lavaan.pl:::set_latpl_data(items_age, X = cbind(age - 40)), model_age, CONTROL = set_qn_control())
+  fit_scaled <- lavaan.pl:::fit_latpl(lavaan.pl:::set_latpl_data(items_age, X = cbind(1000 * age)), model_age, CONTROL = set_qn_control())
+  par_raw <- lavaan.pl:::get_par(fit_raw)
+  par_centred <- lavaan.pl:::get_par(fit_centred)
   expect_equal(abs(par_raw$loadings), abs(par_centred$loadings), tolerance = 1e-4)
   expect_equal(abs(par_raw$gamma), abs(par_centred$gamma), tolerance = 1e-4)
-  expect_equal(1000 * abs(get_par(fit_scaled)$gamma), abs(par_raw$gamma), tolerance = 1e-4)
+  expect_equal(1000 * abs(lavaan.pl:::get_par(fit_scaled)$gamma), abs(par_raw$gamma), tolerance = 1e-4)
   slopes <- as.vector(par_raw$loadings %*% par_raw$gamma)
   expect_equal(
     par_raw$thresholds - rep(slopes, each = 3) * 40,
@@ -489,28 +489,28 @@ local({
   pl <- function(x) lavaan.pl:::cpp_pl(x$theta, x$engine$model, x$engine$data, 1L)
   expect_equal(pl(fit_raw)$pl, pl(fit_centred)$pl, tolerance = 1e-8)
   expect_true(max(abs(pl(fit_raw)$gradient)) / n < 1e-3)
-  fit_started <- fit_latpl(
-    set_latpl_data(items_age, X = cbind(age)),
+  fit_started <- lavaan.pl:::fit_latpl(
+    lavaan.pl:::set_latpl_data(items_age, X = cbind(age)),
     model_age,
     INIT = set_init(METHOD = "SA"),
     CONTROL = set_qn_control()
   )
   expect_equal(pl(fit_started)$pl, pl(fit_centred)$pl, tolerance = 1e-8)
-  fit_sa <- fit_latpl(
-    set_latpl_data(items_age, X = cbind(age)),
+  fit_sa <- lavaan.pl:::fit_latpl(
+    lavaan.pl:::set_latpl_data(items_age, X = cbind(age)),
     model_age,
     CONTROL = set_sa_control(PAIRS_PER_ITERATION = 4)
   )
   expect_true(fit_sa$stoFit$converged)
   expect_equal(pl(fit_sa)$pl, pl(fit_centred)$pl, tolerance = 1e-4)
-  fixed <- set_latpl_model(loadings_structure, GAMMA = matrix(0.01, 1, 1))
-  fit_fixed <- fit_latpl(set_latpl_data(items_age, X = cbind(age)), fixed, CONTROL = set_qn_control())
-  expect_equal(as.vector(get_par(fit_fixed)$gamma), 0.01)
+  fixed <- lavaan.pl:::set_latpl_model(loadings_structure, GAMMA = matrix(0.01, 1, 1))
+  fit_fixed <- lavaan.pl:::fit_latpl(lavaan.pl:::set_latpl_data(items_age, X = cbind(age)), fixed, CONTROL = set_qn_control())
+  expect_equal(as.vector(lavaan.pl:::get_par(fit_fixed)$gamma), 0.01)
   expect_true(max(abs(pl(fit_fixed)$gradient)) / n < 1e-3)
   expect_message(
-    suppressWarnings(fit_latpl(
-      set_latpl_data(items_age, X = cbind(age)),
-      set_latpl_model(
+    suppressWarnings(lavaan.pl:::fit_latpl(
+      lavaan.pl:::set_latpl_data(items_age, X = cbind(age)),
+      lavaan.pl:::set_latpl_model(
         loadings_structure,
         GAMMA = matrix(NA, 1, 1),
         CONSTRAINTS = list(A = matrix(replace(numeric(25), 1, 1), 1), b = -1)
@@ -524,7 +524,7 @@ local({
 #### ucminf warns when it stops with a large gradient ####
 local({
   expect_warning(
-    fit_latpl(data, model, CONTROL = set_qn_control(MAXEVAL = 1)),
+    lavaan.pl:::fit_latpl(data, model, CONTROL = set_qn_control(MAXEVAL = 1)),
     "may not be at an optimum"
   )
 })

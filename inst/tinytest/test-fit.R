@@ -1,47 +1,47 @@
 #### Data and models ####
-three_factors <- build_constr_mat(9, 3, "simple")
+three_factors <- lavaan.pl:::build_constr_mat(9, 3, "simple")
 latent_correlations <- matrix(.3, 3, 3)
 diag(latent_correlations) <- 1
-items <- sim_data(
+items <- lavaan.pl:::sim_data(
   600,
-  gen_loadings(three_factors, SEED = 1, LB = .4, UB = .8),
+  lavaan.pl:::gen_loadings(three_factors, SEED = 1, LB = .4, UB = .8),
   c(-1, 0.3, 1),
   latent_correlations,
   SEED = 3
 )
-data <- set_latpl_data(items)
-lsat_data <- set_latpl_data(as.matrix(data.frame(lapply(LSAT, as.numeric))) - 1)
-one_factor <- set_latpl_model(matrix(NA, 5, 1))
+data <- lavaan.pl:::set_latpl_data(items)
+lsat_data <- lavaan.pl:::set_latpl_data(as.matrix(data.frame(lapply(LSAT, as.numeric))) - 1)
+one_factor <- lavaan.pl:::set_latpl_model(matrix(NA, 5, 1))
 items_two_factors <- items[1:300, 4:9]
-two_factors <- set_latpl_model(build_constr_mat(6, 2, "simple"))
+two_factors <- lavaan.pl:::set_latpl_model(lavaan.pl:::build_constr_mat(6, 2, "simple"))
 
-#### fit_latpl(, CONTROL = set_qn_control()) validates its inputs ####
+#### lavaan.pl:::fit_latpl(, CONTROL = set_qn_control()) validates its inputs ####
 local({
-  expect_error(fit_latpl(items, set_latpl_model(three_factors), CONTROL = set_qn_control()), "inherits")
+  expect_error(lavaan.pl:::fit_latpl(items, lavaan.pl:::set_latpl_model(three_factors), CONTROL = set_qn_control()), "inherits")
   expect_error(
-    fit_latpl(data, set_latpl_model(matrix(NA, 5, 1)), CONTROL = set_qn_control()),
+    lavaan.pl:::fit_latpl(data, lavaan.pl:::set_latpl_model(matrix(NA, 5, 1)), CONTROL = set_qn_control()),
     "DATA\\$p == MODEL\\$p"
   )
   expect_error(
-    fit_latpl(
+    lavaan.pl:::fit_latpl(
       data,
-      set_latpl_model(three_factors),
+      lavaan.pl:::set_latpl_model(three_factors),
       INIT = set_init(THETA = rep(0, 3)),
       CONTROL = set_qn_control()
     ),
     "length"
   )
   expect_error(
-    fit_latpl(lsat_data, one_factor, CONTROL = list(MAXEVAL = 5)),
+    lavaan.pl:::fit_latpl(lsat_data, one_factor, CONTROL = list(MAXEVAL = 5)),
     "inherits"
   )
 })
 
-#### fit_latpl(, CONTROL = set_qn_control()) stores its inputs and compute_var() covers the free parameters ####
+#### lavaan.pl:::fit_latpl(, CONTROL = set_qn_control()) stores its inputs and lavaan.pl:::compute_var() covers the free parameters ####
 local({
-  model <- set_latpl_model(three_factors)
-  fit <- fit_latpl(data, model, CONTROL = set_qn_control())
-  vars <- compute_var(fit)
+  model <- lavaan.pl:::set_latpl_model(three_factors)
+  fit <- lavaan.pl:::fit_latpl(data, model, CONTROL = set_qn_control())
+  vars <- lavaan.pl:::compute_var(fit)
   expect_identical(fit$data, data)
   expect_identical(fit$model, model)
   expect_inherits(fit$control, "latpl_qn_control")
@@ -52,12 +52,12 @@ local({
 
 #### The control object selects the optimiser ####
 local({
-  fit_sa <- fit_latpl(
+  fit_sa <- lavaan.pl:::fit_latpl(
     lsat_data,
     one_factor,
     CONTROL = set_sa_control(AVERAGE_EPOCHS = 1, PAIRS_PER_ITERATION = 2)
   )
-  fit_short <- fit_latpl(
+  fit_short <- lavaan.pl:::fit_latpl(
     lsat_data,
     one_factor,
     CONTROL = set_qn_control(MAXEVAL = 5)
@@ -68,7 +68,7 @@ local({
 
 #### Initialisation by SA reaches the same estimate from different starting values ####
 local({
-  fit_sa_init <- fit_latpl(
+  fit_sa_init <- lavaan.pl:::fit_latpl(
     lsat_data,
     one_factor,
     INIT = set_init(
@@ -77,24 +77,24 @@ local({
     ),
     CONTROL = set_qn_control()
   )
-  fit_standard_init <- fit_latpl(lsat_data, one_factor, CONTROL = set_qn_control())
+  fit_standard_init <- lavaan.pl:::fit_latpl(lsat_data, one_factor, CONTROL = set_qn_control())
   expect_false(identical(fit_sa_init$init, fit_standard_init$init))
   expect_equal(fit_sa_init$theta, fit_standard_init$theta, tolerance = 1e-4)
 })
 
 #### Numerical and analytic Hessians agree ####
 local({
-  fit <- fit_latpl(lsat_data, one_factor, CONTROL = set_qn_control())
+  fit <- lavaan.pl:::fit_latpl(lsat_data, one_factor, CONTROL = set_qn_control())
   expect_equal(
-    compute_var(fit, NUMDERIV = TRUE)$invH,
-    compute_var(fit)$invH,
+    lavaan.pl:::compute_var(fit, NUMDERIV = TRUE)$invH,
+    lavaan.pl:::compute_var(fit)$invH,
     tolerance = 1e-5
   )
 })
 
 #### Linear constraints hold at the estimate, where the projected gradient vanishes ####
 local({
-  names_free <- theta_names(data, set_latpl_model(three_factors))
+  names_free <- lavaan.pl:::theta_names(data, lavaan.pl:::set_latpl_model(three_factors))
   constraints <- rbind(
     replace(
       numeric(length(names_free)),
@@ -103,9 +103,9 @@ local({
     ),
     replace(numeric(length(names_free)), match("tau[4,2]", names_free), 1)
   )
-  fit <- fit_latpl(
+  fit <- lavaan.pl:::fit_latpl(
     data,
-    set_latpl_model(
+    lavaan.pl:::set_latpl_model(
       three_factors,
       CONSTRAINTS = list(A = constraints, b = c(0, 0.25))
     ),
@@ -131,7 +131,7 @@ local({
     max(abs(crossprod(free_to_full, negative_gradient(fit$theta)))) < 1e-5
   )
   expect_equal(
-    compute_var(fit)$H,
+    lavaan.pl:::compute_var(fit)$H,
     (hessian_numeric + t(hessian_numeric)) / 2,
     tolerance = 1e-4
   )
@@ -139,7 +139,7 @@ local({
 
 #### Invalid linear constraints are rejected ####
 local({
-  names_free <- theta_names(data, set_latpl_model(three_factors))
+  names_free <- lavaan.pl:::theta_names(data, lavaan.pl:::set_latpl_model(three_factors))
   constraint <- function(positions, values) {
     matrix(replace(numeric(length(names_free)), positions, values), 1)
   }
@@ -148,9 +148,9 @@ local({
     c(1, -1)
   )
   expect_error(
-    fit_latpl(
+    lavaan.pl:::fit_latpl(
       data,
-      set_latpl_model(
+      lavaan.pl:::set_latpl_model(
         three_factors,
         CONSTRAINTS = list(
           A = constraint(match("eta[1,2]", names_free), 1),
@@ -162,9 +162,9 @@ local({
     "LATCOV"
   )
   expect_error(
-    fit_latpl(
+    lavaan.pl:::fit_latpl(
       data,
-      set_latpl_model(
+      lavaan.pl:::set_latpl_model(
         three_factors,
         CONSTRAINTS = list(A = constraint(c(1, 28), c(1, -1)), b = 0)
       ),
@@ -173,9 +173,9 @@ local({
     "either thresholds"
   )
   expect_error(
-    fit_latpl(
+    lavaan.pl:::fit_latpl(
       data,
-      set_latpl_model(
+      lavaan.pl:::set_latpl_model(
         three_factors,
         CONSTRAINTS = list(
           A = rbind(equal_loadings, equal_loadings),
@@ -192,17 +192,17 @@ local({
 local({
   set.seed(2)
   weights <- sample(1:3, nrow(items_two_factors), replace = TRUE)
-  fit <- fit_latpl(set_latpl_data(items_two_factors), two_factors, CONTROL = set_qn_control())
-  fit_constant <- fit_latpl(
-    set_latpl_data(
+  fit <- lavaan.pl:::fit_latpl(lavaan.pl:::set_latpl_data(items_two_factors), two_factors, CONTROL = set_qn_control())
+  fit_constant <- lavaan.pl:::fit_latpl(
+    lavaan.pl:::set_latpl_data(
       items_two_factors,
       WEIGHTS = rep(2, nrow(items_two_factors))
     ),
     two_factors,
     CONTROL = set_qn_control()
   )
-  fit_weighted <- fit_latpl(
-    set_latpl_data(
+  fit_weighted <- lavaan.pl:::fit_latpl(
+    lavaan.pl:::set_latpl_data(
       items_two_factors,
       WEIGHTS = weights,
       WEIGHTS_TYPE = "frequency"
@@ -210,8 +210,8 @@ local({
     two_factors,
     CONTROL = set_qn_control()
   )
-  fit_replicated <- fit_latpl(
-    set_latpl_data(items_two_factors[
+  fit_replicated <- lavaan.pl:::fit_latpl(
+    lavaan.pl:::set_latpl_data(items_two_factors[
       rep(seq_len(nrow(items_two_factors)), weights),
     ]),
     two_factors,
@@ -223,14 +223,14 @@ local({
 
 #### Complete data give the same estimates under every missing-data option ####
 local({
-  fit_listwise <- fit_latpl(set_latpl_data(items_two_factors), two_factors, CONTROL = set_qn_control())
-  fit_pairwise <- fit_latpl(
-    set_latpl_data(items_two_factors, MISSING = "pairwise"),
+  fit_listwise <- lavaan.pl:::fit_latpl(lavaan.pl:::set_latpl_data(items_two_factors), two_factors, CONTROL = set_qn_control())
+  fit_pairwise <- lavaan.pl:::fit_latpl(
+    lavaan.pl:::set_latpl_data(items_two_factors, MISSING = "pairwise"),
     two_factors,
     CONTROL = set_qn_control()
   )
-  fit_available <- fit_latpl(
-    set_latpl_data(items_two_factors, MISSING = "available.cases"),
+  fit_available <- lavaan.pl:::fit_latpl(
+    lavaan.pl:::set_latpl_data(items_two_factors, MISSING = "available.cases"),
     two_factors,
     CONTROL = set_qn_control()
   )
@@ -242,15 +242,15 @@ local({
 local({
   items_first <- items[1:150, 4:9]
   items_second <- items[151:300, 4:9]
-  fit_first <- fit_latpl(set_latpl_data(items_first), two_factors, CONTROL = set_qn_control())
-  fit_second <- fit_latpl(set_latpl_data(items_second), two_factors, CONTROL = set_qn_control())
-  data_two_groups <- set_latpl_data(
+  fit_first <- lavaan.pl:::fit_latpl(lavaan.pl:::set_latpl_data(items_first), two_factors, CONTROL = set_qn_control())
+  fit_second <- lavaan.pl:::fit_latpl(lavaan.pl:::set_latpl_data(items_second), two_factors, CONTROL = set_qn_control())
+  data_two_groups <- lavaan.pl:::set_latpl_data(
     rbind(items_first, items_second),
     GROUP = rep(c("b", "a"), each = 150)
   )
-  fit_two_groups <- fit_latpl(
+  fit_two_groups <- lavaan.pl:::fit_latpl(
     data_two_groups,
-    set_latpl_groups(list(two_factors, two_factors)),
+    lavaan.pl:::set_latpl_groups(list(two_factors, two_factors)),
     CONTROL = set_qn_control()
   )
   pl <- function(fit) {
@@ -264,43 +264,43 @@ local({
   )
   expect_equal(pl(fit_two_groups), pl(fit_first) + pl(fit_second))
   expect_equal(
-    compute_var(fit_two_groups)$asymptotic_variance / 300,
+    lavaan.pl:::compute_var(fit_two_groups)$asymptotic_variance / 300,
     c(
-      compute_var(fit_first)$asymptotic_variance,
-      compute_var(fit_second)$asymptotic_variance
+      lavaan.pl:::compute_var(fit_first)$asymptotic_variance,
+      lavaan.pl:::compute_var(fit_second)$asymptotic_variance
     ) /
       150,
     tolerance = 1e-4
   )
-  expect_length(get_par(fit_two_groups), 2)
+  expect_length(lavaan.pl:::get_par(fit_two_groups), 2)
   expect_equal(
-    get_par(fit_two_groups)[[2]],
-    theta2par(two_factors, fit_second$theta),
+    lavaan.pl:::get_par(fit_two_groups)[[2]],
+    lavaan.pl:::theta2par(two_factors, fit_second$theta),
     tolerance = 1e-4
   )
   expect_equal(
-    par2theta(fit_two_groups$model, get_par(fit_two_groups)),
+    lavaan.pl:::par2theta(fit_two_groups$model, lavaan.pl:::get_par(fit_two_groups)),
     fit_two_groups$theta
   )
 })
 
 #### An equality constraint across groups holds and removes one parameter ####
 local({
-  data_two_groups <- set_latpl_data(
+  data_two_groups <- lavaan.pl:::set_latpl_data(
     items_two_factors,
     GROUP = rep(1:2, each = 150)
   )
-  model_two_groups <- set_latpl_groups(list(two_factors, two_factors))
-  names_free <- theta_names(data_two_groups, model_two_groups)
+  model_two_groups <- lavaan.pl:::set_latpl_groups(list(two_factors, two_factors))
+  names_free <- lavaan.pl:::theta_names(data_two_groups, model_two_groups)
   equal_loadings <- matrix(0, 1, length(names_free))
   equal_loadings[1, match(c("lambda[1,1]", "lambda[1,1].g2"), names_free)] <- c(
     1,
     -1
   )
-  fit_free <- fit_latpl(data_two_groups, model_two_groups, CONTROL = set_qn_control())
-  fit_equal <- fit_latpl(
+  fit_free <- lavaan.pl:::fit_latpl(data_two_groups, model_two_groups, CONTROL = set_qn_control())
+  fit_equal <- lavaan.pl:::fit_latpl(
     data_two_groups,
-    set_latpl_groups(
+    lavaan.pl:::set_latpl_groups(
       list(two_factors, two_factors),
       list(A = equal_loadings, b = 0)
     ),
@@ -315,15 +315,15 @@ local({
 
 #### The number of groups must match between data and model ####
 local({
-  data_two_groups <- set_latpl_data(
+  data_two_groups <- lavaan.pl:::set_latpl_data(
     items_two_factors,
     GROUP = rep(1:2, each = 150)
   )
-  expect_error(fit_latpl(data_two_groups, two_factors, CONTROL = set_qn_control()), "groups")
+  expect_error(lavaan.pl:::fit_latpl(data_two_groups, two_factors, CONTROL = set_qn_control()), "groups")
   expect_error(
-    fit_latpl(
-      set_latpl_data(items_two_factors),
-      set_latpl_groups(list(two_factors, two_factors)),
+    lavaan.pl:::fit_latpl(
+      lavaan.pl:::set_latpl_data(items_two_factors),
+      lavaan.pl:::set_latpl_groups(list(two_factors, two_factors)),
       CONTROL = set_qn_control()
     ),
     "groups"
@@ -335,9 +335,9 @@ local({
   set.seed(2)
   weights <- sample(1:3, 300, replace = TRUE)
   group <- rep(1:2, each = 150)
-  model_two_groups <- set_latpl_groups(list(two_factors, two_factors))
-  fit_weighted <- fit_latpl(
-    set_latpl_data(
+  model_two_groups <- lavaan.pl:::set_latpl_groups(list(two_factors, two_factors))
+  fit_weighted <- lavaan.pl:::fit_latpl(
+    lavaan.pl:::set_latpl_data(
       items_two_factors,
       WEIGHTS = weights,
       WEIGHTS_TYPE = "frequency",
@@ -346,8 +346,8 @@ local({
     model_two_groups,
     CONTROL = set_qn_control()
   )
-  fit_replicated <- fit_latpl(
-    set_latpl_data(
+  fit_replicated <- lavaan.pl:::fit_latpl(
+    lavaan.pl:::set_latpl_data(
       items_two_factors[rep(1:300, weights), ],
       GROUP = group[rep(1:300, weights)]
     ),
@@ -363,9 +363,9 @@ local({
   set.seed(3)
   weights <- runif(300, .2, 3)
   rescaled <- weights * ifelse(group == 2, 5, 1)
-  model_two_groups <- set_latpl_groups(list(two_factors, two_factors))
-  names_free <- theta_names(
-    set_latpl_data(items_two_factors, GROUP = group),
+  model_two_groups <- lavaan.pl:::set_latpl_groups(list(two_factors, two_factors))
+  names_free <- lavaan.pl:::theta_names(
+    lavaan.pl:::set_latpl_data(items_two_factors, GROUP = group),
     model_two_groups
   )
   equal_loadings <- matrix(0, 1, length(names_free))
@@ -373,18 +373,18 @@ local({
     1,
     match(c("lambda[1,1]", "lambda[1,1].g2"), names_free)
   ] <- c(1, -1)
-  model_equal <- set_latpl_groups(
+  model_equal <- lavaan.pl:::set_latpl_groups(
     list(two_factors, two_factors),
     list(A = equal_loadings, b = 0)
   )
   estimates <- function(weights, normalization) {
-    data <- set_latpl_data(
+    data <- lavaan.pl:::set_latpl_data(
       items_two_factors,
       WEIGHTS = weights,
       GROUP = group,
       WEIGHTS_NORMALIZATION = normalization
     )
-    fit_latpl(data, model_equal, CONTROL = set_qn_control())$theta
+    lavaan.pl:::fit_latpl(data, model_equal, CONTROL = set_qn_control())$theta
   }
   expect_equal(estimates(rescaled, "group"), estimates(weights, "group"))
   expect_false(isTRUE(all.equal(

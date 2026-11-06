@@ -238,7 +238,7 @@ Eigen::VectorXd cpp_saturated_traces(
 //' @return The (weighted) frequencies of the bivariate response patterns: pairs \eqn{(k, l)},
 //'   \eqn{l < k}, ordered by \eqn{k}, and within each pair the categories of \eqn{k} then \eqn{l}.
 //'   With `STRATA`, the tables of each stratum one after the other.
-//' @export
+//' @keywords internal
 // [[Rcpp::export]]
 Eigen::VectorXd pairs_freq(const Eigen::Map<Eigen::MatrixXd> Y, const Eigen::Map<Eigen::VectorXd> C_VEC,
                            const Rcpp::NumericVector WEIGHTS = Rcpp::NumericVector::create(),

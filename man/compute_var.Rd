@@ -27,3 +27,4 @@ each parameter \code{distance}, the estimates \code{theta} and the timing \code{
 \description{
 Compute variance of the estimates
 }
+\keyword{internal}

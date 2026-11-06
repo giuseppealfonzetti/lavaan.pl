@@ -15,16 +15,16 @@ responses[, 1] <- 10 * latent[, 1] + 3
 responses[, 2] <- 0.1 * latent[, 2] - 1
 for (j in 3:p) responses[, j] <- findInterval(latent[, j], c(-.8, 0, .8))
 loadings_structure <- matrix(NA, p, 1)
-data_mixed <- set_latpl_data(responses, NUMERIC = numeric_items)
-model_mixed <- set_latpl_model(loadings_structure, NUMERIC = numeric_items)
-fit_mixed <- fit_latpl(data_mixed, model_mixed, CONTROL = set_qn_control())
-data_both <- set_latpl_data(responses, NUMERIC = numeric_items, X = covariates)
-model_both <- set_latpl_model(
+data_mixed <- lavaan.pl:::set_latpl_data(responses, NUMERIC = numeric_items)
+model_mixed <- lavaan.pl:::set_latpl_model(loadings_structure, NUMERIC = numeric_items)
+fit_mixed <- lavaan.pl:::fit_latpl(data_mixed, model_mixed, CONTROL = set_qn_control())
+data_both <- lavaan.pl:::set_latpl_data(responses, NUMERIC = numeric_items, X = covariates)
+model_both <- lavaan.pl:::set_latpl_model(
   loadings_structure,
   GAMMA = matrix(NA, 1, 2),
   NUMERIC = numeric_items
 )
-fit_both <- fit_latpl(data_both, model_both, CONTROL = set_qn_control())
+fit_both <- lavaan.pl:::fit_latpl(data_both, model_both, CONTROL = set_qn_control())
 frame <- as.data.frame(responses)
 names(frame) <- paste0("y", seq_len(p))
 for (j in 3:p) frame[[j]] <- ordered(frame[[j]])
@@ -39,11 +39,11 @@ local({
   expect_equal(fit_mixed$dims$nint, 2)
   expect_equal(fit_mixed$dims$nscale, 2)
   expect_equal(
-    theta_names(data_mixed, model_mixed)[c(19, 20, 21, 22)],
+    lavaan.pl:::theta_names(data_mixed, model_mixed)[c(19, 20, 21, 22)],
     c("nu[1]", "nu[2]", "logrsd[1]", "logrsd[2]")
   )
   expect_equal(length(data_mixed$freq), 6 * 16)
-  par <- get_par(fit_mixed)
+  par <- lavaan.pl:::get_par(fit_mixed)
   expect_equal(diag(par$residual_covariances)[3:p], rep(0, 4))
   expect_true(all(diag(par$residual_covariances)[1:2] > 0))
   expect_equal(par$scales, rep(1, p))
@@ -51,12 +51,12 @@ local({
 
 #### The parameters are recovered, on the scale of each item ####
 local({
-  par <- get_par(fit_mixed)
+  par <- lavaan.pl:::get_par(fit_mixed)
   total <- par$loadings^2 + c(diag(par$residual_covariances)[1:2], 1, 1, 1, 1)
   expect_equal(par$intercepts[1:2], colMeans(responses[, 1:2]), tolerance = .02)
   expect_equal(sqrt(total[1:2]), apply(responses[, 1:2], 2, sd), tolerance = .02)
-  par_both <- get_par(fit_both)
-  se <- sqrt(compute_var(fit_both)$asymptotic_variance / n)
+  par_both <- lavaan.pl:::get_par(fit_both)
+  se <- sqrt(lavaan.pl:::compute_var(fit_both)$asymptotic_variance / n)
   gamma <- as.vector(par_both$gamma)
   expect_true(all(abs(gamma / tail(se, 2)) > 3))
   expect_equal(sign(gamma), sign(c(.5, -.3)))
@@ -66,9 +66,9 @@ local({
 local({
   rescaled <- responses
   rescaled[, 1] <- 100 * rescaled[, 1] + 7
-  fit_rescaled <- fit_latpl(set_latpl_data(rescaled, NUMERIC = numeric_items), model_mixed, CONTROL = set_qn_control())
-  par <- get_par(fit_mixed)
-  par_rescaled <- get_par(fit_rescaled)
+  fit_rescaled <- lavaan.pl:::fit_latpl(lavaan.pl:::set_latpl_data(rescaled, NUMERIC = numeric_items), model_mixed, CONTROL = set_qn_control())
+  par <- lavaan.pl:::get_par(fit_mixed)
+  par_rescaled <- lavaan.pl:::get_par(fit_rescaled)
   expect_equal(par_rescaled$loadings[1], 100 * par$loadings[1], tolerance = 1e-3)
   expect_equal(par_rescaled$loadings[-1], par$loadings[-1], tolerance = 1e-3)
   expect_equal(par_rescaled$intercepts[1], 100 * par$intercepts[1] + 7, tolerance = 1e-3)
@@ -79,14 +79,14 @@ local({
 #### Frequency tables and individual observations agree with numeric items ####
 local({
   discrete <- cbind(rbinom(n, 1, .5), rbinom(n, 1, .3))
-  data_discrete <- set_latpl_data(responses, NUMERIC = numeric_items, X = discrete)
+  data_discrete <- lavaan.pl:::set_latpl_data(responses, NUMERIC = numeric_items, X = discrete)
   expect_true(data_discrete$tables)
-  model_discrete <- set_latpl_model(
+  model_discrete <- lavaan.pl:::set_latpl_model(
     loadings_structure,
     GAMMA = matrix(NA, 1, 2),
     NUMERIC = numeric_items
   )
-  theta <- suppressWarnings(fit_latpl(
+  theta <- suppressWarnings(lavaan.pl:::fit_latpl(
     data_discrete,
     model_discrete,
     CONTROL = set_qn_control(MAXEVAL = 1)
@@ -135,17 +135,17 @@ local({
 
 #### Tests with numeric items ####
 local({
-  test <- compute_plrt(fit_both, compute_var(fit_both))
+  test <- lavaan.pl:::compute_plrt(fit_both, lavaan.pl:::compute_var(fit_both))
   expect_equal(test$model$df, 12 + 2 * p + 2 * 2 + p * (p - 1) / 2 - fit_both$dims$npar)
   expect_equal(test$baseline$df, p * (p - 1) / 2)
   expect_true(is.finite(test$model$stat.scaled))
   expect_true(is.finite(test$baseline$stat.scaled))
-  fit_nested <- fit_latpl(
+  fit_nested <- lavaan.pl:::fit_latpl(
     data_both,
-    set_latpl_model(loadings_structure, GAMMA = matrix(c(NA, 0), 1, 2), NUMERIC = numeric_items),
+    lavaan.pl:::set_latpl_model(loadings_structure, GAMMA = matrix(c(NA, 0), 1, 2), NUMERIC = numeric_items),
     CONTROL = set_qn_control()
   )
-  difference <- compute_plrt(fit_nested, H1 = fit_both)$model
+  difference <- lavaan.pl:::compute_plrt(fit_nested, H1 = fit_both)$model
   expect_equal(difference$df, 1)
   expect_true(difference$pvalue.scaled < .05)
 })
@@ -153,17 +153,17 @@ local({
 #### SA agrees with PML on mixed items, with and without covariates ####
 local({
   for (fit in list(fit_mixed, fit_both)) {
-    fit_sa <- fit_latpl(
+    fit_sa <- lavaan.pl:::fit_latpl(
       fit$data,
       fit$model,
       CONTROL = set_sa_control(PAIRS_PER_ITERATION = 4)
     )
-    se <- sqrt(compute_var(fit)$asymptotic_variance / n)
+    se <- sqrt(lavaan.pl:::compute_var(fit)$asymptotic_variance / n)
     expect_true(fit_sa$stoFit$converged)
     expect_true(max(abs(
-      get_par(fit_sa, OPTION = "transformed") - get_par(fit, OPTION = "transformed")
+      lavaan.pl:::get_par(fit_sa, OPTION = "transformed") - lavaan.pl:::get_par(fit, OPTION = "transformed")
     ) / se) < 1)
-    expect_true(all(compute_var(fit_sa)$optimisation_noise >= 0))
+    expect_true(all(lavaan.pl:::compute_var(fit_sa)$optimisation_noise >= 0))
   }
 })
 
@@ -171,7 +171,7 @@ local({
 local({
   serial <- lavaan.pl:::cpp_HJ(fit_both$theta, fit_both$engine$model, fit_both$engine$data, TRUE)
   serial_pl <- lavaan.pl:::cpp_pl(fit_both$theta, fit_both$engine$model, fit_both$engine$data, 1L)
-  serial_test <- compute_plrt(fit_both, compute_var(fit_both))
+  serial_test <- lavaan.pl:::compute_plrt(fit_both, lavaan.pl:::compute_var(fit_both))
   threaded <- fit_both
   threaded$cores <- 4
   RcppParallel::setThreadOptions(numThreads = 4)
@@ -183,19 +183,19 @@ local({
   expect_equal(parallel$H, serial$H, tolerance = 1e-10)
   expect_equal(parallel$J, serial$J, tolerance = 1e-10)
   expect_equal(parallel$pairvar, serial$pairvar, tolerance = 1e-10)
-  parallel_test <- compute_plrt(threaded, compute_var(threaded))
+  parallel_test <- lavaan.pl:::compute_plrt(threaded, lavaan.pl:::compute_var(threaded))
   expect_equal(parallel_test$model$stat.scaled, serial_test$model$stat.scaled, tolerance = 1e-8)
 })
 
 #### Inputs are validated ####
 local({
   expect_error(
-    set_latpl_data(responses, NUMERIC = numeric_items, MISSING = "available.cases"),
+    lavaan.pl:::set_latpl_data(responses, NUMERIC = numeric_items, MISSING = "available.cases"),
     "available.cases"
   )
-  expect_error(set_latpl_data(responses, NUMERIC = c(TRUE, FALSE)))
+  expect_error(lavaan.pl:::set_latpl_data(responses, NUMERIC = c(TRUE, FALSE)))
   expect_error(
-    fit_latpl(data_mixed, set_latpl_model(loadings_structure), CONTROL = set_qn_control()),
+    lavaan.pl:::fit_latpl(data_mixed, lavaan.pl:::set_latpl_model(loadings_structure), CONTROL = set_qn_control()),
     "same numeric items"
   )
   expect_error(pmlsem(paste(syntax, "f ~ x1", sep = "\n"), frame, missing = "available.cases"), "available.cases")

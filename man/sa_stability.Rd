@@ -7,7 +7,7 @@
 sa_stability(OBJ, SEEDS = 1:10)
 }
 \arguments{
-\item{OBJ}{Object of class latpl_fit, or a \code{lavaan.pl} object from \code{\link[=lavaan.pl]{lavaan.pl()}}, fitted by stochastic approximation.}
+\item{OBJ}{A \code{lavaan.pl} object from \code{\link[=lavaan.pl]{lavaan.pl()}}, fitted by stochastic approximation.}
 
 \item{SEEDS}{Seeds of the pair sampling.}
 }
@@ -18,5 +18,5 @@ across seeds \code{estimates} and the number of converged fits \code{converged}.
 }
 \description{
 Fits the same model and data with other seeds of the pair sampling, and compares the spread of the estimates with the
-optimisation noise predicted by \code{\link[=compute_var]{compute_var()}} from a single fit.
+optimisation noise predicted from a single fit.
 }

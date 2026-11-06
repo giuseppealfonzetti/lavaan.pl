@@ -24,3 +24,4 @@ the covariates \code{kappa[j,c]}. With \code{\link[=set_latpl_groups]{set_latpl_
 \description{
 Names of the model parameters
 }
+\keyword{internal}

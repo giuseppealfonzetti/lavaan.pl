@@ -28,3 +28,4 @@ per group; \code{par2theta()} returns the parameter vector.
 \description{
 Convert between the parameter vector and the model matrices
 }
+\keyword{internal}

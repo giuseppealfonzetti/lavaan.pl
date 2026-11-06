@@ -8,7 +8,7 @@
 #'   statistic `stat`, its degrees of freedom `df`, and the mean and variance adjusted `stat.scaled`
 #'   (`stat` divided by `scaling.factor`), `df.scaled` and `pvalue.scaled`. Also, without `H1`, the
 #'   saturated and independence fits `saturated` and `independence`, and the timing `RTime`.
-#' @export
+#' @keywords internal
 compute_plrt <- function(OBJ, VARS = compute_var(OBJ), H1 = NULL) {
   UseMethod('compute_plrt')
 }
@@ -22,6 +22,7 @@ compute_plrt <- function(OBJ, VARS = compute_var(OBJ), H1 = NULL) {
 #'   statistic `stat`, its degrees of freedom `df`, and the mean and variance adjusted `stat.scaled`
 #'   (`stat` divided by `scaling.factor`), `df.scaled` and `pvalue.scaled`. Also, without `H1`, the
 #'   saturated and independence fits `saturated` and `independence`, and the timing `RTime`.
+#' @keywords internal
 #' @export
 compute_plrt.latpl_fit <- function(OBJ, VARS = compute_var(OBJ), H1 = NULL) {
   start_time <- Sys.time()

@@ -291,8 +291,8 @@ local({
     if (engine_fit$stoFit$converged) {
       expect_true(distance <= max(1, 4 * engine_fit$stoFit$check$noise) + .1, info = name)
       exact_fit <- ours[[name]]@external$lavaan.pl
-      se <- sqrt(compute_var(exact_fit)$asymptotic_variance / exact_fit$dims$n)
-      gap <- abs(get_par(engine_fit, OPTION = "transformed") - get_par(exact_fit, OPTION = "transformed"))
+      se <- sqrt(lavaan.pl:::compute_var(exact_fit)$asymptotic_variance / exact_fit$dims$n)
+      gap <- abs(lavaan.pl:::get_par(engine_fit, OPTION = "transformed") - lavaan.pl:::get_par(exact_fit, OPTION = "transformed"))
       engine_distance <- max((gap / se)[se > 0])
       expect_true(abs(engine_fit$stoFit$check$distance - engine_distance) < .1 + .1 * engine_distance, info = name)
     } else {

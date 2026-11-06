@@ -1,7 +1,7 @@
 bfi_sample <- as.data.frame(bfi)
 three_factors <- "A =~ A1 + A2 + A3\nC =~ C1 + C2 + C3\nE =~ E1 + E2 + E3"
 
-#### anova() and lavTestLRT() use compute_plrt() ####
+#### anova() and lavTestLRT() use lavaan.pl:::compute_plrt() ####
 local({
   fit_h0 <- pmlcfa(three_factors, bfi_sample, std.lv = TRUE, test = "mean.var.adjusted")
   fit_h1 <- pmlcfa(paste(three_factors, "\nA1 ~~ C1"), bfi_sample, std.lv = TRUE, test = "mean.var.adjusted")

@@ -14,3 +14,4 @@ get_par(OBJ, ...)
 \description{
 Extract parameters
 }
+\keyword{internal}

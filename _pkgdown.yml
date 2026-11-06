@@ -31,34 +31,19 @@ reference:
       - standardizedSolution
       - get_latpl_fit
 
-  - title: Original functions
-    contents:
-      - fit_latpl
-      - print.latpl_fit
-      - get_par
-      - get_par.latpl_fit
-      - compute_var
-      - compute_plrt
-      - compute_plrt.latpl_fit
-
   - title: Diagnostics of the stochastic approximation
     contents:
       - sa_diagnostics
       - plot_sa
       - sa_stability
 
-  - title: Inputs and controls
+  - title: Controls
     contents:
-      - starts_with("set_")
-      - theta_names
-      - theta2par
-
-  - title: Generating data
-    contents:
-      - sim_data
-      - gen_loadings
-      - build_constr_mat
-      - pairs_freq
+      - set_init
+      - set_qn_control
+      - set_sa_control
+      - set_saqn_control
+      - set_sa_init_control
 
   - title: Data
     contents:

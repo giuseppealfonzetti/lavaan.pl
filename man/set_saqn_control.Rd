@@ -53,8 +53,7 @@ pairwise log-likelihood is kept, with a warning if the runs disagree. Each run a
 \item{MAXEVAL}{Maximum number of function evaluations.}
 }
 \value{
-An object of class \code{latpl_saqn_control} to be passed to \code{\link[=fit_latpl]{fit_latpl()}} via \code{CONTROL}, or to \code{\link[=pmlcfa]{pmlcfa()}} via
-\code{control}.
+An object of class \code{latpl_saqn_control} to be passed to \code{\link[=lavaan.pl]{lavaan.pl()}} via \code{control}.
 }
 \description{
 The \code{SA-QN} method: the Adam and preconditioning phases of \code{\link[=set_sa_control]{set_sa_control()}}, without the averaged phase, followed by

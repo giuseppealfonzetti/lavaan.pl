@@ -1,10 +1,10 @@
 #### Data and models ####
-two_factors <- build_constr_mat(6, 2, "simple")
+two_factors <- lavaan.pl:::build_constr_mat(6, 2, "simple")
 latent_correlations <- matrix(.3, 2, 2)
 diag(latent_correlations) <- 1
-items <- sim_data(
+items <- lavaan.pl:::sim_data(
   300,
-  gen_loadings(two_factors, SEED = 1, LB = .4, UB = .8),
+  lavaan.pl:::gen_loadings(two_factors, SEED = 1, LB = .4, UB = .8),
   c(-1, 0.3, 1),
   latent_correlations,
   SEED = 3
@@ -19,17 +19,17 @@ for (j in c(2:3, 5:6)) {
 }
 set.seed(5)
 datasets <- list(
-  available_cases = set_latpl_data(items_missing, MISSING = "available.cases"),
-  weights_and_clusters = set_latpl_data(
+  available_cases = lavaan.pl:::set_latpl_data(items_missing, MISSING = "available.cases"),
+  weights_and_clusters = lavaan.pl:::set_latpl_data(
     items,
     WEIGHTS = runif(300, .2, 3),
     CLUSTER = rep(1:40, length.out = 300)
   ),
-  complete = set_latpl_data(items)
+  complete = lavaan.pl:::set_latpl_data(items)
 )
-fits <- lapply(datasets, function(x) fit_latpl(x, set_latpl_model(two_factors), CONTROL = set_qn_control()))
-vars <- lapply(fits, compute_var)
-tests <- Map(compute_plrt, fits, vars)
+fits <- lapply(datasets, function(x) lavaan.pl:::fit_latpl(x, lavaan.pl:::set_latpl_model(two_factors), CONTROL = set_qn_control()))
+vars <- lapply(fits, lavaan.pl:::compute_var)
+tests <- Map(lavaan.pl:::compute_plrt, fits, vars)
 
 #### Helpers ####
 saturated <- function(fit, tau, rho, order, scores) {
@@ -48,7 +48,7 @@ saturated <- function(fit, tau, rho, order, scores) {
 }
 
 implied_correlations <- function(fit, theta) {
-  par <- get_par(replace(fit, "theta", list(theta)), OPTION = "list")
+  par <- lavaan.pl:::get_par(replace(fit, "theta", list(theta)), OPTION = "list")
   implied <- par$loadings %*% par$latent_correlations %*% t(par$loadings)
   implied[upper.tri(implied)]
 }
@@ -169,12 +169,12 @@ for (case in names(fits)) {
 #### Nested test of orthogonal factors against correlated factors ####
 local({
   fit_correlated <- fits$complete
-  fit_orthogonal <- fit_latpl(
+  fit_orthogonal <- lavaan.pl:::fit_latpl(
     datasets$complete,
-    set_latpl_model(two_factors, CORRFLAG = FALSE),
+    lavaan.pl:::set_latpl_model(two_factors, CORRFLAG = FALSE),
     CONTROL = set_qn_control()
   )
-  nested <- compute_plrt(fit_orthogonal, H1 = fit_correlated)$model
+  nested <- lavaan.pl:::compute_plrt(fit_orthogonal, H1 = fit_correlated)$model
   hj <- lavaan.pl:::cpp_HJ(
     c(fit_orthogonal$theta, 0),
     fit_correlated$engine$model,
@@ -190,7 +190,7 @@ local({
   )
   expect_equal(nested$df.scaled, 1)
   expect_equal(nested$stat.scaled, nested$stat / nested$scaling.factor)
-  expect_error(compute_plrt(fit_correlated, H1 = fit_orthogonal), "not nested")
+  expect_error(lavaan.pl:::compute_plrt(fit_correlated, H1 = fit_orthogonal), "not nested")
 })
 
 #### anova() falls back to stats for other models ####
@@ -203,21 +203,21 @@ local({
 #### A fixed threshold uses the traces over the full parameter vectors ####
 local({
   data <- datasets$complete
-  names_free <- theta_names(data, set_latpl_model(two_factors))
+  names_free <- lavaan.pl:::theta_names(data, lavaan.pl:::set_latpl_model(two_factors))
   fixed_threshold <- matrix(
     replace(numeric(length(names_free)), match("tau[2,1]", names_free), 1),
     1
   )
-  fit <- fit_latpl(
+  fit <- lavaan.pl:::fit_latpl(
     data,
-    set_latpl_model(
+    lavaan.pl:::set_latpl_model(
       two_factors,
       CONSTRAINTS = list(A = fixed_threshold, b = -1)
     ),
     CONTROL = set_qn_control()
   )
-  model_vars <- compute_var(fit)
-  test <- compute_plrt(fit, model_vars)
+  model_vars <- lavaan.pl:::compute_var(fit)
+  test <- lavaan.pl:::compute_plrt(fit, model_vars)
   n <- fit$dims$n
   nthr <- fit$dims$nthr
   constraints <- fit$lincon
@@ -282,23 +282,23 @@ local({
 
 #### Two unconstrained groups: statistic, degrees of freedom and traces add up over groups ####
 local({
-  data_two_groups <- set_latpl_data(items, GROUP = rep(1:2, each = 150))
-  fit_two_groups <- fit_latpl(
+  data_two_groups <- lavaan.pl:::set_latpl_data(items, GROUP = rep(1:2, each = 150))
+  fit_two_groups <- lavaan.pl:::fit_latpl(
     data_two_groups,
-    set_latpl_groups(list(
-      set_latpl_model(two_factors),
-      set_latpl_model(two_factors)
+    lavaan.pl:::set_latpl_groups(list(
+      lavaan.pl:::set_latpl_model(two_factors),
+      lavaan.pl:::set_latpl_model(two_factors)
     )),
     CONTROL = set_qn_control()
   )
   test_separate <- lapply(1:2, function(g) {
-    compute_plrt(fit_latpl(
-      set_latpl_data(items[data_two_groups$group == g - 1, ]),
-      set_latpl_model(two_factors),
+    lavaan.pl:::compute_plrt(lavaan.pl:::fit_latpl(
+      lavaan.pl:::set_latpl_data(items[data_two_groups$group == g - 1, ]),
+      lavaan.pl:::set_latpl_model(two_factors),
       CONTROL = set_qn_control()
     ))
   })
-  test_two_groups <- compute_plrt(fit_two_groups)
+  test_two_groups <- lavaan.pl:::compute_plrt(fit_two_groups)
   statistic_and_traces <- function(x) {
     c(
       x$stat,
@@ -319,24 +319,24 @@ local({
 
 #### Nested test of an equality across groups ####
 local({
-  data_two_groups <- set_latpl_data(items, GROUP = rep(1:2, each = 150))
-  model_two_groups <- set_latpl_groups(list(
-    set_latpl_model(two_factors),
-    set_latpl_model(two_factors)
+  data_two_groups <- lavaan.pl:::set_latpl_data(items, GROUP = rep(1:2, each = 150))
+  model_two_groups <- lavaan.pl:::set_latpl_groups(list(
+    lavaan.pl:::set_latpl_model(two_factors),
+    lavaan.pl:::set_latpl_model(two_factors)
   ))
-  fit_free <- fit_latpl(data_two_groups, model_two_groups, CONTROL = set_qn_control())
-  names_free <- theta_names(data_two_groups, model_two_groups)
+  fit_free <- lavaan.pl:::fit_latpl(data_two_groups, model_two_groups, CONTROL = set_qn_control())
+  names_free <- lavaan.pl:::theta_names(data_two_groups, model_two_groups)
   equal_loadings <- matrix(0, 1, length(names_free))
   equal_loadings[1, match(c("lambda[2,1]", "lambda[2,1].g2"), names_free)] <- c(
     1,
     -1
   )
-  fit_equal <- fit_latpl(
+  fit_equal <- lavaan.pl:::fit_latpl(
     data_two_groups,
-    set_latpl_groups(model_two_groups$MODELS, list(A = equal_loadings, b = 0)),
+    lavaan.pl:::set_latpl_groups(model_two_groups$MODELS, list(A = equal_loadings, b = 0)),
     CONTROL = set_qn_control()
   )
-  nested <- compute_plrt(fit_equal, H1 = fit_free)$model
+  nested <- lavaan.pl:::compute_plrt(fit_equal, H1 = fit_free)$model
   pl <- function(fit) {
     lavaan.pl:::cpp_pl(fit$theta, fit$engine$model, fit$engine$data)$pl
   }

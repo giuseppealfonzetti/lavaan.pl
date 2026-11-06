@@ -4,7 +4,7 @@
 #' @param ... Further objects of class `lavaan`, and arguments for [lavaan::lavTestLRT()].
 #' @param model_names Names of the models.
 #' @return An object of class `anova`, as [lavaan::lavTestLRT()]. When all models are of class
-#'   `lavaan.pl`, the difference tests come from [compute_plrt()].
+#'   `lavaan.pl`, the difference tests are adjusted pairwise likelihood ratio tests.
 #' @export
 lavTestLRT <- function(object, ..., model_names = NULL) {
   dots <- list(...)

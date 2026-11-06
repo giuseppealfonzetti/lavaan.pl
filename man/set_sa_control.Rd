@@ -35,7 +35,7 @@ the end of the Adam phase.}
 \item{MAX_PRECONDITION_EPOCHS}{Maximum number of epochs of the preconditioning phase while the observed information
 is not positive definite.}
 
-\item{AVERAGE_EPOCHS}{Number of epochs of the averaged phase, at least 1 to fit with \code{\link[=fit_latpl]{fit_latpl()}}.}
+\item{AVERAGE_EPOCHS}{Number of epochs of the averaged phase, at least 1.}
 
 \item{TOL}{Absolute change of the pairwise log-likelihood at the epoch average, per free parameter, below which, at
 two consecutive epochs, the Adam or the preconditioning phase ends before its maximum.}
@@ -51,8 +51,7 @@ parameters).}
 \item{SEED}{Seed of the pair sampling.}
 }
 \value{
-An object of class \code{latpl_sa_control} to be passed to \code{\link[=fit_latpl]{fit_latpl()}} via \code{CONTROL}, or to
-\code{\link[=pmlcfa]{pmlcfa()}} via \code{control}.
+An object of class \code{latpl_sa_control} to be passed to \code{\link[=lavaan.pl]{lavaan.pl()}} via \code{control}.
 }
 \description{
 The \code{SA} method. It draws item pairs at each iteration, uniformly and independently across iterations, and runs in

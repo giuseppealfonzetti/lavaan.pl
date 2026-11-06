@@ -62,7 +62,7 @@ corrflag_code <- function(MODEL) {
 #'   deviations `logrsd[j]`, free regressions on the covariates `gamma[h,c]` and free direct effects of
 #'   the covariates `kappa[j,c]`. With [set_latpl_groups()], the names of group 2 onwards end in `.g2`,
 #'   `.g3`, and so on.
-#' @export
+#' @keywords internal
 theta_names <- function(DATA, MODEL) {
   stopifnot(inherits(DATA, "latpl_data"), inherits(MODEL, c("latpl_model", "latpl_groups")))
   if (inherits(MODEL, "latpl_groups")) {
@@ -135,7 +135,7 @@ lkj_inv <- function(R) {
 #'   `gamma` and `kappa`.
 #' @return `theta2par()` returns the list `PAR`, or with [set_latpl_groups()] a list of them, one
 #'   per group; `par2theta()` returns the parameter vector.
-#' @export
+#' @keywords internal
 theta2par <- function(MODEL, THETA) {
   stopifnot(inherits(MODEL, c("latpl_model", "latpl_groups")), is.numeric(THETA))
   if (inherits(MODEL, "latpl_groups")) {
@@ -189,7 +189,6 @@ theta2par <- function(MODEL, THETA) {
 }
 
 #' @rdname theta2par
-#' @export
 par2theta <- function(MODEL, PAR) {
   stopifnot(inherits(MODEL, c("latpl_model", "latpl_groups")))
   if (inherits(MODEL, "latpl_groups")) return(unlist(Map(par2theta, MODEL$MODELS, PAR), use.names = FALSE))

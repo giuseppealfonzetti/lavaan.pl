@@ -15,7 +15,7 @@ lavTestLRT(object, ..., model_names = NULL)
 }
 \value{
 An object of class \code{anova}, as \code{\link[lavaan:lavTestLRT]{lavaan::lavTestLRT()}}. When all models are of class
-\code{lavaan.pl}, the difference tests come from \code{\link[=compute_plrt]{compute_plrt()}}.
+\code{lavaan.pl}, the difference tests are adjusted pairwise likelihood ratio tests.
 }
 \description{
 Likelihood ratio test for nested models

@@ -7,7 +7,7 @@
 sa_diagnostics(OBJ, TARGET = 0.1)
 }
 \arguments{
-\item{OBJ}{Object of class latpl_fit, or a \code{lavaan.pl} object from \code{\link[=lavaan.pl]{lavaan.pl()}}, fitted by stochastic approximation.}
+\item{OBJ}{A \code{lavaan.pl} object from \code{\link[=lavaan.pl]{lavaan.pl()}}, fitted by stochastic approximation.}
 
 \item{TARGET}{Largest ratio of the optimisation noise to the standard error used to suggest a number of epochs.}
 }

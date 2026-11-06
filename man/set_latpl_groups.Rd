@@ -22,3 +22,4 @@ and the number of groups \code{ngroups}, to be passed to \code{\link[=fit_latpl]
 \description{
 Multigroup factor model for pairwise likelihood estimation
 }
+\keyword{internal}

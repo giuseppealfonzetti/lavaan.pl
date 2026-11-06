@@ -32,7 +32,7 @@ cpp_saturated_traces <- function(HTT, HTR, D, B, ST, SR, N, FULL = FALSE) {
 #' @return The (weighted) frequencies of the bivariate response patterns: pairs \eqn{(k, l)},
 #'   \eqn{l < k}, ordered by \eqn{k}, and within each pair the categories of \eqn{k} then \eqn{l}.
 #'   With `STRATA`, the tables of each stratum one after the other.
-#' @export
+#' @keywords internal
 pairs_freq <- function(Y, C_VEC, WEIGHTS = as.numeric( c()), STRATA = as.numeric( c())) {
     .Call(`_lavaan_pl_pairs_freq`, Y, C_VEC, WEIGHTS, STRATA)
 }
