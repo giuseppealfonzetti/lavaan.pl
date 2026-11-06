@@ -48,7 +48,7 @@ The model to fit has the same structure, with free parameters.
 
 ```{r}
 model <- paste(factors, "=~", tapply(items, factor_of, paste, collapse = " + "))
-fit <- pmlcfa(model, dat, std.lv = TRUE, ordered = TRUE)
+fit <- pmlcfa(model, dat, std.lv = TRUE)
 pe <- parameterEstimates(fit)
 head(data.frame(pe[pe$op == "=~", c("lhs", "op", "rhs", "est", "se")], true = loadings))
 ```

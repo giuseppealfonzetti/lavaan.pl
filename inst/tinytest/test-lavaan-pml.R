@@ -3,6 +3,7 @@ if (!at_home()) {
 }
 
 #### Data and models ####
+source("fixtures/simulate.R")
 source("fixtures/lavaan-pml-cases.R")
 reference <- readRDS("fixtures/lavaan-pml-reference.rds")
 ours <- lapply(lavaan_pml_cases, function(case) {
@@ -260,10 +261,13 @@ local({
 
 #### Under the default every case reaches the estimate of QN; bifactor can also reach the lower optimum, which is lavaan's ####
 local({
-  default <- list(cfa = lavaan.pl::pmlcfa, sem = lavaan.pl::pmlsem)
+  default <- list(
+    cfa = function(...) lavaan.pl::pmlcfa(..., ordered = FALSE),
+    sem = function(...) lavaan.pl::pmlsem(..., ordered = FALSE)
+  )
   for (name in names(lavaan_pml_cases)) {
     fit <- suppressWarnings(lavaan_pml_cases[[name]](default))
-    expect_identical(fit@external$lavaan.pl$method, "SA-QN", info = name)
+    expect_identical(fit@external$lavaanpl_internal$method, "SA-QN", info = name)
     expect_true(lavaan::lavInspect(fit, "converged"), info = name)
     expect_true(fit@optim$logl >= reference$cases[[name]]$logl - 1e-3, info = name)
     expect_true(abs(fit@optim$logl - ours[[name]]@optim$logl) < if (name == "bifactor") .05 else 1e-3, info = name)
@@ -278,21 +282,21 @@ local({
 #### Under SA every case returns, and a converged fit is as close to the exact estimate as its noise explains ####
 local({
   stochastic <- list(
-    cfa = function(...) lavaan.pl::pmlcfa(..., control = set_sa_control()),
-    sem = function(...) lavaan.pl::pmlsem(..., control = set_sa_control())
+    cfa = function(...) lavaan.pl::pmlcfa(..., ordered = FALSE, control = set_sa_control()),
+    sem = function(...) lavaan.pl::pmlsem(..., ordered = FALSE, control = set_sa_control())
   )
   for (name in names(lavaan_pml_cases)) {
     fit <- suppressWarnings(lavaan_pml_cases[[name]](stochastic))
-    engine_fit <- fit@external$lavaan.pl
+    engine_fit <- fit@external$lavaanpl_internal
     expect_identical(engine_fit$method, "SA", info = name)
     exact <- parameterEstimates(ours[[name]])
     use <- !is.na(exact$se) & exact$se > 0
     distance <- max(abs(parameterEstimates(fit)$est - exact$est)[use] / exact$se[use])
     if (engine_fit$stoFit$converged) {
       expect_true(distance <= max(1, 4 * engine_fit$stoFit$check$noise) + .1, info = name)
-      exact_fit <- ours[[name]]@external$lavaan.pl
-      se <- sqrt(lavaan.pl:::compute_var(exact_fit)$asymptotic_variance / exact_fit$dims$n)
-      gap <- abs(lavaan.pl:::get_par(engine_fit, OPTION = "transformed") - lavaan.pl:::get_par(exact_fit, OPTION = "transformed"))
+      exact_fit <- ours[[name]]@external$lavaanpl_internal
+      se <- sqrt(lavaan.pl:::compute_var(exact_fit)$asymptotic_variance / exact_fit$data$n)
+      gap <- abs(lavaan.pl:::transform_parameters(engine_fit$model, engine_fit$parameter_vector) - lavaan.pl:::transform_parameters(exact_fit$model, exact_fit$parameter_vector))
       engine_distance <- max((gap / se)[se > 0])
       expect_true(abs(engine_fit$stoFit$check$distance - engine_distance) < .1 + .1 * engine_distance, info = name)
     } else {
@@ -325,7 +329,7 @@ for (name in setdiff(
   cases_in("latent covariances"),
   "latent covariances/free"
 )) {
-  expect_identical(ours[[name]]@external$lavaan.pl$model$LATCOV, "direct")
+  expect_identical(ours[[name]]@external$lavaanpl_internal$model$MODELS[[1]]$LATCOV, "direct")
   expect_matches_reference(name, fit_measures_short)
 }
 
@@ -336,7 +340,7 @@ expect_true(
 
 #### Several starts reach the higher bifactor optimum and warn of the other ####
 local({
-  several <- function(...) lavaan.pl::pmlcfa(..., control = set_saqn_control(SEED = 1, NSTARTS = 8))
+  several <- function(...) lavaan.pl::pmlcfa(..., ordered = FALSE, control = set_saqn_control(seed = 1, nstarts = 8))
   expect_warning(
     fit <- lavaan_pml_cases[["bifactor"]](list(cfa = several)),
     "several optima"

@@ -1,5 +1,6 @@
 library(lavaan.pl)
 
+source("inst/tinytest/fixtures/simulate.R")
 source("inst/tinytest/fixtures/lavaan-pml-cases.R")
 
 fits <- lapply(lavaan_pml_cases, function(case) {

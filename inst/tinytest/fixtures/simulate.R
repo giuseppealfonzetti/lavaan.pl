@@ -1,15 +1,3 @@
-#' Automatic construction of simple constraints matrices
-#'
-#' build_constr_mat() creates a binary matrix with entries equal to 1
-#' when referring to free loadings, and 0 entries otherwise.
-#'
-#' @param P Number of items.
-#' @param Q Number of latent vaiables.
-#' @param STRUCT Label for the constraint structure chosen. Only two possible values:
-#' 'triangular', 'simple' and 'crossed'.
-#' @param CROSS Integer referring to the number of items latent i shares with latent i+1
-#'
-#' @keywords internal
 build_constr_mat <- function(P, Q, STRUCT = c('simple', 'triangular', 'crossed'), CROSS = NULL){
   stopifnot(P > 1, Q > 0)
   p <- as.integer(P)
@@ -52,44 +40,16 @@ build_constr_mat <- function(P, Q, STRUCT = c('simple', 'triangular', 'crossed')
 
   }
 
-
-
   return(out)
 }
 
-
-#' Construct loading matrix
-#'
-#' @param FIXED Fixed value to assign to all free loadings. If 'NULL' it draws
-#' them randomly from Unif(0,1)
-#' @param CONSTRMAT Binary matrix of dimension \eqn{p*q}. A cell equal to \eqn{1} indicates
-#' that the corresponding element in the loading matrix is free to be estimated.
-#' A cell equal to \eqn{0} fixes the corresponding element in the loading matrix
-#' to \eqn{0}.
-#' @param SEED Random seed.
-#' @param LB Lower bound for uniform random generator. Default set to 0.
-#' @param UB Upper bound for uniform random generator. Default set to 1.
-#' @param STDLV  Logical indicator. Set it to `TRUE` to fix latent variables scale. Set it `FALSE` to fix loadings scale.
-#' @keywords internal
-gen_loadings <- function(CONSTRMAT, FIXED = NULL,  SEED = 123, LB = 0, UB = 1, STDLV=TRUE){
-  out <- t(set_latpl_model(CONSTRMAT, STDLV = STDLV)$CONSTRMAT)
+gen_loadings <- function(CONSTRMAT, FIXED = NULL, SEED = 123, LB = 0, UB = 1){
+  out <- t(CONSTRMAT)
   set.seed(SEED)
   out[is.na(out)] <- if (is.null(FIXED)) runif(sum(is.na(out)), LB, UB) else FIXED
   t(out)
 }
 
-#' Simulate new data
-#'
-#' Simulate data given the values of the parameters for thresholds, loadings and latent correlations
-#'
-#' @param SAMPLE_SIZE Number of observations to simulate.
-#' @param LOADINGS Matrix of loadings, with dimensions \eqn{p*q}.
-#' @param THRESHOLDS Vector of thresholds fo a single item.
-#' It is assumed to be the same for all the items.
-#' @param LATENT_COV Latent correlation matrix. Dimension \eqn{q*q}.
-#' @param SEED Numeric seed for random generation.
-#'
-#' @keywords internal
 sim_data <- function(SAMPLE_SIZE, LOADINGS, THRESHOLDS, LATENT_COV, SEED = 123){
 
   stopifnot(SAMPLE_SIZE > 0, is.matrix(LOADINGS), all(is.finite(LOADINGS)), nrow(LOADINGS) > ncol(LOADINGS),

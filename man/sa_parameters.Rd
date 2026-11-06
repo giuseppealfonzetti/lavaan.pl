@@ -7,7 +7,7 @@
 sa_parameters(FIT)
 }
 \arguments{
-\item{FIT}{Object of class latpl_fit, from stochastic approximation.}
+\item{FIT}{Object of class lavaanpl_internal, from stochastic approximation.}
 }
 \value{
 A data frame with one row per free parameter: \code{name}, \code{block}, \code{estimate}, standard error \code{se}, and, when the

@@ -26,6 +26,6 @@ tables are used \code{tables} (see \code{\link[=use_tables]{use_tables()}}) and 
 Distinct covariate rows and their frequency tables
 }
 \seealso{
-\code{\link[=set_latpl_data]{set_latpl_data()}}
+\code{\link[=lavaanpl_data]{lavaanpl_data()}}
 }
 \keyword{internal}

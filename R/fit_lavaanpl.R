@@ -8,23 +8,23 @@
 #'standard errors account for the optimisation noise (`SA`), or quasi-Newton BFGS from the
 #'starting values alone (`QN`).
 #'
-#'@param DATA Data object from [set_latpl_data()].
-#'@param MODEL Model object from [set_latpl_model()], or from [set_latpl_groups()] for several groups.
+#'@param DATA Data object from [lavaanpl_data()].
+#'@param MODEL Model object from [lavaanpl_model()], or from [lavaanpl_groups()] for several groups.
 #'@param CONTROL Control object, which selects the method: [set_saqn_control()] for
 #'  `SA-QN`, [set_sa_control()] for `SA`, [set_qn_control()] for `QN`.
-#'@param START Starting parameter vector, in the order of [theta_names()]. If `NULL`, default values.
+#'@param START Starting parameter vector, in the order of [parameter_names()]. If `NULL`, default values.
 #'@param NCORES Integer value setting the number of threads to carry out the
 #'  estimation.
 #'@param VERBOSE `TRUE` for verbose output
 #'
-#'@return Object of class `latpl_fit`: a list with the inputs `data`, `model` and
-#'  `control`, the starting values `init`, the estimates `theta` (use
-#'  [get_par()]), the dimensions `dims`, the `method`, the optimiser output `stoFit` (`SA`,
+#'@return Object of class `lavaanpl_internal`: a list with the inputs `data`, `model` and
+#'  `control`, the starting values `init`, the estimates `parameter_vector` (use
+#'  [vector_to_matrices()]), the dimensions `dims`, the `method`, the optimiser output `stoFit` (`SA`,
 #'  the burn-in of `SA-QN`, with the pairwise log-likelihood reached from each start in
 #'  `start_logl`) or `numFit` (`QN`, `SA-QN`), the variance `vars` at the estimate (`SA`), and
 #'  the timing `RTime`.
 #' @keywords internal
-fit_latpl <- function(
+fit_lavaanpl <- function(
   DATA,
   MODEL,
   CONTROL = set_saqn_control(),
@@ -34,26 +34,27 @@ fit_latpl <- function(
 ) {
   start_time <- Sys.time()
   stopifnot(
-    inherits(DATA, "latpl_data"),
-    inherits(MODEL, c("latpl_model", "latpl_groups")),
-    inherits(CONTROL, c("latpl_qn_control", "latpl_sa_control")),
+    inherits(DATA, "lavaanpl_data"),
+    inherits(MODEL, c("lavaanpl_model", "lavaanpl_groups")),
+    inherits(CONTROL, c("lavaanpl_qn_control", "lavaanpl_sa_control")),
     DATA$p == MODEL$p
   )
-  grouped <- inherits(MODEL, "latpl_groups")
-  models <- if (grouped) MODEL$MODELS else list(MODEL)
+  if (inherits(MODEL, "lavaanpl_model")) MODEL <- lavaanpl_groups(list(MODEL))
+  models <- MODEL$MODELS
   if (!all(vapply(models, function(x) identical(x$NUMERIC, unname(DATA$numeric)), logical(1)))) {
     stop("DATA and MODEL must declare the same numeric items.")
   }
   if (DATA$ngroups != length(models)) {
     stop("DATA has ", DATA$ngroups, " groups, MODEL has ", length(models), ".")
   }
-  direct <- vapply(models, function(x) corrflag_code(x) == 2, logical(1))
+  direct <- vapply(models, function(x) x$LATCOV == "direct", logical(1))
   nthr <- sum(DATA$cat - 1)
+  block <- parameter_blocks(MODEL, nthr)
   METHOD <- control_method(CONTROL)
-  if (METHOD == "SA" && CONTROL$AVERAGE_EPOCHS == 0) {
-    stop("The SA method needs AVERAGE_EPOCHS of at least 1: use set_saqn_control() to skip the averaged phase.")
+  if (METHOD == "SA" && CONTROL$average_epochs == 0) {
+    stop("The SA method needs average_epochs of at least 1: use set_saqn_control() to skip the averaged phase.")
   }
-  dims <- latpl_dims(DATA, MODEL)
+  dims <- model_dims(DATA, MODEL)
   lc <- lincon(MODEL, nthr)
   dims$npar <- length(lc$free_idx)
   RcppParallel::setThreadOptions(numThreads = NCORES)
@@ -67,18 +68,18 @@ fit_latpl <- function(
       dims = dims,
       method = METHOD,
       lincon = lc,
-      block = theta_block(MODEL, nthr),
+      blocks = block,
       engine = eng,
       version = as.character(utils::packageVersion("lavaan.pl")),
       cores = NCORES
     ),
-    class = "latpl_fit"
+    class = "lavaanpl_internal"
   )
   full <- function(x) as.vector(lc$K %*% x + lc$c)
-  fit$init <- init_theta(START, DATA, dims, MODEL, VERBOSE)
+  fit$init <- start_values(START, DATA, MODEL, VERBOSE)
   if (is.null(START)) {
     x <- fit$init[lc$free_idx]
-    free_block <- theta_block(MODEL, nthr)[lc$free_idx]
+    free_block <- block[lc$free_idx]
     for (i in 1:20) {
       fit$init <- full(x)
       if (implied_variance(MODEL, fit$init) < .95) break
@@ -88,26 +89,22 @@ fit_latpl <- function(
   }
   std <- standardise_covariates(DATA, MODEL, lc, nthr)
   eng_std <- if (is.null(std$model)) eng else engine(std$data, std$model)
-  nll <- function(theta) -cpp_pl(theta, eng$model, eng$data)$pl / dims$n
+  nll <- function(vector) -cpp_pl(vector, eng$model, eng$data)$pl / DATA$n
 
   # With the direct parametrisation, points with a non positive definite latent
   # covariance matrix are outside the parameter space
-  pd <- function(theta) {
+  pd <- function(vector) {
     if (!any(direct)) {
       return(TRUE)
     }
-    par <- if (grouped) {
-      theta2par(MODEL, theta)
-    } else {
-      list(theta2par(MODEL, theta))
-    }
+    par <- vector_to_matrices(MODEL, vector)
     all(
       !direct |
         vapply(
           par,
           function(x) {
             !inherits(
-              try(chol(x$latent_correlations), silent = TRUE),
+              try(chol(x$psi), silent = TRUE),
               "try-error"
             )
           },
@@ -117,51 +114,46 @@ fit_latpl <- function(
   }
 
   if (METHOD == "QN" && any(direct) && pd(fit$init)) {
-    block <- theta_block(MODEL, nthr)
     uncov <- function(C, B) {
       keep <- rowSums(C$A[, B == "corr", drop = FALSE] != 0) == 0
       if (any(keep)) list(A = C$A[keep, , drop = FALSE], b = C$b[keep])
     }
     warm_models <- lapply(models, function(x) {
       if (!is.null(x$CONSTRAINTS)) {
-        x$CONSTRAINTS <- uncov(x$CONSTRAINTS, theta_block(x, nthr))
+        x$CONSTRAINTS <- uncov(x$CONSTRAINTS, parameter_blocks(x, nthr))
       }
       x$LATCOV <- "lkj"
       x
     })
-    warm_model <- if (!grouped) {
-      warm_models[[1]]
-    } else {
-      set_latpl_groups(
-        warm_models,
-        if (!is.null(MODEL$CONSTRAINTS)) uncov(MODEL$CONSTRAINTS, block)
-      )
-    }
-    warm <- fit_latpl(
+    warm_model <- lavaanpl_groups(
+      warm_models,
+      if (!is.null(MODEL$CONSTRAINTS)) uncov(MODEL$CONSTRAINTS, block)
+    )
+    warm <- fit_lavaanpl(
       DATA,
       warm_model,
       CONTROL,
-      par2theta(warm_model, theta2par(MODEL, fit$init)),
+      matrices_to_vector(warm_model, vector_to_matrices(MODEL, fit$init)),
       NCORES
     )
     RcppParallel::setThreadOptions(numThreads = NCORES)
-    theta <- par2theta(MODEL, theta2par(warm$model, warm$theta))
-    x <- as.vector(solve(crossprod(lc$K), crossprod(lc$K, theta - lc$c)))
+    vector <- matrices_to_vector(MODEL, vector_to_matrices(warm$model, warm$parameter_vector))
+    x <- as.vector(solve(crossprod(lc$K), crossprod(lc$K, vector - lc$c)))
     cov_free <- block[lc$free_idx] == "corr"
     for (i in 1:20) {
-      theta <- full(x)
-      if (all(is.finite(theta)) && pd(theta)) {
+      vector <- full(x)
+      if (all(is.finite(vector)) && pd(vector)) {
         break
       }
       x[cov_free] <- 0.8 * x[cov_free]
     }
     start <- full(fit$init[lc$free_idx])
     if (
-      all(is.finite(theta)) &&
-        pd(theta) &&
-        isTRUE(nll(theta) < if (pd(start)) nll(start) else Inf)
+      all(is.finite(vector)) &&
+        pd(vector) &&
+        isTRUE(nll(vector) < if (pd(start)) nll(start) else Inf)
     ) {
-      fit$init <- theta
+      fit$init <- vector
     }
   }
   fit$init <- full(fit$init[lc$free_idx])
@@ -169,30 +161,30 @@ fit_latpl <- function(
   if (METHOD != "SA") {
     x0 <- std$to(fit$init)
     qn_control <- list(
-      grtol = CONTROL$GRTOL,
-      xtol = CONTROL$XTOL,
-      stepmax = CONTROL$STEPMAX,
-      maxeval = CONTROL$MAXEVAL
+      grtol = CONTROL$grtol,
+      xtol = CONTROL$xtol,
+      stepmax = CONTROL$stepmax,
+      maxeval = CONTROL$maxeval
     )
     fn <- function(x) {
-      theta <- full(x)
-      val <- if (pd(theta)) -cpp_pl(theta, eng_std$model, eng_std$data)$pl / dims$n else Inf
+      vector <- full(x)
+      val <- if (pd(vector)) -cpp_pl(vector, eng_std$model, eng_std$data)$pl / DATA$n else Inf
       if (is.finite(val)) val else Inf
     }
     gr <- function(x) {
-      theta <- full(x)
-      g <- if (pd(theta)) {
+      vector <- full(x)
+      g <- if (pd(vector)) {
         -as.vector(crossprod(
           lc$K,
-          cpp_pl(theta, eng_std$model, eng_std$data, 1L)$gradient
+          cpp_pl(vector, eng_std$model, eng_std$data, 1L)$gradient
         )) /
-          dims$n
+          DATA$n
       } else {
         0 * x
       }
       if (all(is.finite(g))) g else 0 * x
     }
-    nstarts <- if (METHOD == "SA-QN") CONTROL$NSTARTS else 1L
+    nstarts <- if (METHOD == "SA-QN") CONTROL$nstarts else 1L
     values <- numeric(nstarts)
     for (s in seq_len(nstarts)) {
       start <- x0
@@ -202,9 +194,9 @@ fit_latpl <- function(
           message("- Burn-in via pairwise stochastic approximation...")
         }
         burn_control <- CONTROL
-        burn_control$SEED <- CONTROL$SEED + s - 1L
+        burn_control$seed <- CONTROL$seed + s - 1L
         burn <- run_sa(x0, std$data, eng_std, lc, burn_control, VERBOSE)
-        start <- burn$theta
+        start <- burn$parameter_vector
         if (length(burn$invh) > 0) start_control$invhessian.lt <- burn$invh[lower.tri(burn$invh, diag = TRUE)]
       }
       if (VERBOSE) {
@@ -220,22 +212,22 @@ fit_latpl <- function(
       values[s] <- opt$value
       if (s == 1 || opt$value < fit$numFit$value) {
         fit$numFit <- opt
-        if (METHOD == "SA-QN") fit$stoFit <- burn[setdiff(names(burn), c("theta", "theta_last", "theta_burn", "invh", "path"))]
+        if (METHOD == "SA-QN") fit$stoFit <- burn[setdiff(names(burn), c("parameter_vector", "last_iterate", "burn_in_iterate", "invh", "path"))]
       }
     }
-    if (METHOD == "SA-QN") fit$stoFit$start_logl <- -values * dims$n
-    if (dims$n * diff(range(values)) > 1e-3) {
+    if (METHOD == "SA-QN") fit$stoFit$start_logl <- -values * DATA$n
+    if (DATA$n * diff(range(values)) > 1e-3) {
       warning(
         "The ",
         nstarts,
         " starts ended at pairwise log-likelihoods up to ",
-        signif(dims$n * diff(range(values)), 3),
+        signif(DATA$n * diff(range(values)), 3),
         " apart, so the pairwise likelihood may have several optima: the highest is returned.",
         call. = FALSE
       )
     }
-    fit$theta <- std$from(full(fit$numFit$par))
-    fit$numFit$par <- fit$theta[lc$free_idx]
+    fit$parameter_vector <- std$from(full(fit$numFit$par))
+    fit$numFit$par <- fit$parameter_vector[lc$free_idx]
     if (!fit$numFit$convergence %in% 1:2 && fit$numFit$info[["maxgradient"]] > 1e-3) {
       warning(
         "ucminf stopped with a gradient of ",
@@ -249,8 +241,8 @@ fit_latpl <- function(
       message("- Optimising via pairwise stochastic approximation...")
     }
     opt <- run_sa(std$to(fit$init), std$data, eng_std, lc, CONTROL, VERBOSE)
-    opt[c("theta", "theta_last", "theta_burn")] <- lapply(opt[c("theta", "theta_last", "theta_burn")], std$from)
-    opt$path$theta <- lapply(opt$path$theta, std$from)
+    opt[c("parameter_vector", "last_iterate", "burn_in_iterate")] <- lapply(opt[c("parameter_vector", "last_iterate", "burn_in_iterate")], std$from)
+    opt$path$parameter_vector <- lapply(opt$path$parameter_vector, std$from)
     if (opt$skipped_averaging > 0) {
       warning(
         opt$skipped_averaging,
@@ -258,9 +250,9 @@ fit_latpl <- function(
         call. = FALSE
       )
     }
-    opt$converged <- opt$skipped_averaging == 0 && all(is.finite(opt$theta))
-    fit$stoFit <- opt[setdiff(names(opt), c("theta", "invh"))]
-    fit$theta <- opt$theta
+    opt$converged <- opt$skipped_averaging == 0 && all(is.finite(opt$parameter_vector))
+    fit$stoFit <- opt[setdiff(names(opt), c("parameter_vector", "invh"))]
+    fit$parameter_vector <- opt$parameter_vector
     fit <- check_sa(fit)
   }
   fit$RTime <- as.numeric(difftime(Sys.time(), start_time, units = "secs"))
@@ -279,20 +271,20 @@ fit_latpl <- function(
 #' explain it. A larger distance that the noise explains only warns: the standard errors account for it. Above 2000 free
 #' parameters there is no check, and the fit has failed if the Adam phase did not reach a plateau.
 #'
-#' @param FIT Object of class latpl_fit.
+#' @param FIT Object of class lavaanpl_internal.
 #' @return `FIT`, with `vars` and, in `stoFit`, the check `check` and the updated `converged`.
-#' @seealso [fit_latpl()], [compute_var()]
+#' @seealso [fit_lavaanpl()], [compute_var()]
 #' @keywords internal
 check_sa <- function(FIT) {
   FIT$stoFit$check <- list(done = FALSE, pd = NA, distance = NA, noise = NA)
   if (FIT$dims$npar > 2000) {
     if (!FIT$stoFit$plateau) {
       FIT$stoFit$converged <- FALSE
-      warning("The Adam phase did not reach a plateau of the pairwise likelihood: increase ADAM_EPOCHS.", call. = FALSE)
+      warning("The Adam phase did not reach a plateau of the pairwise likelihood: increase adam_epochs.", call. = FALSE)
     }
     return(FIT)
   }
-  vars <- tryCatch(compute_var(FIT), latpl_not_pd = function(e) NULL)
+  vars <- tryCatch(compute_var(FIT), lavaanpl_not_pd = function(e) NULL)
   FIT$stoFit$check$done <- TRUE
   FIT$stoFit$check$pd <- !is.null(vars)
   if (is.null(vars)) {
@@ -303,7 +295,7 @@ check_sa <- function(FIT) {
     )
     return(FIT)
   }
-  se <- sqrt(vars$asymptotic_variance / FIT$dims$n)
+  se <- sqrt(vars$asymptotic_variance / FIT$data$n)
   distance <- FIT$stoFit$check$distance <- max(vars$distance)
   FIT$stoFit$check$noise <- max((sqrt(pmax(vars$optimisation_noise, 0)) / se)[se > 0])
   if (distance > max(1, 4 * FIT$stoFit$check$noise)) {
@@ -318,7 +310,7 @@ check_sa <- function(FIT) {
     warning(
       "The SA estimate is ",
       signif(distance, 3),
-      " standard errors from the optimum of the pairwise likelihood on its worst parameter, because of the optimisation noise, which the standard errors account for. For more precision, increase AVERAGE_EPOCHS or use set_saqn_control(); see sa_diagnostics().",
+      " standard errors from the optimum of the pairwise likelihood on its worst parameter, because of the optimisation noise, which the standard errors account for. For more precision, increase average_epochs or use set_saqn_control(); see sa_diagnostics().",
       call. = FALSE
     )
   }
@@ -332,26 +324,25 @@ check_sa <- function(FIT) {
 #' optimisers then work on standardised covariates, with the matching thresholds and intercepts, which is the same
 #' model. This needs thresholds, intercepts of numeric items and effects of covariates free of constraints.
 #'
-#' @param DATA Data object from [set_latpl_data()].
-#' @param MODEL Model object from [set_latpl_model()] or [set_latpl_groups()].
+#' @param DATA Data object from [lavaanpl_data()].
+#' @param MODEL Model object from [lavaanpl_groups()].
 #' @param LINCON Output of [lincon()].
 #' @param NTHR Number of thresholds in each group.
 #' @return A list with the data `data` and model `model` for the optimisers, and the maps `to` and `from` the
 #'   parameter vector of the optimisers. Without standardisation, `DATA`, no `model` and identities.
-#' @seealso [fit_latpl()]
+#' @seealso [fit_lavaanpl()]
 #' @keywords internal
 standardise_covariates <- function(DATA, MODEL, LINCON, NTHR) {
   raw <- list(data = DATA, model = NULL, to = identity, from = identity)
   if (ncol(DATA$X) == 0) return(raw)
-  grouped <- inherits(MODEL, "latpl_groups")
-  models <- if (grouped) MODEL$MODELS else list(MODEL)
+  models <- MODEL$MODELS
   if (!any(vapply(models, function(x) ncol(x$GAMMA) > 0, logical(1)))) return(raw)
   centre <- colMeans(DATA$X)
   spread <- apply(DATA$X, 2, stats::sd)
   spread[spread == 0] <- 1
-  block <- theta_block(MODEL, NTHR)
+  block <- parameter_blocks(MODEL, NTHR)
   touched <- block %in% c("tau", "gamma", "kappa") | (block == "nu" & any(DATA$numeric))
-  fixed_nu <- any(vapply(models, function(x) any(!is.na(x$CONSTRINT[x$NUMERIC])), logical(1)))
+  fixed_nu <- any(vapply(models, function(x) any(!is.na(x$NU[x$NUMERIC])), logical(1)))
   if (fixed_nu || !all(which(touched) %in% LINCON$free_idx)) {
     if (any(abs(centre) > 3 * spread)) {
       message("Constraints on thresholds, intercepts or effects of covariates prevent standardising the covariates: consider centring them.")
@@ -365,50 +356,49 @@ standardise_covariates <- function(DATA, MODEL, LINCON, NTHR) {
     M
   }
   std_models <- lapply(models, rescale)
-  std_model <- if (grouped) replace(MODEL, "MODELS", list(std_models)) else std_models[[1]]
+  std_model <- replace(MODEL, "MODELS", list(std_models))
   standard <- function(X) sweep(sweep(X, 2, centre, "-"), 2, spread, "/")
   std_data <- DATA
   std_data$X <- standard(DATA$X)
   std_data$strata <- lapply(DATA$strata, standard)
   if (!is.null(DATA$val)) std_data$val$strata <- lapply(DATA$val$strata, standard)
-  map <- function(theta, from_model, to_model, to_standard) {
-    pars <- theta2par(from_model, theta)
-    if (!grouped) pars <- list(pars)
+  map <- function(vector, from_model, to_model, to_standard) {
+    pars <- vector_to_matrices(from_model, vector)
     pars <- Map(function(par, m) {
       if (is.null(par$gamma)) return(par)
       gamma_raw <- if (to_standard) par$gamma else sweep(par$gamma, 2, spread, "/")
       kappa_raw <- if (to_standard) par$kappa else sweep(par$kappa, 2, spread, "/")
-      loadings <- par$loadings %*% solve(diag(ncol(par$loadings)) - par$regressions)
+      loadings <- par$lambda %*% solve(diag(ncol(par$lambda)) - par$beta)
       offset <- as.vector((loadings %*% gamma_raw + kappa_raw) %*% centre) * (if (to_standard) 1 else -1)
-      par$thresholds <- par$thresholds - rep(offset, DATA$cat - 1)
-      par$intercepts[m$NUMERIC] <- par$intercepts[m$NUMERIC] + offset[m$NUMERIC]
+      par$tau <- par$tau - rep(offset, DATA$cat - 1)
+      par$nu[m$NUMERIC] <- par$nu[m$NUMERIC] + offset[m$NUMERIC]
       par$gamma <- if (to_standard) scale_x(par$gamma) else gamma_raw
       par$kappa <- if (to_standard) scale_x(par$kappa) else kappa_raw
       par
     }, pars, models)
-    par2theta(to_model, if (grouped) pars else pars[[1]])
+    matrices_to_vector(to_model, pars)
   }
   list(
     data = std_data,
     model = std_model,
-    to = function(theta) map(theta, MODEL, std_model, TRUE),
-    from = function(theta) map(theta, std_model, MODEL, FALSE)
+    to = function(vector) map(vector, MODEL, std_model, TRUE),
+    from = function(vector) map(vector, std_model, MODEL, FALSE)
   )
 }
 
 #' Inputs of the C++ routines
 #'
-#' @param DATA Data object from [set_latpl_data()].
-#' @param MODEL Model object from [set_latpl_model()] or [set_latpl_groups()].
+#' @param DATA Data object from [lavaanpl_data()].
+#' @param MODEL Model object from [lavaanpl_groups()].
 #' @param TABLES Use the frequency tables (`TRUE`) or the individual observations (`FALSE`). If `NA`, as set by
-#'   [set_latpl_data()].
+#'   [lavaanpl_data()].
 #' @return A list with `model` and `data`, each a list with one element per group: the model specification, and
 #'   the frequencies, distinct covariate rows, distinct response patterns with their strata, unit weights and cluster
 #'   weights of the group.
-#' @seealso [fit_latpl()], [run_sa()]
+#' @seealso [fit_lavaanpl()], [run_sa()]
 #' @keywords internal
 engine <- function(DATA, MODEL, TABLES = NA) {
-  models <- if (inherits(MODEL, "latpl_groups")) MODEL$MODELS else list(MODEL)
+  models <- MODEL$MODELS
   gw <- if (length(DATA$weights)) DATA$weights else rep(1, DATA$n)
   jw <- if (length(DATA$jweights)) DATA$jweights else rep(1, DATA$n)
   ns <- vapply(DATA$strata, nrow, numeric(1))
@@ -420,14 +410,14 @@ engine <- function(DATA, MODEL, TABLES = NA) {
   list(
     model = lapply(models, function(x) {
       list(
-        CONSTRMAT = x$CONSTRMAT,
-        CONSTRLOGSD = x$CONSTRLOGSD,
-        CORRFLAG = corrflag_code(x),
-        REGMAT = x$REGMAT,
-        RESCOV = x$RESCOV,
-        CONSTRINT = x$CONSTRINT,
-        CONSTRMEAN = x$CONSTRMEAN,
-        CONSTRLOGSCALE = x$CONSTRLOGSCALE,
+        CONSTRMAT = x$LAMBDA,
+        CONSTRLOGSD = log(sqrt(diag(x$PSI))),
+        CORRFLAG = match(x$LATCOV, c("none", "lkj", "direct")) - 1L,
+        REGMAT = if (all(x$BETA %in% 0)) matrix(0, 0, 0) else x$BETA,
+        RESCOV = if (all(x$THETA[upper.tri(x$THETA)] %in% 0)) matrix(0, 0, 0) else x$THETA,
+        CONSTRINT = x$NU,
+        CONSTRMEAN = x$ALPHA,
+        CONSTRLOGSCALE = log(item_scales(x)),
         THETAPAR = x$PARAMETERIZATION == "theta",
         GAMMA = if (ncol(x$GAMMA) == nx) x$GAMMA else matrix(0, x$q, nx),
         KAPPA = if (ncol(x$KAPPA) == nx) x$KAPPA else matrix(0, x$p, nx)
@@ -482,58 +472,58 @@ engine <- function(DATA, MODEL, TABLES = NA) {
 #' Starting values
 #'
 #' @param START Starting parameter vector, or `NULL`.
-#' @param DATA Data object from [set_latpl_data()].
-#' @param DIMS Dimensions from [latpl_dims()].
-#' @param MODEL Model object from [set_latpl_model()] or [set_latpl_groups()].
+#' @param DATA Data object from [lavaanpl_data()].
+#' @param MODEL Model object from [lavaanpl_groups()].
 #' @param VERBOSE If `TRUE`, report user-supplied starting values.
 #' @return The starting parameter vector: `START` when supplied, otherwise thresholds from the margins of each
 #'   group and fixed values for the other parameters.
-#' @seealso [fit_latpl()], [spec_from_lavaan()]
+#' @seealso [fit_lavaanpl()], [spec_from_lavaan()]
 #' @keywords internal
-init_theta <- function(START, DATA, DIMS, MODEL, VERBOSE) {
-  models <- if (inherits(MODEL, "latpl_groups")) MODEL$MODELS else list(MODEL)
+start_values <- function(START, DATA, MODEL, VERBOSE) {
+  models <- MODEL$MODELS
   nthr <- sum(DATA$cat - 1)
-  theta <- START
-  if (is.null(theta)) {
+  vector <- START
+  if (is.null(vector)) {
     w <- if (length(DATA$weights)) DATA$weights else rep(1, DATA$n)
-    theta <- unlist(lapply(seq_along(models), function(g) {
+    vector <- unlist(lapply(seq_along(models), function(g) {
       m <- models[[g]]
       rows <- DATA$group == g - 1
-      block <- theta_block(m, nthr)
+      block <- parameter_blocks(m, nthr)
       th <- rep(0, length(block))
-      th[block == "tau"] <- unlist(lapply(seq_len(DIMS$p), function(j) {
+      th[block == "tau"] <- unlist(lapply(seq_len(DATA$p), function(j) {
         pj <- vapply(
-          seq_len(DIMS$cat[j]) - 1,
+          seq_len(DATA$cat[j]) - 1,
           function(a) sum(w[rows & DATA$Y[, j] %in% a]),
           numeric(1)
         )
         stats::qnorm(pmin(pmax(cumsum(pj) / sum(pj), 1e-4), 1 - 1e-4))[
-          -DIMS$cat[j]
+          -DATA$cat[j]
         ]
       }))
       th[block == "beta"] <- 0.25
-      spread <- rep(1, DIMS$p)
-      centre <- rep(0, DIMS$p)
+      spread <- rep(1, DATA$p)
+      centre <- rep(0, DATA$p)
       for (j in which(DATA$numeric)) {
         seen <- rows & !is.na(DATA$Y[, j])
         centre[j] <- stats::weighted.mean(DATA$Y[seen, j], w[seen])
         spread[j] <- sqrt(stats::weighted.mean((DATA$Y[seen, j] - centre[j])^2, w[seen]))
       }
       start <- signed_loadings(DATA$Y[rows, , drop = FALSE], m, spread)
-      th[block == "lambda"] <- start$loadings[is.na(m$CONSTRMAT)]
-      th[block == "logsd"] <- log(start$sd[is.na(m$CONSTRLOGSD)])
-      th[block == "nu"] <- centre[is.na(m$CONSTRINT)]
-      th[block == "scale"][m$NUMERIC[is.na(m$CONSTRLOGSCALE)]] <- log(spread[m$NUMERIC & is.na(m$CONSTRLOGSCALE)])
+      free_scales <- is.na(item_scales(m))
+      th[block == "lambda"] <- start$loadings[is.na(m$LAMBDA)]
+      th[block == "logsd"] <- log(start$sd[is.na(diag(m$PSI))])
+      th[block == "nu"] <- centre[is.na(m$NU)]
+      th[block == "scale"][m$NUMERIC[free_scales]] <- log(spread[m$NUMERIC & free_scales])
       if (m$PARAMETERIZATION == "theta") {
-        par <- theta2par(m, th)
-        L <- par$loadings %*% solve(diag(m$q) - par$regressions)
+        par <- vector_to_matrices(m, th)
+        L <- par$lambda %*% solve(diag(m$q) - par$beta)
         th[block == "tau"] <- th[block == "tau"] *
           rep(
             sqrt(
-              rowSums((L %*% par$latent_correlations) * L) +
-                diag(par$residual_covariances)
+              rowSums((L %*% par$psi) * L) +
+                diag(par$theta)
             ),
-            DIMS$cat - 1
+            DATA$cat - 1
           )
       }
       th
@@ -541,11 +531,11 @@ init_theta <- function(START, DATA, DIMS, MODEL, VERBOSE) {
   } else if (VERBOSE) {
     message("- Initialised at user-supplied values.")
   }
-  stopifnot(is.numeric(theta), length(theta) == DIMS$d, all(is.finite(theta)))
-  if (!is.null(START) && implied_variance(MODEL, theta) > 1) {
+  stopifnot(is.numeric(vector), length(vector) == length(parameter_blocks(MODEL, nthr)), all(is.finite(vector)))
+  if (!is.null(START) && implied_variance(MODEL, vector) > 1) {
     warning("Negative error variances implied by init parameters")
   }
-  theta
+  vector
 }
 
 #' Signed starting loadings
@@ -555,34 +545,35 @@ init_theta <- function(START, DATA, DIMS, MODEL, VERBOSE) {
 #' a small variance.
 #'
 #' @param Y Data matrix of the group.
-#' @param MODEL Model object from [set_latpl_model()].
+#' @param MODEL Model object from [lavaanpl_model()].
 #' @param SPREAD Standard deviation of numeric items, one for the others.
 #' @return A list with the matrix `loadings` and the latent standard deviations `sd`.
-#' @seealso [init_theta()]
+#' @seealso [start_values()]
 #' @keywords internal
 signed_loadings <- function(Y, MODEL, SPREAD) {
   rows <- unique(round(seq(1, nrow(Y), length.out = min(nrow(Y), 2000))))
-  L <- MODEL$CONSTRMAT
-  sd <- ifelse(is.na(MODEL$CONSTRLOGSD), .25, exp(MODEL$CONSTRLOGSD))
+  L <- MODEL$LAMBDA
+  variance <- diag(MODEL$PSI)
+  sd <- ifelse(is.na(variance), .25, sqrt(variance))
   L[is.na(L)] <- .25
   for (h in seq_len(MODEL$q)) {
-    S <- which(is.na(MODEL$CONSTRMAT[, h]) | MODEL$CONSTRMAT[, h] != 0)
+    S <- which(is.na(MODEL$LAMBDA[, h]) | MODEL$LAMBDA[, h] != 0)
     if (length(S) < 2) next
     R <- suppressWarnings(stats::cor(Y[rows, S, drop = FALSE], use = "pairwise.complete.obs"))
     R[is.na(R)] <- 0
     e <- eigen(R, symmetric = TRUE)
     v <- pmin(pmax(e$vectors[, 1] * sqrt(max(e$values[1] - 1, .1)), -.9), .9)
     v <- if (v[1] < 0) -v else v
-    fix <- which(!is.na(MODEL$CONSTRMAT[S, h]))[1]
-    if (is.na(MODEL$CONSTRLOGSD[h]) && !is.na(fix)) {
-      sd[h] <- abs(v[fix] * SPREAD[S[fix]] / MODEL$CONSTRMAT[S[fix], h])
-      v <- v * sign(v[fix] * MODEL$CONSTRMAT[S[fix], h]) * SPREAD[S] / sd[h]
+    fix <- which(!is.na(MODEL$LAMBDA[S, h]))[1]
+    if (is.na(variance[h]) && !is.na(fix)) {
+      sd[h] <- abs(v[fix] * SPREAD[S[fix]] / MODEL$LAMBDA[S[fix], h])
+      v <- v * sign(v[fix] * MODEL$LAMBDA[S[fix], h]) * SPREAD[S] / sd[h]
     } else {
-      if (is.na(MODEL$CONSTRLOGSD[h])) sd[h] <- 1
-      if (!is.na(fix)) v <- v * sign(v[fix] * MODEL$CONSTRMAT[S[fix], h])
+      if (is.na(variance[h])) sd[h] <- 1
+      if (!is.na(fix)) v <- v * sign(v[fix] * MODEL$LAMBDA[S[fix], h])
       v <- v * SPREAD[S] / sd[h]
     }
-    free <- is.na(MODEL$CONSTRMAT[S, h])
+    free <- is.na(MODEL$LAMBDA[S, h])
     L[S[free], h] <- v[free]
   }
   list(loadings = L, sd = sd)
@@ -590,43 +581,40 @@ signed_loadings <- function(Y, MODEL, SPREAD) {
 
 #' Largest variance of the latent responses implied by the factors
 #'
-#' @param MODEL Model object from [set_latpl_model()] or [set_latpl_groups()].
-#' @param THETA Parameter vector.
+#' @param MODEL Model object from [lavaanpl_groups()].
+#' @param PARAMETER_VECTOR Parameter vector.
 #' @return The largest implied variance among the ordinal items under `PARAMETERIZATION = "delta"`, which must be below
 #'   one, and zero if there are none.
-#' @seealso [fit_latpl()], [init_theta()]
+#' @seealso [fit_lavaanpl()], [start_values()]
 #' @keywords internal
-implied_variance <- function(MODEL, THETA) {
-  models <- if (inherits(MODEL, "latpl_groups")) MODEL$MODELS else list(MODEL)
-  pars <- if (inherits(MODEL, "latpl_groups")) theta2par(MODEL, THETA) else list(theta2par(MODEL, THETA))
+implied_variance <- function(MODEL, PARAMETER_VECTOR) {
   max(0, unlist(Map(function(m, par) {
     if (m$PARAMETERIZATION != "delta") return(0)
-    L <- par$loadings %*% solve(diag(m$q) - par$regressions)
-    (rowSums((L %*% par$latent_correlations) * L) * par$scales^2)[!m$NUMERIC]
-  }, models, pars)))
+    L <- par$lambda %*% solve(diag(m$q) - par$beta)
+    (rowSums((L %*% par$psi) * L) * par$delta^2)[!m$NUMERIC]
+  }, MODEL$MODELS, vector_to_matrices(MODEL, PARAMETER_VECTOR))))
 }
 
 #' Stochastic approximation
 #'
 #' @param START Starting parameter vector.
-#' @param DATA Data object from [set_latpl_data()].
+#' @param DATA Data object from [lavaanpl_data()].
 #' @param ENGINE Output of [engine()].
 #' @param LINCON Output of [lincon()].
 #' @param CONTROL Control object from [set_sa_control()] or [set_saqn_control()].
 #' @param VERBOSE If `TRUE`, print progress.
-#' @return A list with the estimate `theta`, the last and end-of-burn-in iterates `theta_last` and `theta_burn`,
+#' @return A list with the estimate `parameter_vector`, the last and end-of-burn-in iterates `last_iterate` and `burn_in_iterate`,
 #'   the epoch length and phase counts, the rejected and skipped steps, the trajectory `path` and the timings
 #'   `time`.
-#' @seealso [fit_latpl()], [set_sa_control()]
+#' @seealso [fit_lavaanpl()], [set_sa_control()]
 #' @keywords internal
 run_sa <- function(START, DATA, ENGINE, LINCON, CONTROL, VERBOSE) {
   npar <- length(LINCON$free_idx)
   free <- npar < length(START)
-  pairs <- DATA$ngroups * DATA$p * (DATA$p - 1) / 2
-  adam_epochs <- CONTROL$ADAM_EPOCHS
-  if (is.null(adam_epochs)) adam_epochs <- max(5L, ceiling(150 / ceiling(pairs / min(CONTROL$PAIRS_PER_ITERATION, pairs))))
+  adam_epochs <- CONTROL$adam_epochs
+  if (is.null(adam_epochs)) adam_epochs <- max(5L, ceiling(150 / ceiling(DATA$pairs / min(CONTROL$pairs_per_iteration, DATA$pairs))))
   gain <- switch(
-    CONTROL$GAIN,
+    CONTROL$gain,
     auto = as.integer(npar <= 2000),
     hessian = 1L,
     diagonal = 0L
@@ -637,17 +625,17 @@ run_sa <- function(START, DATA, ENGINE, LINCON, CONTROL, VERBOSE) {
     C = LINCON$c,
     MODEL = ENGINE$model,
     DATA = ENGINE$data,
-    PAIRS_PER_ITERATION = CONTROL$PAIRS_PER_ITERATION,
-    ALPHA = CONTROL$ALPHA,
+    PAIRS_PER_ITERATION = CONTROL$pairs_per_iteration,
+    ALPHA = CONTROL$alpha,
     ADAM_EPOCHS = as.integer(adam_epochs),
-    PRECONDITION_EPOCHS = CONTROL$PRECONDITION_EPOCHS,
-    MAX_PRECONDITION_EPOCHS = CONTROL$MAX_PRECONDITION_EPOCHS,
-    AVERAGE_EPOCHS = CONTROL$AVERAGE_EPOCHS,
-    TOL = CONTROL$TOL,
-    DECAY = CONTROL$DECAY,
-    AVG_FROM = CONTROL$AVG_FROM,
+    PRECONDITION_EPOCHS = CONTROL$precondition_epochs,
+    MAX_PRECONDITION_EPOCHS = CONTROL$max_precondition_epochs,
+    AVERAGE_EPOCHS = CONTROL$average_epochs,
+    TOL = CONTROL$tol,
+    DECAY = CONTROL$decay,
+    AVG_FROM = CONTROL$avg_from,
     GAIN = gain,
-    SEED = CONTROL$SEED,
+    SEED = CONTROL$seed,
     VERBOSE = VERBOSE
   )
   out$path$nll <- c(out$path$nll, rep(NA, sum(out$path$phase == 3)))

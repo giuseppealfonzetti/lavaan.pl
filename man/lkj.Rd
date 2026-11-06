@@ -18,6 +18,6 @@ The upper triangular Cholesky factor of the latent correlation matrix.
 Cholesky factor from LKJ parameters
 }
 \seealso{
-\code{\link[=lkj_inv]{lkj_inv()}}, \code{\link[=theta2par]{theta2par()}}
+\code{\link[=lkj_inv]{lkj_inv()}}, \code{\link[=vector_to_matrices]{vector_to_matrices()}}
 }
 \keyword{internal}

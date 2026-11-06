@@ -16,6 +16,6 @@ control_method(CONTROL)
 Method of a control object
 }
 \seealso{
-\code{\link[=fit_latpl]{fit_latpl()}}, \code{\link[=pmlcfa]{pmlcfa()}}
+\code{\link[=fit_lavaanpl]{fit_lavaanpl()}}, \code{\link[=pmlcfa]{pmlcfa()}}
 }
 \keyword{internal}

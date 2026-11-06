@@ -4,19 +4,19 @@
 \alias{set_qn_control}
 \title{Control options of the quasi-Newton method}
 \usage{
-set_qn_control(GRTOL = 1e-06, XTOL = 1e-12, STEPMAX = 1, MAXEVAL = 500)
+set_qn_control(grtol = 1e-06, xtol = 1e-12, stepmax = 1, maxeval = 500)
 }
 \arguments{
-\item{GRTOL}{Tolerance on the largest absolute gradient element.}
+\item{grtol}{Tolerance on the largest absolute gradient element.}
 
-\item{XTOL}{Tolerance on the relative step length.}
+\item{xtol}{Tolerance on the relative step length.}
 
-\item{STEPMAX}{Initial maximal step length of the trust region.}
+\item{stepmax}{Initial maximal step length of the trust region.}
 
-\item{MAXEVAL}{Maximum number of function evaluations.}
+\item{maxeval}{Maximum number of function evaluations.}
 }
 \value{
-An object of class \code{latpl_qn_control} to be passed to \code{\link[=lavaan.pl]{lavaan.pl()}} via \code{control}.
+An object of class \code{lavaanpl_qn_control} to be passed to \code{\link[=lavaan.pl]{lavaan.pl()}} via \code{control}.
 }
 \description{
 The \code{QN} method: the exact pairwise likelihood estimate, by the BFGS optimiser of the \code{ucminf} package.

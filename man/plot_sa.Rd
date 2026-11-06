@@ -4,16 +4,16 @@
 \alias{plot_sa}
 \title{Plots of the stochastic approximation}
 \usage{
-plot_sa(OBJ, WHAT = c("trajectory", "objective", "noise"), BLOCKS = NULL)
+plot_sa(object, type = c("trajectory", "objective", "noise"), blocks = NULL)
 }
 \arguments{
-\item{OBJ}{A \code{lavaan.pl} object from \code{\link[=lavaan.pl]{lavaan.pl()}}, fitted by stochastic approximation.}
+\item{object}{A \code{lavaan.pl} object from \code{\link[=lavaan.pl]{lavaan.pl()}}, fitted by stochastic approximation.}
 
-\item{WHAT}{\code{"trajectory"} for the estimates across iterations by parameter block, \code{"objective"} for the pairwise
+\item{type}{\code{"trajectory"} for the estimates across iterations by parameter block, \code{"objective"} for the pairwise
 likelihood along the burn-in (it is not monitored in the averaged phase), \code{"noise"} for the optimisation noise
 relative to the standard error of each parameter.}
 
-\item{BLOCKS}{Parameter blocks to show, such as \code{"lambda"} or \code{"tau"}. If \code{NULL}, all of them.}
+\item{blocks}{Parameter blocks to show, such as \code{"lambda"} or \code{"tau"}. If \code{NULL}, all of them.}
 }
 \value{
 The plotted data, invisibly. Without the tinyplot package, a warning and the data.

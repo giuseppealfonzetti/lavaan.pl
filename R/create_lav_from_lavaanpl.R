@@ -1,30 +1,19 @@
 #' Convert a lavaan.pl fit into a lavaan.pl object
 #'
-#' @param fit Object of class `latpl_fit` returned by [fit_latpl()].
+#' @param fit Object of class `lavaanpl_internal` returned by [fit_lavaanpl()].
 #' @param vars Output of [compute_var()] for `fit`, or `NULL` to skip standard errors.
 #' @param template Unfitted [lavaan::lavaan] object for the same model and data, created with `do.fit = FALSE`.
 #' @return An object of class `lavaan.pl`.
 #' @keywords internal
-create_lav_from_latpl <- function(fit, vars = NULL, template) {
+create_lav_from_lavaanpl <- function(fit, vars = NULL, template) {
   frees <- lavaan_matrices(template, "free")
-  par_lav <- function(theta) {
-    pars <- theta2par(fit$model, theta)
-    if (!inherits(fit$model, "latpl_groups")) pars <- list(pars)
+  par_lav <- function(vector) {
+    pars <- vector_to_matrices(fit$model, vector)
     x <- numeric(template@Model@nx.free)
     for (g in seq_along(frees)) {
-      free <- frees[[g]]
-      par <- pars[[g]]
-      x[free$tau[free$tau > 0]] <- par$thresholds[free$tau > 0]
-      x[free$lambda[free$lambda > 0]] <- par$loadings[free$lambda > 0]
-      x[free$psi[free$psi > 0]] <- par$latent_correlations[free$psi > 0]
-      if (!is.null(free$beta)) x[free$beta[free$beta > 0]] <- par$regressions[free$beta > 0]
-      x[free$theta[free$theta > 0]] <- par$residual_covariances[free$theta > 0]
-      x[free$nu[free$nu > 0]] <- par$intercepts[free$nu > 0]
-      x[free$alpha[free$alpha > 0]] <- par$means[free$alpha > 0]
-      if (!is.null(par$scales)) x[free$delta[free$delta > 0]] <- par$scales[free$delta > 0]
-      if (!is.null(par$gamma)) {
-        x[free$gamma[free$gamma > 0]] <- par$gamma[free$gamma > 0]
-        x[free$kappa[free$kappa > 0]] <- par$kappa[free$kappa > 0]
+      for (m in intersect(names(frees[[g]]), names(pars[[g]]))) {
+        free <- frees[[g]][[m]]
+        x[free[free > 0]] <- pars[[g]][[m]][free > 0]
       }
     }
     x
@@ -32,14 +21,14 @@ create_lav_from_latpl <- function(fit, vars = NULL, template) {
 
   # Change Model and implied slots ---------------------------------------------
   out <- new("lavaan.pl", template)
-  x <- par_lav(fit$theta)
-  logl <- cpp_pl(fit$theta, fit$engine$model, fit$engine$data)$pl
+  x <- par_lav(fit$parameter_vector)
+  logl <- cpp_pl(fit$parameter_vector, fit$engine$model, fit$engine$data)$pl
   out@Model <- lavaan::lav_model_set_parameters(template@Model, x)
   out@implied <- lavaan::lav_model_implied(out@Model)
   out@ParTable$est <- lavaan::lav_model_get_parameters(out@Model, type = "user", extra = TRUE)
   out@Options$do.fit <- TRUE
   out@Options$optim.method <- fit$method
-  out@optim[c("x", "npar", "logl", "fx")] <- list(x, length(x), logl, -logl / fit$dims$n)
+  out@optim[c("x", "npar", "logl", "fx")] <- list(x, length(x), logl, -logl / fit$data$n)
   out@optim$fx.group <- out@optim$logl.group <- NA
 
   # Change optim slot (depends whether it is numFit or stoFit) -----------------
@@ -56,13 +45,13 @@ create_lav_from_latpl <- function(fit, vars = NULL, template) {
   # Change vcov slot -----------------------------------------------------------
   vcov <- NULL
   if (!is.null(vars)) {
-    lat <- fit$block %in% c("corr", "logsd", "scale")
-    delta <- matrix(0, length(x), length(fit$theta))
-    delta[, !lat] <- numDeriv::jacobian(function(t) par_lav(replace(fit$theta, !lat, t)), fit$theta[!lat], method = "simple")
-    if (any(lat)) delta[, lat] <- numDeriv::jacobian(function(t) par_lav(replace(fit$theta, lat, t)), fit$theta[lat])
+    lat <- fit$blocks %in% c("corr", "logsd", "scale")
+    delta <- matrix(0, length(x), length(fit$parameter_vector))
+    delta[, !lat] <- numDeriv::jacobian(function(t) par_lav(replace(fit$parameter_vector, !lat, t)), fit$parameter_vector[!lat], method = "simple")
+    if (any(lat)) delta[, lat] <- numDeriv::jacobian(function(t) par_lav(replace(fit$parameter_vector, lat, t)), fit$parameter_vector[lat])
     delta <- delta %*% fit$lincon$K
     hinv <- solve(vars$H)
-    vcov <- delta %*% hinv %*% vars$J %*% hinv %*% t(delta) / fit$dims$n
+    vcov <- delta %*% hinv %*% vars$J %*% hinv %*% t(delta) / fit$data$n
     attr(vcov, "E.inv") <- delta %*% hinv %*% t(delta)
     if (!is.null(vars$noise)) vcov <- vcov + delta %*% vars$noise %*% t(delta)
     out@vcov <- list(se = out@Options$se, information = out@Options$information[1], vcov = vcov)
@@ -106,7 +95,7 @@ create_lav_from_latpl <- function(fit, vars = NULL, template) {
   out@timing$vcov <- if (is.null(vars)) 0 else vars$RTime
   out@timing$total <- out@timing$total + fit$RTime + out@timing$vcov
   # Include the entire output of lavaan.pl fit --------------------------------------
-  out@external <- list(lavaan.pl = fit, vars = vars, plrt = plrt)
+  out@external <- list(lavaanpl_internal = fit, vars = vars, plrt = plrt)
   # Output ---------------------------------------------------------------------
   out@call <- template@call
   out

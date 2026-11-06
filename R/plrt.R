@@ -1,7 +1,7 @@
 #' Pairwise likelihood ratio test
-#' @param OBJ Object of class latpl_fit
+#' @param OBJ Object of class lavaanpl_internal
 #' @param VARS Output of [compute_var()] for `OBJ`
-#' @param H1 Object of class latpl_fit in which `OBJ` is nested, or `NULL` to test `OBJ` against the
+#' @param H1 Object of class lavaanpl_internal in which `OBJ` is nested, or `NULL` to test `OBJ` against the
 #'   saturated model
 #' @return A list with the test of the model against `H1` or the saturated model `model` and, without
 #'   `H1`, of the independence model against the saturated model `baseline`. Each holds the
@@ -41,7 +41,7 @@ plrt_adjust <- function(STAT, DF, E, V) {
     stat.scaled = c1 * sum(STAT),
     df.scaled = E^2 / (V / 2),
     scaling.factor = 1 / c1,
-    pvalue.scaled = if (isTRUE(c1 > 0)) {
+    pvalue.scaled = if (isTRUE(E > 0 && V > 0)) {
       stats::pchisq(c1 * sum(STAT), E^2 / (V / 2), lower.tail = FALSE)
     } else {
       NA
@@ -52,13 +52,13 @@ plrt_adjust <- function(STAT, DF, E, V) {
 
 #' Test of nested models
 #'
-#' @param OBJ Object of class latpl_fit, nested in `H1`.
-#' @param H1 Object of class latpl_fit.
+#' @param OBJ Object of class lavaanpl_internal, nested in `H1`.
+#' @param H1 Object of class lavaanpl_internal.
 #' @return The output of [plrt_adjust()] for `OBJ` against `H1`.
 #' @seealso [compute_plrt()], [lavTestLRT()]
 #' @keywords internal
 plrt_nested <- function(OBJ, H1) {
-  stopifnot(inherits(H1, "latpl_fit"))
+  stopifnot(inherits(H1, "lavaanpl_internal"))
   if (
     !identical(OBJ$data$freq, H1$data$freq) ||
       !identical(OBJ$data$Y, H1$data$Y) ||
@@ -70,101 +70,90 @@ plrt_nested <- function(OBJ, H1) {
   ) {
     stop('OBJ is not nested in H1.')
   }
-  pl <- function(FIT, THETA) cpp_pl(THETA, FIT$engine$model, FIT$engine$data)$pl
+  pl <- function(FIT, PARAMETER_VECTOR) cpp_pl(PARAMETER_VECTOR, FIT$engine$model, FIT$engine$data)$pl
   lc0 <- OBJ$lincon
   lc1 <- H1$lincon
-  m1 <- if (inherits(H1$model, "latpl_groups")) {
-    H1$model$MODELS
-  } else {
-    list(H1$model)
-  }
   emb <- function(x) {
-    par <- theta2par(OBJ$model, as.vector(lc0$K %*% x + lc0$c))
-    if (!inherits(OBJ$model, "latpl_groups")) {
-      par <- list(par)
-    }
+    par <- vector_to_matrices(OBJ$model, as.vector(lc0$K %*% x + lc0$c))
     par <- Map(
       function(par, m) {
-        q <- ncol(par$loadings)
-        Lt <- par$loadings %*% solve(diag(q) - par$regressions)
-        nx <- OBJ$dims$nx
+        q <- ncol(par$lambda)
+        Lt <- par$lambda %*% solve(diag(q) - par$beta)
+        nx <- ncol(OBJ$data$X)
         if (is.null(par$gamma) && nx > 0) {
           par$gamma <- matrix(0, q, nx)
-          par$kappa <- matrix(0, nrow(par$loadings), nx)
+          par$kappa <- matrix(0, nrow(par$lambda), nx)
         }
-        theta <- m$PARAMETERIZATION == "theta"
+        thetapar <- m$PARAMETERIZATION == "theta"
         if (
-          all(m$CONSTRINT %in% 0) &&
-            all(m$CONSTRMEAN %in% 0) &&
-            all(m$CONSTRLOGSCALE %in% 0)
+          all(m$NU %in% 0) &&
+            all(m$ALPHA %in% 0) &&
+            all(item_scales(m) %in% 1)
         ) {
-          R <- par$residual_covariances
-          s <- if (theta) {
+          R <- par$theta
+          s <- if (thetapar) {
             1 / sqrt(diag(R))
-          } else if (is.null(par$scales)) {
-            1 / sqrt(rowSums((Lt %*% par$latent_correlations) * Lt) + diag(R))
+          } else if (is.null(par$delta)) {
+            1 / sqrt(rowSums((Lt %*% par$psi) * Lt) + diag(R))
           } else {
-            par$scales
+            par$delta
           }
-          k <- OBJ$dims$cat - 1
-          par$thresholds <- rep(s, k) *
-            (par$thresholds -
-              rep(as.vector(par$intercepts + Lt %*% par$means), k))
-          par$loadings <- s * par$loadings
+          k <- OBJ$data$cat - 1
+          par$tau <- rep(s, k) *
+            (par$tau -
+              rep(as.vector(par$nu + Lt %*% par$alpha), k))
+          par$lambda <- s * par$lambda
           if (nx > 0) par$kappa <- s * par$kappa
-          par$residual_covariances <- s * R * rep(s, each = length(s))
-          par$intercepts[] <- 0
-          par$means[] <- 0
-          if (!theta) {
-            diag(par$residual_covariances) <- 0
-            par$scales <- rep(1, length(s))
+          par$theta <- s * R * rep(s, each = length(s))
+          par$nu[] <- 0
+          par$alpha[] <- 0
+          if (!thetapar) {
+            diag(par$theta) <- 0
+            par$delta <- rep(1, length(s))
           }
-        } else if (!anyNA(m$CONSTRMEAN)) {
-          par$intercepts <- as.vector(
-            par$intercepts + Lt %*% (par$means - m$CONSTRMEAN)
+        } else if (!anyNA(m$ALPHA)) {
+          par$nu <- as.vector(
+            par$nu + Lt %*% (par$alpha - m$ALPHA)
           )
-          par$means <- m$CONSTRMEAN
+          par$alpha <- m$ALPHA
         }
-        if (!length(m$REGMAT)) {
-          A <- solve(diag(q) - par$regressions)
-          S <- A %*% par$latent_correlations %*% t(A)
+        if (all(m$BETA %in% 0)) {
+          A <- solve(diag(q) - par$beta)
+          S <- A %*% par$psi %*% t(A)
           mk <- cbind(
-            apply(!is.na(m$CONSTRMAT) & m$CONSTRMAT != 0, 2, match, x = TRUE),
+            apply(!is.na(m$LAMBDA) & m$LAMBDA != 0, 2, match, x = TRUE),
             seq_len(q)
           )
           sc <- ifelse(
-            is.finite(m$CONSTRLOGSD),
-            sqrt(diag(S)) / exp(m$CONSTRLOGSD),
-            ifelse(is.na(mk[, 1]), 1, m$CONSTRMAT[mk] / par$loadings[mk])
+            !is.na(diag(m$PSI)),
+            sqrt(diag(S) / diag(m$PSI)),
+            ifelse(is.na(mk[, 1]), 1, m$LAMBDA[mk] / par$lambda[mk])
           )
-          par$loadings <- par$loadings %*% diag(sc, q)
-          par$latent_correlations <- S / tcrossprod(sc)
-          par$means <- par$means / sc
+          par$lambda <- par$lambda %*% diag(sc, q)
+          par$psi <- S / tcrossprod(sc)
+          par$alpha <- par$alpha / sc
           if (nx > 0) par$gamma <- (A %*% par$gamma) / sc
         }
         par
       },
       par,
-      m1
+      H1$model$MODELS
     )
-    par2theta(
-      H1$model,
-      if (inherits(H1$model, "latpl_groups")) par else par[[1]]
-    )[lc1$free_idx]
+    matrices_to_vector(H1$model, par)[lc1$free_idx]
   }
-  theta0f <- OBJ$theta[lc0$free_idx]
-  theta1 <- as.vector(lc1$K %*% emb(theta0f) + lc1$c)
-  pl0 <- pl(OBJ, OBJ$theta)
-  if (abs(pl(H1, theta1) - pl0) > 1e-8 * abs(pl0)) {
+  free0 <- OBJ$parameter_vector[lc0$free_idx]
+  vector1 <- as.vector(lc1$K %*% emb(free0) + lc1$c)
+  pl0 <- pl(OBJ, OBJ$parameter_vector)
+  if (abs(pl(H1, vector1) - pl0) > 1e-8 * abs(pl0)) {
     stop('OBJ is not nested in H1.')
   }
-  N <- numDeriv::jacobian(emb, theta0f)
-  HJ <- cpp_HJ(theta1, H1$engine$model, H1$engine$data)
+  N <- numDeriv::jacobian(emb, free0)
+  HJ <- cpp_HJ(vector1, H1$engine$model, H1$engine$data)
   Hf <- crossprod(lc1$K, HJ$H %*% lc1$K)
   M <- crossprod(lc1$K, HJ$J %*% lc1$K) %*%
     (solve(Hf) - N %*% solve(crossprod(N, Hf %*% N), t(N)))
   plrt_adjust(
-    STAT = 2 * (pl(H1, H1$theta) - pl0),
+    STAT = 2 * (pl(H1, H1$parameter_vector) - pl0),
     DF = H1$dims$npar - OBJ$dims$npar,
     E = sum(diag(M)),
     V = 2 * sum(M * t(M))
@@ -173,7 +162,7 @@ plrt_nested <- function(OBJ, H1) {
 
 #' Test against the saturated model
 #'
-#' @param OBJ Object of class latpl_fit.
+#' @param OBJ Object of class lavaanpl_internal.
 #' @param VARS Output of [compute_var()] for `OBJ`.
 #' @return A list with the tests of the model `model` and of the independence model `baseline` against the
 #'   saturated model, and the saturated and independence fits `saturated` and `independence`.
@@ -181,10 +170,12 @@ plrt_nested <- function(OBJ, H1) {
 #' @keywords internal
 plrt_fit <- function(OBJ, VARS) {
   dims <- OBJ$dims
-  n <- dims$n
-  nnum <- sum(dims$cat == 1)
-  nthr <- sum(dims$cat - 1) + dims$p * dims$nx + 2 * nnum
-  P <- dims$p * (dims$p - 1) / 2
+  data <- OBJ$data
+  n <- data$n
+  nx <- ncol(data$X)
+  nnum <- sum(data$cat == 1)
+  nthr <- sum(data$cat - 1) + data$p * nx + 2 * nnum
+  P <- data$pairs / data$ngroups
   eng <- OBJ$engine$data
   sat <- function(g, tau, rho, order, scores = FALSE) {
     cpp_saturated(tau, rho, eng[[g]], order, scores)
@@ -193,17 +184,17 @@ plrt_fit <- function(OBJ, VARS) {
   Y <- OBJ$data$Y
   v <- (rowSums(!is.na(Y)) - 1 + OBJ$data$uweights) *
     (if (length(OBJ$data$weights)) OBJ$data$weights else 1)
-  fits <- lapply(seq_len(dims$ngroups), function(g) {
+  fits <- lapply(seq_len(data$ngroups), function(g) {
     rows <- OBJ$data$group == g - 1
-    tau_ind <- unlist(lapply(seq_len(dims$p), function(j) {
+    tau_ind <- unlist(lapply(seq_len(data$p), function(j) {
       pj <- vapply(
-        seq_len(dims$cat[j]) - 1,
+        seq_len(data$cat[j]) - 1,
         function(a) sum(v[rows & Y[, j] %in% a]),
         numeric(1)
       )
-      stats::qnorm(cumsum(pj)[-dims$cat[j]] / sum(pj))
+      stats::qnorm(cumsum(pj)[-data$cat[j]] / sum(pj))
     }))
-    numeric_items <- which(dims$cat == 1)
+    numeric_items <- which(data$cat == 1)
     centre <- vapply(numeric_items, function(j) {
       seen <- rows & !is.na(Y[, j])
       sum(v[seen] * Y[seen, j]) / sum(v[seen])
@@ -212,8 +203,8 @@ plrt_fit <- function(OBJ, VARS) {
       seen <- rows & !is.na(Y[, numeric_items[a]])
       sqrt(sum(v[seen] * (Y[seen, numeric_items[a]] - centre[a])^2) / sum(v[seen]))
     }, numeric(1))
-    tau_ind <- c(tau_ind, rep(0, dims$p * dims$nx), -centre / spread, 1 / spread)
-    for (iter in seq_len(if (dims$nx > 0 || nnum > 0) 100 else 0)) {
+    tau_ind <- c(tau_ind, rep(0, data$p * nx), -centre / spread, 1 / spread)
+    for (iter in seq_len(if (nx > 0 || nnum > 0) 100 else 0)) {
       o <- sat(g, tau_ind, rep(0, P), 2)
       if (max(abs(o$gradient[1:nthr])) / n < 1e-8) {
         break
@@ -262,7 +253,7 @@ plrt_fit <- function(OBJ, VARS) {
 
   sat_terms <- function(TAU, RHO, DELTA = NULL, FULL = FALSE) {
     out <- list(ll = numeric(0), e = 0, v = 0, dad = 0)
-    for (g in seq_len(dims$ngroups)) {
+    for (g in seq_len(data$ngroups)) {
       it <- (g - 1) * nthr + seq_len(nthr)
       ir <- (g - 1) * P + seq_len(P)
       s <- sat(g, TAU[it], RHO[ir], 2, TRUE)
@@ -310,11 +301,11 @@ plrt_fit <- function(OBJ, VARS) {
   }
 
   lc <- OBJ$lincon
-  r <- cpp_rho(OBJ$theta, OBJ$engine$model, eng)
+  r <- cpp_rho(OBJ$parameter_vector, OBJ$engine$model, eng)
   jac <- if (ncol(lc$K) < nrow(lc$K)) r$jacobian %*% lc$K else r$jacobian
   invH <- solve(VARS$H)
-  tpos <- which(OBJ$block == "tau")
-  if (dims$nx == 0 && nnum == 0 && all(tpos %in% lc$free_idx)) {
+  tpos <- which(OBJ$blocks == "tau")
+  if (nx == 0 && nnum == 0 && all(tpos %in% lc$free_idx)) {
     psi <- which(!(lc$free_idx %in% tpos))
     G <- (invH %*% VARS$J %*% invH)[psi, psi, drop = FALSE]
     P0 <- solve(invH[psi, psi, drop = FALSE], G)
@@ -332,16 +323,16 @@ plrt_fit <- function(OBJ, VARS) {
   }
   model <- plrt_adjust(
     STAT = 2 * (ll_sat - tz$ll),
-    DF = dims$nthr + dims$ngroups * (dims$p * dims$nx + 2 * nnum) + dims$pairs - dims$npar,
+    DF = dims$nthr + data$ngroups * (data$p * nx + 2 * nnum) + data$pairs - dims$npar,
     E = tz$e - sum(diag(P0)),
     V = tz$v + 2 * sum(P0 * t(P0)) - 4 * cv
   )
 
   # Independence model against saturated
-  tb <- sat_terms(tau_ind, rep(0, dims$pairs))
+  tb <- sat_terms(tau_ind, rep(0, data$pairs))
   baseline <- plrt_adjust(
     STAT = 2 * (ll_sat - tb$ll),
-    DF = dims$pairs,
+    DF = data$pairs,
     E = tb$e,
     V = tb$v
   )

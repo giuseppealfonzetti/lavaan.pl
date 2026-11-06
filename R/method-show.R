@@ -2,6 +2,6 @@
 #' @importFrom methods show
 #' @export
 setMethod("show", "lavaan.pl", function(object) {
-  cat("lavaan.pl", get_latpl_fit(object)$version, "\n")
+  cat("lavaan.pl", get_lavaanpl_internal(object)$version, "\n")
   show(as(object, "lavaan"))
 })

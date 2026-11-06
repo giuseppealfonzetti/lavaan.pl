@@ -331,9 +331,9 @@ Rcpp::List cpp_sa(
   t_avg = secs(t0);
 
   return Rcpp::List::create(
-    Rcpp::Named("theta") = full(avg),
-    Rcpp::Named("theta_last") = full(x),
-    Rcpp::Named("theta_burn") = full(x_burn),
+    Rcpp::Named("parameter_vector") = full(avg),
+    Rcpp::Named("last_iterate") = full(x),
+    Rcpp::Named("burn_in_iterate") = full(x_burn),
     Rcpp::Named("epoch_length") = E,
     Rcpp::Named("pairs_per_iteration") = nu,
     Rcpp::Named("adam_epochs") = adam_epochs,
@@ -350,7 +350,7 @@ Rcpp::List cpp_sa(
     Rcpp::Named("skipped_averaging") = skipped - skipped_burn,
     Rcpp::Named("path") = Rcpp::List::create(
       Rcpp::Named("iter") = path_iter, Rcpp::Named("phase") = path_phase,
-      Rcpp::Named("theta") = path_theta, Rcpp::Named("nll") = path_nll),
+      Rcpp::Named("parameter_vector") = path_theta, Rcpp::Named("nll") = path_nll),
     Rcpp::Named("time") = Rcpp::NumericVector::create(
       Rcpp::Named("adam") = t_adam, Rcpp::Named("precondition") = t_precondition, Rcpp::Named("hessian") = t_hess,
       Rcpp::Named("averaging") = t_avg, Rcpp::Named("monitor") = t_mon)

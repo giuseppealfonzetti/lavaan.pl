@@ -29,7 +29,7 @@ reference:
       - lavTestLRT
       - parameterEstimates
       - standardizedSolution
-      - get_latpl_fit
+      - get_lavaanpl_internal
 
   - title: Diagnostics of the stochastic approximation
     contents:

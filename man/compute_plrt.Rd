@@ -7,11 +7,11 @@
 compute_plrt(OBJ, VARS = compute_var(OBJ), H1 = NULL)
 }
 \arguments{
-\item{OBJ}{Object of class latpl_fit}
+\item{OBJ}{Object of class lavaanpl_internal}
 
 \item{VARS}{Output of \code{\link[=compute_var]{compute_var()}} for \code{OBJ}}
 
-\item{H1}{Object of class latpl_fit in which \code{OBJ} is nested, or \code{NULL} to test \code{OBJ} against the
+\item{H1}{Object of class lavaanpl_internal in which \code{OBJ} is nested, or \code{NULL} to test \code{OBJ} against the
 saturated model}
 }
 \value{

@@ -7,7 +7,7 @@
 plrt_fit(OBJ, VARS)
 }
 \arguments{
-\item{OBJ}{Object of class latpl_fit.}
+\item{OBJ}{Object of class lavaanpl_internal.}
 
 \item{VARS}{Output of \code{\link[=compute_var]{compute_var()}} for \code{OBJ}.}
 }

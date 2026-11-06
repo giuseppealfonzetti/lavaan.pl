@@ -102,7 +102,7 @@ semPaths(fit, whatLabels = "est", layout = "circle", residuals = FALSE,
 
 ## Choosing the algorithm
 
-Three algorithms are available through `optim.method`. The default, `"SA-QN"`, gives the pairwise likelihood estimate by quasi-Newton, started from the burn-in of stochastic approximation and its curvature. `"SA"` is pairwise stochastic approximation with Polyak-Ruppert averaging, whose standard errors account for the optimisation noise. `"QN"` runs quasi-Newton from the starting values alone. `control` tunes them, for example `set_sa_control(AVERAGE_EPOCHS = 100)`. If a model may have several optima, `set_saqn_control(NSTARTS = 3)` runs `"SA-QN"` with three seeds, keeps the highest pairwise likelihood and warns if the runs disagree.
+Three algorithms are available through `optim.method`. The default, `"SA-QN"`, gives the pairwise likelihood estimate by quasi-Newton, started from the burn-in of stochastic approximation and its curvature. `"SA"` is pairwise stochastic approximation with Polyak-Ruppert averaging, whose standard errors account for the optimisation noise. `"QN"` runs quasi-Newton from the starting values alone. `control` tunes them, for example `set_sa_control(average_epochs = 100)`. If a model may have several optima, `set_saqn_control(nstarts = 3)` runs `"SA-QN"` with three seeds, keeps the highest pairwise likelihood and warns if the runs disagree.
 
 With `"SA"`, `sa_diagnostics()` reports how the run behaved, how far the estimates are predicted to be from the pairwise likelihood estimate, and how much noise the sampling of pairs adds to the standard errors. See also `plot_sa()` and `sa_stability()`.
 

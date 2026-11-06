@@ -7,9 +7,9 @@
 plrt_nested(OBJ, H1)
 }
 \arguments{
-\item{OBJ}{Object of class latpl_fit, nested in \code{H1}.}
+\item{OBJ}{Object of class lavaanpl_internal, nested in \code{H1}.}
 
-\item{H1}{Object of class latpl_fit.}
+\item{H1}{Object of class lavaanpl_internal.}
 }
 \value{
 The output of \code{\link[=plrt_adjust]{plrt_adjust()}} for \code{OBJ} against \code{H1}.

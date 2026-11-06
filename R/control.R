@@ -11,15 +11,15 @@
 #'@param CLUSTER Cluster membership, one per observation, for cluster-robust standard errors. If
 #'  `NULL`, observations are independent.
 #'@param GROUP Group membership, one per observation, for multigroup models (see
-#'  [set_latpl_groups()]). Groups are numbered in order of appearance. If `NULL`, a single group.
+#'  [lavaanpl_groups()]). Groups are numbered in order of appearance. If `NULL`, a single group.
 #'@param WEIGHTS_NORMALIZATION Normalisation of the sampling weights, as in lavaan: to the total
 #'  number of observations (`"total"`) or to the number of observations of each group (`"group"`).
 #'@param X Numeric matrix of covariates, one row per observation, on which the responses are
 #'  conditioned. Observations with missing covariates are removed. If `NULL`, no covariates.
 #'@param NUMERIC Logical vector marking the numeric items. If `NULL`, all items are ordinal.
 #'
-#' @return An object of class `latpl_data` with the data matrix `Y`, its dimensions `n` and `p`,
-#'   the number of categories of each item `cat` (one for numeric items), the indicator of numeric
+#' @return An object of class `lavaanpl_data` with the data matrix `Y`, its dimensions `n` and `p`, the number of item pairs
+#'   over all groups `pairs`, the number of categories of each item `cat` (one for numeric items), the indicator of numeric
 #'   items `numeric`, the pairwise frequency tables `freq`, the treatment of missing values `missing`, the unit weights `uweights` and
 #'   univariate frequencies `ufreq` of the available-cases term, the normalised sampling weights
 #'   `weights` and their factors on the scores `jweights`, the cluster indices `cluster`, the group
@@ -30,7 +30,7 @@
 #'   `ufreq` stack the tables of each group and, within it, of each stratum.
 #'
 #' @keywords internal
-set_latpl_data <- function(DATA, MISSING = c("listwise", "pairwise", "available.cases"),
+lavaanpl_data <- function(DATA, MISSING = c("listwise", "pairwise", "available.cases"),
                           WEIGHTS = NULL, WEIGHTS_TYPE = c("design", "frequency"), CLUSTER = NULL, GROUP = NULL,
                           WEIGHTS_NORMALIZATION = c("total", "group"), X = NULL, NUMERIC = NULL) {
   MISSING <- match.arg(MISSING)
@@ -103,6 +103,7 @@ set_latpl_data <- function(DATA, MISSING = c("listwise", "pairwise", "available.
     Y = Y,
     n = nrow(Y),
     p = ncol(Y),
+    pairs = G * ncol(Y) * (ncol(Y) - 1) / 2,
     cat = cat,
     numeric = numeric,
     freq = unlist(st$freq),
@@ -120,7 +121,7 @@ set_latpl_data <- function(DATA, MISSING = c("listwise", "pairwise", "available.
     tables = st$tables,
     freqTime = as.numeric(difftime(Sys.time(), freq_start_time, units = "secs"))
   )
-  class(out) <- "latpl_data"
+  class(out) <- "lavaanpl_data"
   out
 }
 
@@ -134,7 +135,7 @@ set_latpl_data <- function(DATA, MISSING = c("listwise", "pairwise", "available.
 #' @return A list with, for each group, the distinct rows of `X` in order of appearance `strata`, whether frequency
 #'   tables are used `tables` (see [use_tables()]) and the tables `freq` (`NULL` when not used), and the index `stratum`
 #'   (from zero) of each row among the strata of its group.
-#' @seealso [set_latpl_data()]
+#' @seealso [lavaanpl_data()]
 #' @keywords internal
 strata_index <- function(X, GROUP, Y, CAT, WEIGHTS) {
   G <- max(GROUP) + 1
@@ -165,7 +166,7 @@ strata_index <- function(X, GROUP, Y, CAT, WEIGHTS) {
 #' @param CAT Number of categories of each item.
 #' @param STRATUM Stratum of each row of `Y`.
 #' @return `TRUE` if the tables should be used. They must also fit in memory.
-#' @seealso [set_latpl_data()], [engine()]
+#' @seealso [lavaanpl_data()], [engine()]
 #' @keywords internal
 use_tables <- function(STRATA, Y, CAT, STRATUM) {
   ordinal <- CAT > 1
@@ -182,135 +183,124 @@ use_tables <- function(STRATA, Y, CAT, STRATUM) {
 
 #' Factor model for pairwise likelihood estimation
 #'
-#' @param CONSTRMAT \eqn{p*q}-dimensional matrix. Elements set to `NA`
-#'  refers to free loading parameters. Elements set to numerical values denote
-#'  fixed values constraints.
-#' @param CONSTRVAR \eqn{q}-dimensional vector. Elements set to `NA` refers to free latent
-#'  variance parameters. Elements set to numerical values denote fixed values
-#'  constraints.
-#' @param CORRFLAG Logical indicator. Set it to
-#'  `FALSE` if the latent variables are assumed to be independent. Set it `TRUE`
-#'  otherwise.
-#' @param STDLV Logical indicator. Set it to
-#'  `TRUE` to fix latent variables scale. Set it `FALSE` to fix loadings scale.
-#' @param CONSTRAINTS Linear equality constraints `A %*% theta = b` on the parameter vector, as
-#'  `list(A = , b = )`, with one column of `A` per parameter in the order of [theta_names()]. Each
-#'  constraint involves either thresholds, loadings, latent covariances (with `LATCOV = "direct"`),
-#'  latent log standard deviations, regression coefficients or residual covariances.
-#' @param REGMAT \eqn{q*q}-dimensional matrix of structural regressions among the latent variables, with
-#'  `REGMAT[i, j]` the effect of latent variable `j` on latent variable `i`. Elements set to `NA` are
-#'  free, numerical values are fixed. The latent covariances then refer to the disturbances.
-#' @param RESCOV \eqn{p*p}-dimensional symmetric matrix of residual covariances of the items.
-#'  Elements set to `NA` are free, numerical values are fixed. The diagonal holds the residual
-#'  variances with `PARAMETERIZATION = "theta"` (default 1), and is ignored otherwise.
-#' @param LATCOV Parametrisation of the latent correlations: `"lkj"` (Cholesky factor with Fisher-z
-#'  angles, always positive definite) or `"direct"` (the latent covariances themselves, which allows
-#'  linear constraints on them).
-#' @param PARAMETERIZATION `"delta"` (latent responses with unit variances in the reference metric,
-#'  scaled by `SCALES`) or `"theta"` (residual variances in the diagonal of `RESCOV`), as in lavaan.
-#' @param INTERCEPTS \eqn{p}-dimensional vector of item intercepts. Elements set to `NA` are free,
-#'  numerical values are fixed. If `NULL`, all zero.
-#' @param MEANS \eqn{q}-dimensional vector of latent means (intercepts, with `REGMAT`). Elements set
-#'  to `NA` are free, numerical values are fixed. If `NULL`, all zero.
-#' @param SCALES \eqn{p}-dimensional vector of positive scale factors of the latent responses, with
-#'  `PARAMETERIZATION = "delta"`. Elements set to `NA` are free, numerical values are fixed. If
-#'  `NULL`, all one.
-#' @param GAMMA \eqn{q*x}-dimensional matrix of regressions of the latent variables on the `x` covariates of
-#'  [set_latpl_data()]. Elements set to `NA` are free, numerical values are fixed. If `NULL`, all zero.
-#' @param KAPPA \eqn{p*x}-dimensional matrix of direct effects of the covariates on the latent responses.
-#'  Elements set to `NA` are free, numerical values are fixed. If `NULL`, all zero.
-#' @param NUMERIC Logical vector marking the numeric items, as in [set_latpl_data()]. Unless `INTERCEPTS`
-#'  and `SCALES` say otherwise, their intercepts and residual standard deviations are free. For them,
-#'  `SCALES` holds the residual standard deviations under both parameterizations.
+#' Each matrix argument is the model matrix of lavaan with the same name: elements set to `NA` are free, numerical
+#' values are fixed.
 #'
-#' @return An object of class `latpl_model` with the identified loading constraints `CONSTRMAT`,
-#'   the log standard deviations of the latent variables `CONSTRLOGSD` (`NA` when free),
-#'   `CORRFLAG`, `STDLV`, `CONSTRAINTS`, `LATCOV`, `REGMAT`, `RESCOV`, `PARAMETERIZATION`, the
-#'   intercepts `CONSTRINT` and latent means `CONSTRMEAN`, the log scale factors or log residual
-#'   standard deviations `CONSTRLOGSCALE` (`NA` when free), the covariate effects `GAMMA` and `KAPPA`,
-#'   the indicator of numeric items `NUMERIC`, and the numbers of items `p` and latent variables `q`.
+#' @param LAMBDA \eqn{p*q}-dimensional matrix of loadings. Latent variables with a free variance need a fixed nonzero
+#'  loading.
+#' @param PSI \eqn{q*q}-dimensional symmetric matrix of latent (disturbance) covariances. If `NULL`, unit variances and
+#'  free covariances. Covariances all fixed to zero make the latent variables independent.
+#' @param BETA \eqn{q*q}-dimensional matrix of structural regressions among the latent variables, with `BETA[i, j]` the
+#'  effect of latent variable `j` on latent variable `i`. If `NULL`, none.
+#' @param THETA \eqn{p*p}-dimensional symmetric matrix of residual covariances of the items. The diagonal holds the
+#'  residual variances of the numeric items and, with `PARAMETERIZATION = "theta"`, of all items; it is ignored for the
+#'  other items. If `NULL`, no residual covariances, free residual variances of the numeric items and unit residual
+#'  variances of the others.
+#' @param NU \eqn{p}-dimensional vector of item intercepts. If `NULL`, free for the numeric items and zero otherwise.
+#' @param ALPHA \eqn{q}-dimensional vector of latent means (intercepts, with `BETA`). If `NULL`, all zero.
+#' @param DELTA \eqn{p}-dimensional vector of positive scale factors of the latent responses, with
+#'  `PARAMETERIZATION = "delta"`; ignored for the numeric items. If `NULL`, all one.
+#' @param TAU Vector of thresholds, item after item, with the length set by the data. If `NULL`, all free.
+#' @param GAMMA \eqn{q*x}-dimensional matrix of regressions of the latent variables on the `x` covariates of
+#'  [lavaanpl_data()]. If `NULL`, none.
+#' @param KAPPA \eqn{p*x}-dimensional matrix of direct effects of the covariates on the latent responses. If `NULL`,
+#'  none.
+#' @param CONSTRAINTS Linear equality constraints `A %*% parameter_vector = b` among free parameters, as
+#'  `list(A = , b = )`, with one column of `A` per parameter in the order of [parameter_names()]. Each constraint
+#'  involves a single block of [parameter_blocks()].
+#' @param LATCOV Parametrisation of the latent correlations: `"lkj"` (Cholesky factor with Fisher-z angles, always
+#'  positive definite, all covariances free) or `"direct"` (the latent covariances themselves, which can be fixed or
+#'  constrained).
+#' @param PARAMETERIZATION `"delta"` (latent responses with unit variances in the reference metric, scaled by `DELTA`)
+#'  or `"theta"` (residual variances in the diagonal of `THETA`), as in lavaan.
+#' @param NUMERIC Logical vector marking the numeric items, as in [lavaanpl_data()].
+#'
+#' @return An object of class `lavaanpl_model` with the matrices `LAMBDA`, `PSI`, `BETA`, `THETA` (with zero diagonal
+#'   entries where they are ignored), `NU`, `ALPHA`, `DELTA` (one where it is ignored), `TAU`, `GAMMA` and `KAPPA`,
+#'   `CONSTRAINTS`, `LATCOV` (`"none"` for independent latent variables), `PARAMETERIZATION`, `NUMERIC`, and the
+#'   numbers of items `p` and latent variables `q`.
 #'
 #' @keywords internal
-set_latpl_model <- function(CONSTRMAT, CONSTRVAR = NULL, CORRFLAG = TRUE, STDLV = TRUE, CONSTRAINTS = NULL,
-                           LATCOV = c("lkj", "direct"), REGMAT = NULL, RESCOV = NULL,
-                           PARAMETERIZATION = c("delta", "theta"), INTERCEPTS = NULL, MEANS = NULL, SCALES = NULL,
-                           GAMMA = NULL, KAPPA = NULL, NUMERIC = NULL) {
+lavaanpl_model <- function(LAMBDA, PSI = NULL, BETA = NULL, THETA = NULL, NU = NULL, ALPHA = NULL, DELTA = NULL,
+                            TAU = NULL, GAMMA = NULL, KAPPA = NULL, CONSTRAINTS = NULL, LATCOV = c("lkj", "direct"),
+                            PARAMETERIZATION = c("delta", "theta"), NUMERIC = NULL) {
   LATCOV <- match.arg(LATCOV)
   PARAMETERIZATION <- match.arg(PARAMETERIZATION)
-  stopifnot(is.matrix(CONSTRMAT), !is.infinite(CONSTRMAT), CORRFLAG %in% c(0, 1), is.logical(STDLV))
-  storage.mode(CONSTRMAT) <- "double"
-  p <- nrow(CONSTRMAT)
-  q <- ncol(CONSTRMAT)
-  if (!STDLV && is.null(CONSTRVAR)) {
-    for (h in seq_len(q)) {
-      f <- which(is.na(CONSTRMAT[, h]))[1]
-      if (!is.na(f) && all(CONSTRMAT[seq_len(f - 1), h] == 0)) CONSTRMAT[f, h] <- 1
-    }
+  stopifnot(is.matrix(LAMBDA))
+  p <- nrow(LAMBDA)
+  q <- ncol(LAMBDA)
+  if (is.null(NUMERIC)) NUMERIC <- rep(FALSE, p)
+  stopifnot(is.logical(NUMERIC), length(NUMERIC) == p, !anyNA(NUMERIC))
+  rsd <- PARAMETERIZATION == "theta" | NUMERIC
+  if (!is.null(DELTA) && PARAMETERIZATION == "theta") {
+    stop("DELTA requires PARAMETERIZATION = \"delta\"; set the residual variances in the diagonal of THETA.")
   }
-  if (is.null(CONSTRVAR)) CONSTRVAR <- rep(if (STDLV) 1 else NA, q)
-  stopifnot(length(CONSTRVAR) == q, CONSTRVAR[!is.na(CONSTRVAR)] > 0)
-  if (STDLV) CONSTRVAR[is.na(CONSTRVAR)] <- 1
+  if (is.null(PSI)) {
+    PSI <- matrix(NA, q, q)
+    diag(PSI) <- 1
+  }
+  if (is.null(BETA)) BETA <- matrix(0, q, q)
+  if (is.null(THETA)) THETA <- diag(ifelse(NUMERIC, NA, 1), p)
+  if (is.null(NU)) NU <- ifelse(NUMERIC, NA, 0)
+  if (is.null(ALPHA)) ALPHA <- rep(0, q)
+  if (is.null(DELTA)) DELTA <- rep(1, p)
+  nx <- max(NCOL(GAMMA) * !is.null(GAMMA), NCOL(KAPPA) * !is.null(KAPPA))
+  if (is.null(GAMMA)) GAMMA <- matrix(0, q, nx)
+  if (is.null(KAPPA)) KAPPA <- matrix(0, p, nx)
+  stopifnot(
+    is.matrix(PSI), dim(PSI) == q, is.matrix(BETA), dim(BETA) == q, is.matrix(THETA), dim(THETA) == p,
+    is.matrix(GAMMA), dim(GAMMA) == c(q, nx), is.matrix(KAPPA), dim(KAPPA) == c(p, nx),
+    length(NU) == p, length(ALPHA) == q, length(DELTA) == p,
+    !is.infinite(c(LAMBDA, PSI, BETA, THETA, NU, ALPHA, DELTA, TAU, GAMMA, KAPPA))
+  )
+  for (M in list(PSI = PSI, THETA = THETA)) {
+    if (!identical(is.na(M), t(is.na(M))) || !isSymmetric(unname(M))) stop("PSI and THETA must be symmetric.")
+  }
+  if (any(diag(PSI) <= 0, na.rm = TRUE)) stop("Fixed latent variances must be positive.")
+  if (all(PSI[upper.tri(PSI)] %in% 0)) {
+    LATCOV <- "none"
+  } else if (LATCOV == "lkj" && !all(is.na(PSI[upper.tri(PSI)]))) {
+    stop("Fixed latent covariances require LATCOV = \"direct\".")
+  }
+  if (any(is.na(diag(BETA)) | diag(BETA) != 0)) stop("The diagonal of BETA must be zero.")
+  if (!anyNA(BETA) && abs(det(diag(q) - BETA)) < 1e-8) stop("diag(q) - BETA must be invertible.")
+  if (anyNA(diag(THETA)[!rsd])) stop("Free residual variances require PARAMETERIZATION = \"theta\".")
+  if (any(diag(THETA)[rsd] <= 0, na.rm = TRUE)) stop("Residual variances must be positive.")
+  if (any(DELTA[!rsd] <= 0, na.rm = TRUE)) stop("DELTA must be positive.")
+  diag(THETA)[!rsd] <- 0
+  DELTA[rsd] <- 1
   if (!is.null(CONSTRAINTS)) {
     stopifnot(
       is.list(CONSTRAINTS), is.matrix(CONSTRAINTS$A), is.numeric(CONSTRAINTS$A), all(is.finite(CONSTRAINTS$A)),
       is.numeric(CONSTRAINTS$b), length(CONSTRAINTS$b) == nrow(CONSTRAINTS$A), all(is.finite(CONSTRAINTS$b))
     )
   }
-  if (LATCOV == "direct" && !CORRFLAG) stop("LATCOV = \"direct\" requires CORRFLAG = TRUE.")
-  if (is.null(REGMAT)) REGMAT <- matrix(0, 0, 0)
-  if (is.null(RESCOV)) RESCOV <- matrix(0, 0, 0)
-  storage.mode(REGMAT) <- storage.mode(RESCOV) <- "double"
-  if (length(REGMAT)) {
-    stopifnot(is.matrix(REGMAT), dim(REGMAT) == q, !is.infinite(REGMAT))
-    if (any(is.na(diag(REGMAT)) | diag(REGMAT) != 0)) stop("The diagonal of REGMAT must be zero.")
-    if (!anyNA(REGMAT) && abs(det(diag(q) - REGMAT)) < 1e-8) stop("diag(q) - REGMAT must be invertible.")
-  }
-  if (is.null(NUMERIC)) NUMERIC <- rep(FALSE, p)
-  stopifnot(is.logical(NUMERIC), length(NUMERIC) == p, !anyNA(NUMERIC))
-  if (is.null(INTERCEPTS)) INTERCEPTS <- ifelse(NUMERIC, NA, 0)
-  if (is.null(MEANS)) MEANS <- rep(0, q)
-  stopifnot(length(INTERCEPTS) == p, !is.infinite(INTERCEPTS), length(MEANS) == q, !is.infinite(MEANS))
-  if (PARAMETERIZATION == "theta") {
-    if (!is.null(SCALES)) stop("SCALES requires PARAMETERIZATION = \"delta\"; set the residual variances in the diagonal of RESCOV.")
-    SCALES <- if (length(RESCOV)) sqrt(diag(RESCOV)) else ifelse(NUMERIC, NA, 1)
-  }
-  if (is.null(SCALES)) SCALES <- ifelse(NUMERIC, NA, 1)
-  stopifnot(length(SCALES) == p, !is.infinite(SCALES))
-  if (any(SCALES <= 0, na.rm = TRUE)) stop(if (PARAMETERIZATION == "theta") "Residual variances must be positive." else "SCALES must be positive.")
-  if (length(RESCOV)) {
-    stopifnot(is.matrix(RESCOV), dim(RESCOV) == p, !is.infinite(RESCOV))
-    diag(RESCOV) <- 0
-    if (!identical(is.na(RESCOV), t(is.na(RESCOV))) || !isSymmetric(unname(RESCOV))) stop("RESCOV must be symmetric.")
-  }
-  nx <- max(NCOL(GAMMA) * !is.null(GAMMA), NCOL(KAPPA) * !is.null(KAPPA))
-  if (is.null(GAMMA)) GAMMA <- matrix(0, q, nx)
-  if (is.null(KAPPA)) KAPPA <- matrix(0, p, nx)
-  stopifnot(is.matrix(GAMMA), is.matrix(KAPPA), dim(GAMMA) == c(q, nx), dim(KAPPA) == c(p, nx), !is.infinite(GAMMA), !is.infinite(KAPPA))
+  storage.mode(LAMBDA) <- storage.mode(PSI) <- storage.mode(BETA) <- storage.mode(THETA) <- "double"
   storage.mode(GAMMA) <- storage.mode(KAPPA) <- "double"
-  out <- list(CONSTRMAT = CONSTRMAT, CONSTRLOGSD = log(sqrt(CONSTRVAR)), CORRFLAG = as.logical(CORRFLAG), STDLV = STDLV,
-              CONSTRAINTS = CONSTRAINTS, LATCOV = LATCOV, p = p, q = q, REGMAT = REGMAT, RESCOV = RESCOV,
-              PARAMETERIZATION = PARAMETERIZATION, CONSTRINT = as.numeric(INTERCEPTS), CONSTRMEAN = as.numeric(MEANS),
-              CONSTRLOGSCALE = log(as.numeric(SCALES)), GAMMA = GAMMA, KAPPA = KAPPA, NUMERIC = NUMERIC)
-  class(out) <- "latpl_model"
+  out <- list(LAMBDA = LAMBDA, PSI = PSI, BETA = BETA, THETA = THETA, NU = as.numeric(NU), ALPHA = as.numeric(ALPHA),
+              DELTA = as.numeric(DELTA), TAU = if (!is.null(TAU)) as.numeric(TAU), GAMMA = GAMMA, KAPPA = KAPPA,
+              CONSTRAINTS = CONSTRAINTS, LATCOV = LATCOV, PARAMETERIZATION = PARAMETERIZATION, NUMERIC = NUMERIC,
+              p = p, q = q)
+  class(out) <- "lavaanpl_model"
   out
 }
 
 #' Multigroup factor model for pairwise likelihood estimation
 #'
-#' @param MODELS List of model objects from [set_latpl_model()], one per group in the order of the
-#'   groups of [set_latpl_data()], with the same number of items.
-#' @param CONSTRAINTS Linear equality constraints `A %*% theta = b` across groups, as
-#'  `list(A = , b = )`, with one column of `A` per parameter in the order of [theta_names()]: the
+#' @param MODELS List of model objects from [lavaanpl_model()], one per group in the order of the
+#'   groups of [lavaanpl_data()], with the same number of items.
+#' @param CONSTRAINTS Linear equality constraints `A %*% parameter_vector = b` across groups, as
+#'  `list(A = , b = )`, with one column of `A` per parameter in the order of [parameter_names()]: the
 #'  parameters of the first group, then those of the second, and so on. Each model's own
 #'  `CONSTRAINTS` apply within its group.
 #'
-#' @return An object of class `latpl_groups` with `MODELS`, `CONSTRAINTS`, the number of items `p`
-#'   and the number of groups `ngroups`, to be passed to [fit_latpl()] via `MODEL`.
+#' @return An object of class `lavaanpl_groups` with `MODELS`, `CONSTRAINTS`, the number of items `p`
+#'   and the number of groups `ngroups`, to be passed to [fit_lavaanpl()] via `MODEL`.
 #'
 #' @keywords internal
-set_latpl_groups <- function(MODELS, CONSTRAINTS = NULL) {
+lavaanpl_groups <- function(MODELS, CONSTRAINTS = NULL) {
   stopifnot(
-    is.list(MODELS), length(MODELS) > 0, all(vapply(MODELS, inherits, logical(1), "latpl_model")),
+    is.list(MODELS), length(MODELS) > 0, all(vapply(MODELS, inherits, logical(1), "lavaanpl_model")),
     length(unique(vapply(MODELS, function(x) x$p, numeric(1)))) == 1
   )
   if (!is.null(CONSTRAINTS)) {
@@ -320,7 +310,7 @@ set_latpl_groups <- function(MODELS, CONSTRAINTS = NULL) {
     )
   }
   out <- list(MODELS = MODELS, CONSTRAINTS = CONSTRAINTS, p = MODELS[[1]]$p, ngroups = length(MODELS))
-  class(out) <- "latpl_groups"
+  class(out) <- "lavaanpl_groups"
   out
 }
 
@@ -328,28 +318,28 @@ set_latpl_groups <- function(MODELS, CONSTRAINTS = NULL) {
 #'
 #' The `QN` method: the exact pairwise likelihood estimate, by the BFGS optimiser of the \code{ucminf} package.
 #'
-#' @param GRTOL Tolerance on the largest absolute gradient element.
-#' @param XTOL Tolerance on the relative step length.
-#' @param STEPMAX Initial maximal step length of the trust region.
-#' @param MAXEVAL Maximum number of function evaluations.
+#' @param grtol Tolerance on the largest absolute gradient element.
+#' @param xtol Tolerance on the relative step length.
+#' @param stepmax Initial maximal step length of the trust region.
+#' @param maxeval Maximum number of function evaluations.
 #'
-#' @return An object of class `latpl_qn_control` to be passed to [lavaan.pl()] via `control`.
+#' @return An object of class `lavaanpl_qn_control` to be passed to [lavaan.pl()] via `control`.
 #'
 #' @export
 set_qn_control <- function(
-  GRTOL = 1e-6,
-  XTOL = 1e-12,
-  STEPMAX = 1,
-  MAXEVAL = 500
+  grtol = 1e-6,
+  xtol = 1e-12,
+  stepmax = 1,
+  maxeval = 500
 ) {
   stopifnot(
-    is.numeric(GRTOL), length(GRTOL) == 1, GRTOL > 0,
-    is.numeric(XTOL), length(XTOL) == 1, XTOL > 0,
-    is.numeric(STEPMAX), length(STEPMAX) == 1, STEPMAX > 0,
-    is.numeric(MAXEVAL), length(MAXEVAL) == 1, MAXEVAL >= 1
+    is.numeric(grtol), length(grtol) == 1, grtol > 0,
+    is.numeric(xtol), length(xtol) == 1, xtol > 0,
+    is.numeric(stepmax), length(stepmax) == 1, stepmax > 0,
+    is.numeric(maxeval), length(maxeval) == 1, maxeval >= 1
   )
-  out <- list(GRTOL = GRTOL, XTOL = XTOL, STEPMAX = STEPMAX, MAXEVAL = as.integer(MAXEVAL))
-  class(out) <- "latpl_qn_control"
+  out <- list(grtol = grtol, xtol = xtol, stepmax = stepmax, maxeval = as.integer(maxeval))
+  class(out) <- "lavaanpl_qn_control"
   out
 }
 
@@ -359,63 +349,63 @@ set_qn_control <- function(
 #' three phases: Adam, preconditioning, and stochastic gradient updates with a frozen gain and Polyak-Ruppert averaging. An
 #' epoch is the number of iterations needed to draw as many pairs as there are in the model, one pass over the pairs.
 #'
-#' @param PAIRS_PER_ITERATION Number of item pairs drawn at each iteration.
-#' @param ALPHA Step length of the Adam phase, divided by the square root of the number of
+#' @param pairs_per_iteration Number of item pairs drawn at each iteration.
+#' @param alpha Step length of the Adam phase, divided by the square root of the number of
 #'   iterations per epoch.
-#' @param ADAM_EPOCHS Maximum number of epochs of the Adam phase. If `NULL`, 5, or as many as make 150 iterations on small
+#' @param adam_epochs Maximum number of epochs of the Adam phase. If `NULL`, 5, or as many as make 150 iterations on small
 #'   models, whose epochs are short.
-#' @param PRECONDITION_EPOCHS Number of epochs of the preconditioning phase, which draws each pair once per epoch,
+#' @param precondition_epochs Number of epochs of the preconditioning phase, which draws each pair once per epoch,
 #'   recomputes the observed information as the gain after each epoch, and takes stochastic Newton steps with it. The
 #'   gain is then frozen, unless the observed information is not positive definite. With `0`, the gain is computed at
 #'   the end of the Adam phase.
-#' @param MAX_PRECONDITION_EPOCHS Maximum number of epochs of the preconditioning phase while the observed information
+#' @param max_precondition_epochs Maximum number of epochs of the preconditioning phase while the observed information
 #'   is not positive definite.
-#' @param AVERAGE_EPOCHS Number of epochs of the averaged phase, at least 1.
-#' @param TOL Absolute change of the pairwise log-likelihood at the epoch average, per free parameter, below which, at
+#' @param average_epochs Number of epochs of the averaged phase, at least 1.
+#' @param tol Absolute change of the pairwise log-likelihood at the epoch average, per free parameter, below which, at
 #'   two consecutive epochs, the Adam or the preconditioning phase ends before its maximum.
-#' @param DECAY Exponent of the step length decay in the averaged phase, in \eqn{(1/2, 1)}.
-#' @param AVG_FROM Fraction of the averaged phase discarded before averaging.
-#' @param GAIN Gain of the preconditioning and averaged phases: `"hessian"` (inverse observed information),
+#' @param decay Exponent of the step length decay in the averaged phase, in \eqn{(1/2, 1)}.
+#' @param avg_from Fraction of the averaged phase discarded before averaging.
+#' @param gain Gain of the preconditioning and averaged phases: `"hessian"` (inverse observed information),
 #'   `"diagonal"` (Adam's diagonal preconditioner, no preconditioning phase), or `"auto"` (`"hessian"` up to 2000 free
 #'   parameters).
-#' @param SEED Seed of the pair sampling.
+#' @param seed Seed of the pair sampling.
 #'
-#' @return An object of class `latpl_sa_control` to be passed to [lavaan.pl()] via `control`.
+#' @return An object of class `lavaanpl_sa_control` to be passed to [lavaan.pl()] via `control`.
 #'
 #' @export
 set_sa_control <- function(
-  PAIRS_PER_ITERATION = 16,
-  ALPHA = 0.2,
-  ADAM_EPOCHS = NULL,
-  PRECONDITION_EPOCHS = 3,
-  MAX_PRECONDITION_EPOCHS = 20,
-  AVERAGE_EPOCHS = 50,
-  TOL = 0.05,
-  DECAY = 0.75,
-  AVG_FROM = 0.25,
-  GAIN = c("auto", "hessian", "diagonal"),
-  SEED = 123
+  pairs_per_iteration = 16,
+  alpha = 0.2,
+  adam_epochs = NULL,
+  precondition_epochs = 3,
+  max_precondition_epochs = 20,
+  average_epochs = 50,
+  tol = 0.05,
+  decay = 0.75,
+  avg_from = 0.25,
+  gain = c("auto", "hessian", "diagonal"),
+  seed = 123
 ) {
-  GAIN <- match.arg(GAIN)
+  gain <- match.arg(gain)
   num <- function(x) is.numeric(x) && length(x) == 1 && is.finite(x)
   stopifnot(
-    num(PAIRS_PER_ITERATION), PAIRS_PER_ITERATION >= 1,
-    num(ALPHA), ALPHA > 0,
-    is.null(ADAM_EPOCHS) || (num(ADAM_EPOCHS) && ADAM_EPOCHS >= 1),
-    num(PRECONDITION_EPOCHS), PRECONDITION_EPOCHS >= 0,
-    num(MAX_PRECONDITION_EPOCHS), MAX_PRECONDITION_EPOCHS >= 0,
-    num(AVERAGE_EPOCHS), AVERAGE_EPOCHS >= 0,
-    num(TOL), TOL > 0,
-    num(DECAY), DECAY > 0.5, DECAY < 1,
-    num(AVG_FROM), AVG_FROM >= 0, AVG_FROM < 1,
-    num(SEED), SEED > 0
+    num(pairs_per_iteration), pairs_per_iteration >= 1,
+    num(alpha), alpha > 0,
+    is.null(adam_epochs) || (num(adam_epochs) && adam_epochs >= 1),
+    num(precondition_epochs), precondition_epochs >= 0,
+    num(max_precondition_epochs), max_precondition_epochs >= 0,
+    num(average_epochs), average_epochs >= 0,
+    num(tol), tol > 0,
+    num(decay), decay > 0.5, decay < 1,
+    num(avg_from), avg_from >= 0, avg_from < 1,
+    num(seed), seed > 0
   )
-  out <- list(PAIRS_PER_ITERATION = as.integer(PAIRS_PER_ITERATION), ALPHA = ALPHA,
-              ADAM_EPOCHS = if (!is.null(ADAM_EPOCHS)) as.integer(ADAM_EPOCHS), PRECONDITION_EPOCHS = as.integer(PRECONDITION_EPOCHS),
-              MAX_PRECONDITION_EPOCHS = as.integer(MAX_PRECONDITION_EPOCHS), AVERAGE_EPOCHS = as.integer(AVERAGE_EPOCHS),
-              TOL = TOL, DECAY = DECAY, AVG_FROM = AVG_FROM, GAIN = GAIN,
-              SEED = as.integer(SEED))
-  class(out) <- "latpl_sa_control"
+  out <- list(pairs_per_iteration = as.integer(pairs_per_iteration), alpha = alpha,
+              adam_epochs = if (!is.null(adam_epochs)) as.integer(adam_epochs), precondition_epochs = as.integer(precondition_epochs),
+              max_precondition_epochs = as.integer(max_precondition_epochs), average_epochs = as.integer(average_epochs),
+              tol = tol, decay = decay, avg_from = avg_from, gain = gain,
+              seed = as.integer(seed))
+  class(out) <- "lavaanpl_sa_control"
   out
 }
 
@@ -427,35 +417,35 @@ set_sa_control <- function(
 #'
 #' @inheritParams set_sa_control
 #' @inheritParams set_qn_control
-#' @param NSTARTS Number of full runs from the same starting values, with seeds `SEED`, `SEED + 1` and so on. The highest
+#' @param nstarts Number of full runs from the same starting values, with seeds `seed`, `seed + 1` and so on. The highest
 #'   pairwise log-likelihood is kept, with a warning if the runs disagree. Each run adds its full cost.
 #'
-#' @return An object of class `latpl_saqn_control` to be passed to [lavaan.pl()] via `control`.
+#' @return An object of class `lavaanpl_saqn_control` to be passed to [lavaan.pl()] via `control`.
 #'
 #' @export
 set_saqn_control <- function(
-  PAIRS_PER_ITERATION = 16,
-  ALPHA = 0.2,
-  ADAM_EPOCHS = NULL,
-  PRECONDITION_EPOCHS = 3,
-  MAX_PRECONDITION_EPOCHS = 20,
-  TOL = 0.05,
-  SEED = 123,
-  NSTARTS = 1,
-  GRTOL = 1e-6,
-  XTOL = 1e-12,
-  STEPMAX = 1,
-  MAXEVAL = 500
+  pairs_per_iteration = 16,
+  alpha = 0.2,
+  adam_epochs = NULL,
+  precondition_epochs = 3,
+  max_precondition_epochs = 20,
+  tol = 0.05,
+  seed = 123,
+  nstarts = 1,
+  grtol = 1e-6,
+  xtol = 1e-12,
+  stepmax = 1,
+  maxeval = 500
 ) {
-  stopifnot(is.numeric(NSTARTS), length(NSTARTS) == 1, is.finite(NSTARTS), NSTARTS >= 1)
+  stopifnot(is.numeric(nstarts), length(nstarts) == 1, is.finite(nstarts), nstarts >= 1)
   out <- c(
-    set_sa_control(PAIRS_PER_ITERATION = PAIRS_PER_ITERATION, ALPHA = ALPHA, ADAM_EPOCHS = ADAM_EPOCHS,
-                   PRECONDITION_EPOCHS = PRECONDITION_EPOCHS, MAX_PRECONDITION_EPOCHS = MAX_PRECONDITION_EPOCHS,
-                   AVERAGE_EPOCHS = 0, TOL = TOL, SEED = SEED),
-    set_qn_control(GRTOL = GRTOL, XTOL = XTOL, STEPMAX = STEPMAX, MAXEVAL = MAXEVAL),
-    list(NSTARTS = as.integer(NSTARTS))
+    set_sa_control(pairs_per_iteration = pairs_per_iteration, alpha = alpha, adam_epochs = adam_epochs,
+                   precondition_epochs = precondition_epochs, max_precondition_epochs = max_precondition_epochs,
+                   average_epochs = 0, tol = tol, seed = seed),
+    set_qn_control(grtol = grtol, xtol = xtol, stepmax = stepmax, maxeval = maxeval),
+    list(nstarts = as.integer(nstarts))
   )
-  class(out) <- c("latpl_saqn_control", "latpl_qn_control", "latpl_sa_control")
+  class(out) <- c("lavaanpl_saqn_control", "lavaanpl_qn_control", "lavaanpl_sa_control")
   out
 }
 
@@ -463,10 +453,10 @@ set_saqn_control <- function(
 #'
 #' @param CONTROL Control object from [set_saqn_control()], [set_sa_control()] or [set_qn_control()].
 #' @return `"SA-QN"`, `"SA"` or `"QN"`.
-#' @seealso [fit_latpl()], [pmlcfa()]
+#' @seealso [fit_lavaanpl()], [pmlcfa()]
 #' @keywords internal
 control_method <- function(CONTROL) {
-  if (inherits(CONTROL, "latpl_saqn_control")) return("SA-QN")
-  if (inherits(CONTROL, "latpl_sa_control")) "SA" else "QN"
+  if (inherits(CONTROL, "lavaanpl_saqn_control")) return("SA-QN")
+  if (inherits(CONTROL, "lavaanpl_sa_control")) "SA" else "QN"
 }
 

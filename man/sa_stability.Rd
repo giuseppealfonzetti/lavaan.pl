@@ -4,15 +4,15 @@
 \alias{sa_stability}
 \title{Stability of the stochastic approximation across seeds}
 \usage{
-sa_stability(OBJ, SEEDS = 1:10)
+sa_stability(object, seeds = 1:10)
 }
 \arguments{
-\item{OBJ}{A \code{lavaan.pl} object from \code{\link[=lavaan.pl]{lavaan.pl()}}, fitted by stochastic approximation.}
+\item{object}{A \code{lavaan.pl} object from \code{\link[=lavaan.pl]{lavaan.pl()}}, fitted by stochastic approximation.}
 
-\item{SEEDS}{Seeds of the pair sampling.}
+\item{seeds}{Seeds of the pair sampling.}
 }
 \value{
-An object of class \code{latpl_sa_stability}: a list with the table \code{parameters} of each free parameter (\code{name},
+An object of class \code{lavaanpl_sa_stability}: a list with the table \code{parameters} of each free parameter (\code{name},
 \code{block}, standard error \code{se}, standard deviation across seeds \code{observed}, predicted noise \code{predicted}), the estimates
 across seeds \code{estimates} and the number of converged fits \code{converged}.
 }

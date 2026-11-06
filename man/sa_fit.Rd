@@ -4,13 +4,13 @@
 \alias{sa_fit}
 \title{Fit behind a stochastic approximation object}
 \usage{
-sa_fit(OBJ)
+sa_fit(object)
 }
 \arguments{
-\item{OBJ}{Object of class latpl_fit, or a \code{lavaan.pl} object from \code{\link[=lavaan.pl]{lavaan.pl()}}.}
+\item{object}{Object of class lavaanpl_internal, or a \code{lavaan.pl} object from \code{\link[=lavaan.pl]{lavaan.pl()}}.}
 }
 \value{
-The object of class latpl_fit.
+The object of class lavaanpl_internal.
 }
 \description{
 Fit behind a stochastic approximation object

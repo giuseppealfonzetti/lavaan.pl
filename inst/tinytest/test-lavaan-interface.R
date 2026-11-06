@@ -20,15 +20,26 @@ local({
   )) {
     expect_inherits(fit, "lavaan.pl")
     expect_inherits(coef(fit), "lavaan.vector")
-    expect_false(is.null(fit@external$lavaan.pl))
+    expect_false(is.null(fit@external$lavaanpl_internal))
   }
+})
+
+#### Integer items are ordinal by default, and items that look continuous are rejected ####
+local({
+  integers <- as.data.frame(lapply(LSAT, function(x) as.integer(x) - 1L))
+  expect_equal(coef(pmlcfa(lsat_model, integers, std.lv = TRUE)), coef(pmlcfa(lsat_model, LSAT, std.lv = TRUE)))
+  continuous <- replace(integers, "y1", list(integers$y1 + 0.5))
+  expect_error(pmlcfa(lsat_model, continuous, std.lv = TRUE), "non-integer values or more than 10 categories")
+  many <- replace(integers, "y1", list(rep(0:11, length.out = nrow(integers))))
+  expect_error(pmlcfa(lsat_model, many, std.lv = TRUE), "y1 would be ordinal")
+  expect_inherits(pmlcfa(lsat_model, continuous, std.lv = TRUE, ordered = c("y2", "y3", "y4", "y5")), "lavaan.pl")
 })
 
 #### Estimators other than PML are left to lavaan ####
 local({
   expect_error(pmlcfa(lsat_model, LSAT, estimator = "DWLS"), "lavaan::cfa")
   expect_error(pmlsem(lsat_model, LSAT, estimator = "DWLS"), "lavaan::sem")
-  expect_false(is.null(pmlcfa(lsat_model, LSAT, estimator = "PML", se = "none")@external$lavaan.pl))
+  expect_false(is.null(pmlcfa(lsat_model, LSAT, estimator = "PML", se = "none")@external$lavaanpl_internal))
 })
 
 #### std.lv gives the same fit ####
@@ -36,8 +47,8 @@ local({
   fit_marker <- pmlcfa(three_factors, bfi, std.lv = FALSE, control = set_qn_control())
   fit_stdlv <- pmlcfa(three_factors, bfi, std.lv = TRUE, control = set_qn_control())
   expect_equal(
-    fit_marker@external$lavaan.pl$numFit$value,
-    fit_stdlv@external$lavaan.pl$numFit$value
+    fit_marker@external$lavaanpl_internal$numFit$value,
+    fit_stdlv@external$lavaanpl_internal$numFit$value
   )
   expect_equal(fitted(fit_marker), fitted(fit_stdlv), tolerance = 1e-3)
 })
@@ -52,7 +63,7 @@ local({
     se = "none"
   ))
   expect_inherits(fit, "lavaan.pl")
-  expect_identical(fit@external$lavaan.pl$method, "SA")
+  expect_identical(fit@external$lavaanpl_internal$method, "SA")
 })
 
 #### Fixed loadings and equality constraints are honoured ####
@@ -74,9 +85,9 @@ local({
   fit_no_se <- update(fit, se = "none")
   fit_four_items <- update(fit, model = "eta =~ y1 + y2 + y3 + y4")
   expect_identical(fit_no_se@Options$se, "none")
-  expect_false(is.null(fit_no_se@external$lavaan.pl))
+  expect_false(is.null(fit_no_se@external$lavaanpl_internal))
   expect_equal(length(coef(fit_four_items)), 8)
-  expect_false(is.null(fit_four_items@external$lavaan.pl))
+  expect_false(is.null(fit_four_items@external$lavaanpl_internal))
 })
 
 #### Numerical and analytic standard errors agree ####
@@ -124,9 +135,9 @@ local({
     LSAT,
     std.lv = TRUE,
     se = "none",
-    control = set_qn_control(MAXEVAL = 5)
+    control = set_qn_control(maxeval = 5)
   )
-  expect_true(fit@external$lavaan.pl$numFit$info[["neval"]] <= 5)
+  expect_true(fit@external$lavaanpl_internal$numFit$info[["neval"]] <= 5)
 })
 
 #### Unsupported models are rejected ####
@@ -234,17 +245,17 @@ local({
     QN = pmlcfa(lsat_model, LSAT, std.lv = TRUE, optim.method = "QN")
   )
   for (method in names(fits)) {
-    expect_identical(fits[[method]]@external$lavaan.pl$method, method)
+    expect_identical(fits[[method]]@external$lavaanpl_internal$method, method)
     expect_identical(fits[[method]]@Options$optim.method, method)
     expect_true(any(grepl(method, capture.output(summary(fits[[method]])), fixed = TRUE)))
   }
   expect_equal(unname(coef(fits$`SA-QN`)), unname(coef(fits$QN)), tolerance = 1e-4)
   expect_identical(
-    pmlcfa(lsat_model, LSAT, std.lv = TRUE, optim.method = "SA", control = set_sa_control(AVERAGE_EPOCHS = 5))@external$lavaan.pl$control$AVERAGE_EPOCHS,
+    pmlcfa(lsat_model, LSAT, std.lv = TRUE, optim.method = "SA", control = set_sa_control(average_epochs = 5))@external$lavaanpl_internal$control$average_epochs,
     5L
   )
   expect_identical(
-    pmlcfa(lsat_model, LSAT, std.lv = TRUE, control = set_sa_control())@external$lavaan.pl$method,
+    pmlcfa(lsat_model, LSAT, std.lv = TRUE, control = set_sa_control())@external$lavaanpl_internal$method,
     "SA"
   )
   expect_error(pmlcfa(lsat_model, LSAT, std.lv = TRUE, optim.method = "nlminb"), "must be")
@@ -260,8 +271,8 @@ local({
   frame$w <- runif(600, .5, 2)
   syntax <- "A =~ A1 + A2 + A3\nC =~ C1 + C2 + C3\nC ~ x1"
   fit <- pmlsem(syntax, frame, std.lv = TRUE, sampling.weights = "w")
-  engine_fit <- fit@external$lavaan.pl
-  logl <- lavaan.pl:::cpp_pl(engine_fit$theta, engine_fit$engine$model, engine_fit$engine$data)$pl
+  engine_fit <- fit@external$lavaanpl_internal
+  logl <- lavaan.pl:::cpp_pl(engine_fit$parameter_vector, engine_fit$engine$model, engine_fit$engine$data)$pl
   expect_identical(fit@optim$logl, logl)
   expect_equal(fit@optim$fx, -logl / nobs(fit))
   expect_equal(unname(vcov(fit)[1, 1]), parameterEstimates(fit)$se[1]^2)
@@ -283,7 +294,7 @@ local({
 local({
   fit <- pmlcfa(lsat_model, LSAT, std_lv = TRUE, optim_method = "QN")
   expect_true(fit@Options$std.lv)
-  expect_identical(fit@external$lavaan.pl$method, "QN")
+  expect_identical(fit@external$lavaanpl_internal$method, "QN")
   expect_identical(fit@Options$optim.method, "QN")
   expect_false(fit@Options$ceq.simple)
   expect_error(

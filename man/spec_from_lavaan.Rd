@@ -13,12 +13,12 @@ spec_from_lavaan(template, start = NULL)
 }
 \value{
 A list with the data object \code{DATA}, the model object \code{MODEL} and the starting values \code{START} for
-\code{\link[=fit_latpl]{fit_latpl()}}.
+\code{\link[=fit_lavaanpl]{fit_lavaanpl()}}.
 }
 \description{
 lavaan.pl inputs from a lavaan model
 }
 \seealso{
-\code{\link[=lavaan.pl]{lavaan.pl()}}, \code{\link[=create_lav_from_latpl]{create_lav_from_latpl()}}
+\code{\link[=lavaan.pl]{lavaan.pl()}}, \code{\link[=create_lav_from_lavaanpl]{create_lav_from_lavaanpl()}}
 }
 \keyword{internal}

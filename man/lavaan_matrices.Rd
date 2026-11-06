@@ -21,6 +21,6 @@ Here the phantom is removed: its row of \code{gamma} is the row of the item in \
 item in \code{lambda}, its variance the residual variance of the item and its mean the intercept of the item.
 }
 \seealso{
-\code{\link[=spec_from_lavaan]{spec_from_lavaan()}}, \code{\link[=create_lav_from_latpl]{create_lav_from_latpl()}}
+\code{\link[=spec_from_lavaan]{spec_from_lavaan()}}, \code{\link[=create_lav_from_lavaanpl]{create_lav_from_lavaanpl()}}
 }
 \keyword{internal}

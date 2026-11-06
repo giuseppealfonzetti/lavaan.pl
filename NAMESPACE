@@ -2,15 +2,15 @@
 
 S3method(lavaan::lavInspect,lavaan.pl)
 S3method(lavaan::lavTech,lavaan.pl)
-S3method(plot,latpl_sa_stability)
-S3method(print,latpl_data)
-S3method(print,latpl_fit)
-S3method(print,latpl_model)
-S3method(print,latpl_sa_diagnostics)
-S3method(print,latpl_sa_stability)
+S3method(plot,lavaanpl_sa_stability)
+S3method(print,lavaanpl_data)
+S3method(print,lavaanpl_internal)
+S3method(print,lavaanpl_model)
+S3method(print,lavaanpl_sa_diagnostics)
+S3method(print,lavaanpl_sa_stability)
 export(fitMeasures)
 export(fitmeasures)
-export(get_latpl_fit)
+export(get_lavaanpl_internal)
 export(lavParameterEstimates)
 export(lavTestLRT)
 export(lavaan.pl)
@@ -66,8 +66,6 @@ importFrom(stats,
   predict,
   resid,
   residuals,
-  rnorm,
-  runif,
   update,
   vcov
 )

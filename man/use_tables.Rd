@@ -25,6 +25,6 @@ cell: \eqn{a_k a_l}, where \eqn{a} is 1 for an extreme category, 2 for a middle 
 and identical observations count once.
 }
 \seealso{
-\code{\link[=set_latpl_data]{set_latpl_data()}}, \code{\link[=engine]{engine()}}
+\code{\link[=lavaanpl_data]{lavaanpl_data()}}, \code{\link[=engine]{engine()}}
 }
 \keyword{internal}

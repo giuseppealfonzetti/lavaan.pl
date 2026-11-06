@@ -4,17 +4,17 @@
 \alias{sa_diagnostics}
 \title{Diagnostics of the stochastic approximation}
 \usage{
-sa_diagnostics(OBJ, TARGET = 0.1)
+sa_diagnostics(object, target = 0.1)
 }
 \arguments{
-\item{OBJ}{A \code{lavaan.pl} object from \code{\link[=lavaan.pl]{lavaan.pl()}}, fitted by stochastic approximation.}
+\item{object}{A \code{lavaan.pl} object from \code{\link[=lavaan.pl]{lavaan.pl()}}, fitted by stochastic approximation.}
 
-\item{TARGET}{Largest ratio of the optimisation noise to the standard error used to suggest a number of epochs.}
+\item{target}{Largest ratio of the optimisation noise to the standard error used to suggest a number of epochs.}
 }
 \value{
-An object of class \code{latpl_sa_diagnostics}: a list with \code{converged}, the checks \code{checks}, the summary of the
+An object of class \code{lavaanpl_sa_diagnostics}: a list with \code{converged}, the checks \code{checks}, the summary of the
 phases \code{phases}, the settings \code{settings}, the table of free parameters \code{parameters} from \code{sa_parameters()}, its
-summary by block \code{blocks}, and the value of \code{AVERAGE_EPOCHS} predicted to reach \code{TARGET} in \code{epochs_needed}.
+summary by block \code{blocks}, and the value of \code{average_epochs} predicted to reach \code{target} in \code{epochs_needed}.
 }
 \description{
 Reports whether the run behaved, and how precise its estimate is. The optimisation noise is the variability due to the

@@ -15,20 +15,24 @@
 #'   for more information. Alternatively, a parameter table (eg. the output of
 #'   the [`lavaan::lavaanify()`] function) is also accepted.
 #' @param data A data frame containing the observed variables used in the model.
-#'   Ordinal items must be declared as ordered factors.
+#'   Items are ordinal unless `ordered` says otherwise.
 #' @param model.type The lavaan function whose defaults are used, `"sem"` or `"cfa"`.
 #' @param std.lv If `TRUE`, the metric of each latent variable is determined by
 #'   fixing their (residual) variances to 1.0. If `FALSE`, the metric of each
 #'   latent variable is determined by fixing the factor loading of the first
 #'   indicator to 1.0.
+#' @param ordered `TRUE` to treat all items as ordinal, `FALSE` for the lavaan default (only the ordered factors of
+#'   `data`), or the names of the ordinal items. With `TRUE`, numeric columns with non-integer values or more than 10
+#'   categories are an error.
 #' @param estimator The estimator, which must be `"PML"`.
 #' @param estimator.args A list with `ncores` and `computevar_numderiv`.
 #' @param start A vector of starting values in lavaan's free-parameter order.
 #' @param control Control object from [set_saqn_control()], [set_sa_control()] or [set_qn_control()], or `NULL`.
 #' @param verbose If `TRUE`, print additional information during the estimation
 #'   process.
-#' @param ... Additional arguments for [lavaan::lavaan()], including `optim.method` (`"SA-QN"`, `"SA"` or `"QN"`)
-#'   and `samplestats = FALSE`, which skips lavaan's sample statistics (faster, for simulations).
+#' @param ... Additional arguments for [lavaan::lavaan()], including `optim.method` (`"SA-QN"`, `"SA"` or `"QN"`),
+#'   and, for faster fits in simulations, `test = "none"`, which skips the mean and variance adjusted test, and
+#'   `samplestats = FALSE`, which skips lavaan's sample statistics.
 #' @return An object of class [`lavaan.pl`][lavaan.pl-class].
 #' @seealso [lavaan.pl-class]
 #'
@@ -56,6 +60,7 @@ lavaan.pl <- function(
     data,
     model.type = c("sem", "cfa"),
     std.lv = FALSE,
+    ordered = TRUE,
     estimator = "PML",
     estimator.args = list(ncores = 1, computevar_numderiv = FALSE),
     start = NULL,
@@ -85,7 +90,7 @@ lavaan.pl <- function(
   if (is.null(control)) {
     control <- switch(if (is.null(method)) "SA-QN" else method, `SA-QN` = set_saqn_control(), SA = set_sa_control(), QN = set_qn_control())
   }
-  if (!inherits(control, c("latpl_qn_control", "latpl_sa_control"))) {
+  if (!inherits(control, c("lavaanpl_qn_control", "lavaanpl_sa_control"))) {
     stop("`control` must be created with `set_saqn_control()`, `set_sa_control()` or `set_qn_control()`.", call. = FALSE)
   }
   if (!is.null(method) && !identical(method, control_method(control))) {
@@ -96,10 +101,21 @@ lavaan.pl <- function(
   computevar_numderiv <- estimator.args$computevar_numderiv
   if (is.null(computevar_numderiv)) computevar_numderiv <- FALSE
 
+  if (isTRUE(ordered)) {
+    items <- intersect(lavaan::lavNames(if (is.character(model)) lavaan::lavaanify(model) else model, "ov.nox"), names(data))
+    values <- Filter(is.numeric, as.data.frame(data)[items])
+    continuous <- names(values)[vapply(values, function(x) any(x != round(x), na.rm = TRUE) || length(unique(x[!is.na(x)])) > 10, logical(1))]
+    if (length(continuous)) {
+      stop("With `ordered = TRUE`, ", paste(continuous, collapse = ", "), " would be ordinal, but ", if (length(continuous) > 1) "they have" else "it has",
+           " non-integer values or more than 10 categories: use `ordered = FALSE` for numeric items, or list the ordinal items in `ordered`.", call. = FALSE)
+    }
+  }
+
   # Initialise {lavaan} model object -------------------------------------------
   lavargs$model <- model
   lavargs$data <- data
   lavargs$std.lv <- std.lv
+  lavargs$ordered <- if (isFALSE(ordered)) NULL else ordered
   lavargs$estimator <- "PML"
   lavargs$do.fit <- FALSE
   lavargs$optim.method <- NULL
@@ -118,7 +134,7 @@ lavaan.pl <- function(
     lavargs$se <- "robust.huber.white"
   }
   if (!("test" %in% names(lavargs))) {
-    lavargs$test <- "none"
+    lavargs$test <- "mean.var.adjusted"
   }
   if (is.null(lavargs$ceq.simple)) lavargs$ceq.simple <- FALSE
   if (isFALSE(lavargs$samplestats)) lavargs$slot_cache <- list()
@@ -127,7 +143,7 @@ lavaan.pl <- function(
   # Fit lavaan.pl -------------------------------------------------------------------
   spec <- spec_from_lavaan(template, start)
   # Send to lavaan.pl
-  fit <- fit_latpl(
+  fit <- fit_lavaanpl(
     DATA = spec$DATA,
     MODEL = spec$MODEL,
     CONTROL = control,
@@ -141,11 +157,11 @@ lavaan.pl <- function(
   if (lavargs$se != "none") {
     vars <- tryCatch(
       compute_var(fit, NUMDERIV = computevar_numderiv),
-      latpl_not_pd = function(e) if (fit$method == "SA") NULL else stop(e)
+      lavaanpl_not_pd = function(e) if (fit$method == "SA") NULL else stop(e)
     )
   }
 
-  out <- create_lav_from_latpl(fit, vars, template)
+  out <- create_lav_from_lavaanpl(fit, vars, template)
   out@call <- mc
   out
 }
@@ -156,6 +172,7 @@ pmlcfa <- function(
     model,
     data,
     std.lv = FALSE,
+    ordered = TRUE,
     estimator = "PML",
     estimator.args = list(ncores = 1, computevar_numderiv = FALSE),
     start = NULL,
@@ -175,6 +192,7 @@ pmlsem <- function(
     model,
     data,
     std.lv = FALSE,
+    ordered = TRUE,
     estimator = "PML",
     estimator.args = list(ncores = 1, computevar_numderiv = FALSE),
     start = NULL,

@@ -1,90 +1,88 @@
 #' Parameter blocks
 #'
-#' @param MODEL Model object from [set_latpl_model()] or [set_latpl_groups()].
+#' @param MODEL Model object from [lavaanpl_model()] or [lavaanpl_groups()].
 #' @param NTHR Number of thresholds in each group.
-#' @return A character vector with the block of each parameter, in the order used by [fit_latpl()]: `"tau"`,
+#' @return A character vector with the block of each parameter, in the order used by [fit_lavaanpl()]: `"tau"`,
 #'   `"lambda"`, `"corr"`, `"logsd"`, `"beta"`, `"rescov"`, `"nu"`, `"alpha"`, `"scale"`, `"gamma"` or `"kappa"`, group
 #'   after group.
-#' @seealso [theta_names()], [latpl_dims()]
+#' @seealso [parameter_names()], [model_dims()]
 #' @keywords internal
-theta_block <- function(MODEL, NTHR) {
-  if (inherits(MODEL, "latpl_groups")) return(unlist(lapply(MODEL$MODELS, theta_block, NTHR)))
+parameter_blocks <- function(MODEL, NTHR) {
+  if (inherits(MODEL, "lavaanpl_groups")) return(unlist(lapply(MODEL$MODELS, parameter_blocks, NTHR)))
   q <- MODEL$q
   rep(c("tau", "lambda", "corr", "logsd", "beta", "rescov", "nu", "alpha", "scale", "gamma", "kappa"),
-      c(NTHR, sum(is.na(MODEL$CONSTRMAT)), if (MODEL$CORRFLAG) q * (q - 1) / 2 else 0, sum(is.na(MODEL$CONSTRLOGSD)),
-        sum(is.na(MODEL$REGMAT)), sum(is.na(MODEL$RESCOV[upper.tri(MODEL$RESCOV)])), sum(is.na(MODEL$CONSTRINT)),
-        sum(is.na(MODEL$CONSTRMEAN)), sum(is.na(MODEL$CONSTRLOGSCALE)), sum(is.na(MODEL$GAMMA)), sum(is.na(MODEL$KAPPA))))
+      c(NTHR, sum(is.na(MODEL$LAMBDA)), if (MODEL$LATCOV != "none") q * (q - 1) / 2 else 0, sum(is.na(diag(MODEL$PSI))),
+        sum(is.na(MODEL$BETA)), sum(is.na(MODEL$THETA[upper.tri(MODEL$THETA)])), sum(is.na(MODEL$NU)),
+        sum(is.na(MODEL$ALPHA)), sum(is.na(item_scales(MODEL))), sum(is.na(MODEL$GAMMA)), sum(is.na(MODEL$KAPPA))))
+}
+
+#' Scales of the items
+#'
+#' @param MODEL Model object from [lavaanpl_model()].
+#' @return The residual standard deviation of each item under `PARAMETERIZATION = "theta"` and of the numeric items,
+#'   the scale factor `DELTA` of the other items, `NA` when free.
+#' @seealso [parameter_blocks()], [vector_to_matrices()]
+#' @keywords internal
+item_scales <- function(MODEL) {
+  ifelse(MODEL$PARAMETERIZATION == "theta" | MODEL$NUMERIC, sqrt(diag(MODEL$THETA)), MODEL$DELTA)
 }
 
 #' Dimensions of a fit
 #'
-#' @param DATA Data object from [set_latpl_data()].
-#' @param MODEL Model object from [set_latpl_model()] or [set_latpl_groups()].
-#' @return A list with the sample size `n`, the numbers of items `p` and latent variables `q`, the numbers of
-#'   categories `cat`, the number of groups `ngroups`, the number of pairs `pairs` over all groups, the size of each
-#'   parameter block summed over groups (`nthr`, `nload`, `ncorr`, `nvar`, `nreg`, `nres`, `nint`, `nmean`,
-#'   `nscale`, `ngam`, `nkap`), the number of covariates `nx` and the number of parameters `d`.
-#' @seealso [theta_block()], [fit_latpl()]
+#' @param DATA Data object from [lavaanpl_data()].
+#' @param MODEL Model object from [lavaanpl_groups()].
+#' @return A list with the number of latent variables `q`, the size of each parameter block summed over groups
+#'   (`nthr`, `nload`, `ncorr`, `nvar`, `nreg`, `nres`, `nint`, `nmean`, `nscale`, `ngam`, `nkap`) and the number of
+#'   parameters `d`.
+#' @seealso [parameter_blocks()], [fit_lavaanpl()]
 #' @keywords internal
-latpl_dims <- function(DATA, MODEL) {
-  models <- if (inherits(MODEL, "latpl_groups")) MODEL$MODELS else list(MODEL)
+model_dims <- function(DATA, MODEL) {
+  models <- MODEL$MODELS
   stopifnot(all(vapply(models, function(x) x$q, numeric(1)) < DATA$p))
   for (m in models) {
     if (ncol(m$GAMMA) > 0 && ncol(m$GAMMA) != ncol(DATA$X)) stop("GAMMA and KAPPA must have one column per covariate of DATA.")
   }
-  nb <- table(factor(theta_block(MODEL, sum(DATA$cat - 1)), c("tau", "lambda", "corr", "logsd", "beta", "rescov", "nu", "alpha", "scale", "gamma", "kappa")))
-  list(n = DATA$n, p = DATA$p, q = models[[1]]$q, cat = DATA$cat, ngroups = DATA$ngroups,
-       pairs = DATA$ngroups * DATA$p * (DATA$p - 1) / 2,
-       nthr = nb[[1]], nload = nb[[2]], ncorr = nb[[3]], nvar = nb[[4]], nreg = nb[[5]], nres = nb[[6]],
-       nint = nb[[7]], nmean = nb[[8]], nscale = nb[[9]], ngam = nb[[10]], nkap = nb[[11]], nx = ncol(DATA$X), d = sum(nb))
+  nb <- table(factor(parameter_blocks(MODEL, sum(DATA$cat - 1)), c("tau", "lambda", "corr", "logsd", "beta", "rescov", "nu", "alpha", "scale", "gamma", "kappa")))
+  list(q = models[[1]]$q, nthr = nb[[1]], nload = nb[[2]], ncorr = nb[[3]], nvar = nb[[4]], nreg = nb[[5]], nres = nb[[6]],
+       nint = nb[[7]], nmean = nb[[8]], nscale = nb[[9]], ngam = nb[[10]], nkap = nb[[11]], d = sum(nb))
 }
-
-#' Code of the latent covariance parameterisation
-#'
-#' @param MODEL Model object from [set_latpl_model()].
-#' @return `0` for orthogonal latent variables, `1` for LKJ correlations, `2` for direct covariances.
-#' @seealso [engine()], [lincon()]
-#' @keywords internal
-corrflag_code <- function(MODEL) {
-  if (!MODEL$CORRFLAG) 0L else if (identical(MODEL$LATCOV, "direct")) 2L else 1L
-}
-
 
 #' Names of the model parameters
 #'
-#' @param DATA Data object from [set_latpl_data()].
-#' @param MODEL Model object from [set_latpl_model()].
-#' @return The names of the parameters in the order used by [fit_latpl()]: thresholds `tau[i,k]`,
+#' @param DATA Data object from [lavaanpl_data()].
+#' @param MODEL Model object from [lavaanpl_model()].
+#' @return The names of the parameters in the order used by [fit_lavaanpl()]: thresholds `tau[i,k]`,
 #'   free loadings `lambda[j,h]`, latent correlation parameters `eta[r,c]` (or covariances `psi[r,c]`),
 #'   free latent log standard deviations `logsd[h]`, free regression coefficients `beta[i,j]`, free
 #'   residual covariances `theta[k,l]`, free intercepts `nu[j]`, free latent means `alpha[h]`, and free
 #'   log scale factors `logdelta[j]` or, with `PARAMETERIZATION = "theta"`, free log residual standard
 #'   deviations `logrsd[j]`, free regressions on the covariates `gamma[h,c]` and free direct effects of
-#'   the covariates `kappa[j,c]`. With [set_latpl_groups()], the names of group 2 onwards end in `.g2`,
+#'   the covariates `kappa[j,c]`. With [lavaanpl_groups()], the names of group 2 onwards end in `.g2`,
 #'   `.g3`, and so on.
 #' @keywords internal
-theta_names <- function(DATA, MODEL) {
-  stopifnot(inherits(DATA, "latpl_data"), inherits(MODEL, c("latpl_model", "latpl_groups")))
-  if (inherits(MODEL, "latpl_groups")) {
+parameter_names <- function(DATA, MODEL) {
+  stopifnot(inherits(DATA, "lavaanpl_data"), inherits(MODEL, c("lavaanpl_model", "lavaanpl_groups")))
+  if (inherits(MODEL, "lavaanpl_groups")) {
     return(unlist(lapply(seq_len(MODEL$ngroups), function(g) {
-      paste0(theta_names(DATA, MODEL$MODELS[[g]]), if (g > 1) paste0(".g", g))
+      paste0(parameter_names(DATA, MODEL$MODELS[[g]]), if (g > 1) paste0(".g", g))
     })))
   }
-  idx <- which(is.na(MODEL$CONSTRMAT), arr.ind = TRUE)
+  idx <- which(is.na(MODEL$LAMBDA), arr.ind = TRUE)
   q <- MODEL$q
+  scales <- item_scales(MODEL)
   c(
     unlist(lapply(seq_len(DATA$p), function(i) sprintf("tau[%d,%d]", i, seq_len(DATA$cat[i] - 1)))),
     sprintf("lambda[%d,%d]", idx[, 1], idx[, 2]),
-    if (MODEL$CORRFLAG && q > 1) unlist(lapply(2:q, function(h) {
-      sprintf(if (corrflag_code(MODEL) == 2) "psi[%d,%d]" else "eta[%d,%d]", seq_len(h - 1), h)
+    if (MODEL$LATCOV != "none" && q > 1) unlist(lapply(2:q, function(h) {
+      sprintf(if (MODEL$LATCOV == "direct") "psi[%d,%d]" else "eta[%d,%d]", seq_len(h - 1), h)
     })),
-    sprintf("logsd[%d]", which(is.na(MODEL$CONSTRLOGSD))),
-    sprintf("beta[%d,%d]", row(MODEL$REGMAT)[is.na(MODEL$REGMAT)], col(MODEL$REGMAT)[is.na(MODEL$REGMAT)]),
-    sprintf("theta[%d,%d]", row(MODEL$RESCOV)[is.na(MODEL$RESCOV) & upper.tri(MODEL$RESCOV)],
-            col(MODEL$RESCOV)[is.na(MODEL$RESCOV) & upper.tri(MODEL$RESCOV)]),
-    sprintf("nu[%d]", which(is.na(MODEL$CONSTRINT))),
-    sprintf("alpha[%d]", which(is.na(MODEL$CONSTRMEAN))),
-    sprintf(ifelse(MODEL$PARAMETERIZATION == "theta" | MODEL$NUMERIC, "logrsd[%d]", "logdelta[%d]")[is.na(MODEL$CONSTRLOGSCALE)], which(is.na(MODEL$CONSTRLOGSCALE))),
+    sprintf("logsd[%d]", which(is.na(diag(MODEL$PSI)))),
+    sprintf("beta[%d,%d]", row(MODEL$BETA)[is.na(MODEL$BETA)], col(MODEL$BETA)[is.na(MODEL$BETA)]),
+    sprintf("theta[%d,%d]", row(MODEL$THETA)[is.na(MODEL$THETA) & upper.tri(MODEL$THETA)],
+            col(MODEL$THETA)[is.na(MODEL$THETA) & upper.tri(MODEL$THETA)]),
+    sprintf("nu[%d]", which(is.na(MODEL$NU))),
+    sprintf("alpha[%d]", which(is.na(MODEL$ALPHA))),
+    sprintf(ifelse(MODEL$PARAMETERIZATION == "theta" | MODEL$NUMERIC, "logrsd[%d]", "logdelta[%d]")[is.na(scales)], which(is.na(scales))),
     sprintf("gamma[%d,%d]", row(MODEL$GAMMA)[is.na(MODEL$GAMMA)], col(MODEL$GAMMA)[is.na(MODEL$GAMMA)]),
     sprintf("kappa[%d,%d]", row(MODEL$KAPPA)[is.na(MODEL$KAPPA)], col(MODEL$KAPPA)[is.na(MODEL$KAPPA)])
   )
@@ -95,7 +93,7 @@ theta_names <- function(DATA, MODEL) {
 #' @param H Unconstrained latent correlation parameters, one per pair of latent variables.
 #' @param Q Number of latent variables.
 #' @return The upper triangular Cholesky factor of the latent correlation matrix.
-#' @seealso [lkj_inv()], [theta2par()]
+#' @seealso [lkj_inv()], [vector_to_matrices()]
 #' @keywords internal
 lkj <- function(H, Q) {
   U <- diag(Q)
@@ -112,7 +110,7 @@ lkj <- function(H, Q) {
 #'
 #' @param R Latent correlation matrix.
 #' @return The unconstrained latent correlation parameters, one per pair of latent variables.
-#' @seealso [lkj()], [par2theta()]
+#' @seealso [lkj()], [matrices_to_vector()]
 #' @keywords internal
 lkj_inv <- function(R) {
   U <- chol(R)
@@ -125,118 +123,122 @@ lkj_inv <- function(R) {
 
 #' Convert between the parameter vector and the model matrices
 #'
-#' @param MODEL Model object from [set_latpl_model()] or [set_latpl_groups()].
-#' @param THETA Parameter vector, in the order of [theta_names()].
-#' @param PAR List with the thresholds `thresholds`, the loading matrix `loadings`, the latent
-#'   (disturbance) covariance matrix `latent_correlations`, the regression matrix `regressions`, the
-#'   residual covariance matrix `residual_covariances` (with the residual variances on the diagonal
-#'   when `PARAMETERIZATION = "theta"`), the intercepts `intercepts`, the latent means `means`,
-#'   with `PARAMETERIZATION = "delta"`, the scale factors `scales` and, with covariates, their effects
-#'   `gamma` and `kappa`.
-#' @return `theta2par()` returns the list `PAR`, or with [set_latpl_groups()] a list of them, one
-#'   per group; `par2theta()` returns the parameter vector.
+#' @param MODEL Model object from [lavaanpl_model()] or [lavaanpl_groups()].
+#' @param PARAMETER_VECTOR Parameter vector, in the order of [parameter_names()].
+#' @param MATRICES List with the model matrices, named as in lavaan: the thresholds `tau`, the loadings `lambda`, the
+#'   latent (disturbance) covariance matrix `psi`, the regressions `beta`, the residual covariance matrix `theta` (with
+#'   the residual variances on the diagonal when `PARAMETERIZATION = "theta"`), the intercepts `nu`, the latent means
+#'   `alpha`, with `PARAMETERIZATION = "delta"`, the scale factors `delta` and, with covariates, their effects `gamma`
+#'   and `kappa`.
+#' @return `vector_to_matrices()` returns the list `MATRICES`, or with [lavaanpl_groups()] a list of them, one
+#'   per group; `matrices_to_vector()` returns the parameter vector.
 #' @keywords internal
-theta2par <- function(MODEL, THETA) {
-  stopifnot(inherits(MODEL, c("latpl_model", "latpl_groups")), is.numeric(THETA))
-  if (inherits(MODEL, "latpl_groups")) {
-    d <- vapply(MODEL$MODELS, function(x) length(theta_block(x, 0)), numeric(1))
-    d <- d + (length(THETA) - sum(d)) / length(d)
-    return(Map(theta2par, MODEL$MODELS, split(THETA, rep(seq_along(d), d))))
+vector_to_matrices <- function(MODEL, PARAMETER_VECTOR) {
+  stopifnot(inherits(MODEL, c("lavaanpl_model", "lavaanpl_groups")), is.numeric(PARAMETER_VECTOR))
+  if (inherits(MODEL, "lavaanpl_groups")) {
+    d <- vapply(MODEL$MODELS, function(x) length(parameter_blocks(x, 0)), numeric(1))
+    d <- d + (length(PARAMETER_VECTOR) - sum(d)) / length(d)
+    return(Map(vector_to_matrices, MODEL$MODELS, split(PARAMETER_VECTOR, rep(seq_along(d), d))))
   }
-  b <- theta_block(MODEL, length(THETA) - length(theta_block(MODEL, 0)))
+  b <- parameter_blocks(MODEL, length(PARAMETER_VECTOR) - length(parameter_blocks(MODEL, 0)))
   q <- MODEL$q
   p <- MODEL$p
-  L <- MODEL$CONSTRMAT
-  L[is.na(L)] <- THETA[b == "lambda"]
-  sd <- MODEL$CONSTRLOGSD
-  sd[is.na(sd)] <- THETA[b == "logsd"]
-  sd <- exp(sd)
+  L <- MODEL$LAMBDA
+  L[is.na(L)] <- PARAMETER_VECTOR[b == "lambda"]
+  sd <- sqrt(diag(MODEL$PSI))
+  sd[is.na(sd)] <- exp(PARAMETER_VECTOR[b == "logsd"])
   Psi <- diag(sd^2, q)
-  if (corrflag_code(MODEL) == 2) {
-    Psi[upper.tri(Psi)] <- THETA[b == "corr"]
+  if (MODEL$LATCOV == "direct") {
+    Psi[upper.tri(Psi)] <- PARAMETER_VECTOR[b == "corr"]
     Psi[lower.tri(Psi)] <- t(Psi)[lower.tri(Psi)]
   } else if (any(b == "corr")) {
-    Psi <- sd * crossprod(lkj(THETA[b == "corr"], q)) * rep(sd, each = q)
+    Psi <- sd * crossprod(lkj(PARAMETER_VECTOR[b == "corr"], q)) * rep(sd, each = q)
   }
-  B <- matrix(0, q, q)
-  if (length(MODEL$REGMAT)) {
-    B <- MODEL$REGMAT
-    B[is.na(B)] <- THETA[b == "beta"]
-  }
-  R <- matrix(0, p, p)
-  if (length(MODEL$RESCOV)) {
-    R <- MODEL$RESCOV
-    R[is.na(R) & upper.tri(R)] <- THETA[b == "rescov"]
-    R[lower.tri(R)] <- t(R)[lower.tri(R)]
-  }
-  nu <- MODEL$CONSTRINT
-  nu[is.na(nu)] <- THETA[b == "nu"]
-  al <- MODEL$CONSTRMEAN
-  al[is.na(al)] <- THETA[b == "alpha"]
-  ls <- MODEL$CONSTRLOGSCALE
-  ls[is.na(ls)] <- THETA[b == "scale"]
-  theta <- MODEL$PARAMETERIZATION == "theta"
-  if (theta) diag(R) <- exp(2 * ls)
-  diag(R)[MODEL$NUMERIC] <- exp(2 * ls[MODEL$NUMERIC])
+  B <- MODEL$BETA
+  B[is.na(B)] <- PARAMETER_VECTOR[b == "beta"]
+  R <- MODEL$THETA
+  R[is.na(R) & upper.tri(R)] <- PARAMETER_VECTOR[b == "rescov"]
+  R[lower.tri(R)] <- t(R)[lower.tri(R)]
+  nu <- MODEL$NU
+  nu[is.na(nu)] <- PARAMETER_VECTOR[b == "nu"]
+  al <- MODEL$ALPHA
+  al[is.na(al)] <- PARAMETER_VECTOR[b == "alpha"]
+  ls <- log(item_scales(MODEL))
+  ls[is.na(ls)] <- PARAMETER_VECTOR[b == "scale"]
+  thetapar <- MODEL$PARAMETERIZATION == "theta"
+  rsd <- thetapar | MODEL$NUMERIC
+  diag(R)[rsd] <- exp(2 * ls[rsd])
   scales <- exp(ls)
   scales[MODEL$NUMERIC] <- 1
   Ga <- MODEL$GAMMA
-  Ga[is.na(Ga)] <- THETA[b == "gamma"]
+  Ga[is.na(Ga)] <- PARAMETER_VECTOR[b == "gamma"]
   Ka <- MODEL$KAPPA
-  Ka[is.na(Ka)] <- THETA[b == "kappa"]
-  c(list(thresholds = THETA[b == "tau"], loadings = L, latent_correlations = Psi, regressions = B, residual_covariances = R,
-         intercepts = nu, means = al), if (!theta) list(scales = scales), if (ncol(Ga) > 0) list(gamma = Ga, kappa = Ka))
+  Ka[is.na(Ka)] <- PARAMETER_VECTOR[b == "kappa"]
+  c(list(tau = PARAMETER_VECTOR[b == "tau"], lambda = L, psi = Psi, beta = B, theta = R, nu = nu, alpha = al),
+    if (!thetapar) list(delta = scales), if (ncol(Ga) > 0) list(gamma = Ga, kappa = Ka))
 }
 
-#' @rdname theta2par
-par2theta <- function(MODEL, PAR) {
-  stopifnot(inherits(MODEL, c("latpl_model", "latpl_groups")))
-  if (inherits(MODEL, "latpl_groups")) return(unlist(Map(par2theta, MODEL$MODELS, PAR), use.names = FALSE))
-  Psi <- PAR$latent_correlations
-  c(PAR$thresholds,
-    PAR$loadings[is.na(MODEL$CONSTRMAT)],
-    if (corrflag_code(MODEL) == 2) Psi[upper.tri(Psi)] else if (MODEL$CORRFLAG && MODEL$q > 1) lkj_inv(stats::cov2cor(Psi)),
-    log(sqrt(diag(Psi)))[is.na(MODEL$CONSTRLOGSD)],
-    if (length(MODEL$REGMAT)) PAR$regressions[is.na(MODEL$REGMAT)],
-    if (length(MODEL$RESCOV)) PAR$residual_covariances[is.na(MODEL$RESCOV) & upper.tri(MODEL$RESCOV)],
-    PAR$intercepts[is.na(MODEL$CONSTRINT)],
-    PAR$means[is.na(MODEL$CONSTRMEAN)],
-    if (anyNA(MODEL$CONSTRLOGSCALE)) {
+#' @rdname vector_to_matrices
+matrices_to_vector <- function(MODEL, MATRICES) {
+  stopifnot(inherits(MODEL, c("lavaanpl_model", "lavaanpl_groups")))
+  if (inherits(MODEL, "lavaanpl_groups")) return(unlist(Map(matrices_to_vector, MODEL$MODELS, MATRICES), use.names = FALSE))
+  Psi <- MATRICES$psi
+  scales <- item_scales(MODEL)
+  c(MATRICES$tau,
+    MATRICES$lambda[is.na(MODEL$LAMBDA)],
+    if (MODEL$LATCOV == "direct") Psi[upper.tri(Psi)] else if (MODEL$LATCOV == "lkj" && MODEL$q > 1) lkj_inv(stats::cov2cor(Psi)),
+    log(sqrt(diag(Psi)))[is.na(diag(MODEL$PSI))],
+    MATRICES$beta[is.na(MODEL$BETA)],
+    MATRICES$theta[is.na(MODEL$THETA) & upper.tri(MODEL$THETA)],
+    MATRICES$nu[is.na(MODEL$NU)],
+    MATRICES$alpha[is.na(MODEL$ALPHA)],
+    if (anyNA(scales)) {
       rsd <- MODEL$PARAMETERIZATION == "theta" | MODEL$NUMERIC
-      log(ifelse(rsd, sqrt(diag(PAR$residual_covariances)), if (is.null(PAR$scales)) 1 else PAR$scales))[is.na(MODEL$CONSTRLOGSCALE)]
+      log(ifelse(rsd, sqrt(diag(MATRICES$theta)), if (is.null(MATRICES$delta)) 1 else MATRICES$delta))[is.na(scales)]
     },
-    PAR$gamma[is.na(MODEL$GAMMA)],
-    PAR$kappa[is.na(MODEL$KAPPA)])
+    MATRICES$gamma[is.na(MODEL$GAMMA)],
+    MATRICES$kappa[is.na(MODEL$KAPPA)])
 }
 
 #' Linear constraints on the parameters
 #'
-#' @param MODEL Model object from [set_latpl_model()] or [set_latpl_groups()].
+#' @param MODEL Model object from [lavaanpl_groups()].
 #' @param NTHR Number of thresholds in each group.
 #' @return A list with the matrix `K` and the vector `c` that map the free parameters to the full parameter
 #'   vector, and the positions `free_idx` of the free parameters in it.
-#' @seealso [fit_latpl()], [theta_names()]
+#' @seealso [fit_lavaanpl()], [parameter_names()]
 #' @keywords internal
 lincon <- function(MODEL, NTHR) {
-  models <- if (inherits(MODEL, "latpl_groups")) MODEL$MODELS else list(MODEL)
-  block <- theta_block(MODEL, NTHR)
+  models <- MODEL$MODELS
+  block <- parameter_blocks(MODEL, NTHR)
   d <- length(block)
-  dg <- vapply(models, function(x) length(theta_block(x, NTHR)), numeric(1))
-  direct <- rep(vapply(models, function(x) corrflag_code(x) == 2, logical(1)), dg)
-  cons <- c(lapply(models, function(x) x$CONSTRAINTS), list(if (length(models) > 1) MODEL$CONSTRAINTS))
+  dg <- vapply(models, function(x) length(parameter_blocks(x, NTHR)), numeric(1))
+  direct <- rep(vapply(models, function(x) x$LATCOV == "direct", logical(1)), dg)
+  cons <- c(lapply(models, function(x) x$CONSTRAINTS), list(MODEL$CONSTRAINTS))
   cols <- c(split(seq_len(d), rep(seq_along(dg), dg)), list(seq_len(d)))
   A <- matrix(0, 0, d)
   b <- numeric(0)
   for (g in seq_along(cons)) {
     if (is.null(cons[[g]]) || nrow(cons[[g]]$A) == 0) next
     if (ncol(cons[[g]]$A) != length(cols[[g]])) {
-      stop("CONSTRAINTS$A must have one column per parameter (", length(cols[[g]]), "), in the order of theta_names().")
+      stop("CONSTRAINTS$A must have one column per parameter (", length(cols[[g]]), "), in the order of parameter_names().")
     }
     Ag <- matrix(0, nrow(cons[[g]]$A), d)
     Ag[, cols[[g]]] <- cons[[g]]$A
     A <- rbind(A, Ag)
     b <- c(b, cons[[g]]$b)
   }
+  fixed <- do.call(rbind, Map(function(m, pos) {
+    tau <- if (is.null(m$TAU)) rep(NA, NTHR) else m$TAU
+    if (length(tau) != NTHR) stop("TAU must have one element per threshold (", NTHR, ").")
+    value <- c(tau, if (m$LATCOV == "direct") m$PSI[upper.tri(m$PSI)])
+    at <- pos[block[pos] == "tau" | (m$LATCOV == "direct" & block[pos] == "corr")]
+    cbind(at, value)[!is.na(value), , drop = FALSE]
+  }, models, cols[seq_along(models)]))
+  Af <- matrix(0, nrow(fixed), d)
+  Af[cbind(seq_len(nrow(fixed)), fixed[, 1])] <- 1
+  A <- rbind(A, Af)
+  b <- c(b, fixed[, 2])
   if (nrow(A) == 0) return(list(K = diag(d), c = rep(0, d), free_idx = seq_len(d)))
   for (r in seq_len(nrow(A))) {
     blk <- unique(block[A[r, ] != 0])
@@ -267,4 +269,29 @@ lincon <- function(MODEL, NTHR) {
     cvec[piv[r]] <- b[r]
   }
   list(K = K, c = cvec, free_idx = free_idx)
+}
+
+#' Interpretable parameters
+#'
+#' @param MODEL Model object from [lavaanpl_groups()].
+#' @param PARAMETER_VECTOR Parameter vector, in the order of [parameter_names()].
+#' @return The parameter vector with latent correlations instead of their parameters, latent standard deviations, and
+#'   scale factors or residual variances instead of their logarithms.
+#' @keywords internal
+transform_parameters <- function(MODEL, PARAMETER_VECTOR) {
+  unlist(Map(function(m, mat) {
+    R <- stats::cov2cor(mat$psi)
+    rsd <- m$PARAMETERIZATION == "theta" | m$NUMERIC
+    c(mat$tau,
+      mat$lambda[is.na(m$LAMBDA)],
+      if (m$LATCOV != "none" && m$q > 1) R[upper.tri(R)],
+      sqrt(diag(mat$psi))[is.na(diag(m$PSI))],
+      mat$beta[is.na(m$BETA)],
+      mat$theta[is.na(m$THETA) & upper.tri(m$THETA)],
+      mat$nu[is.na(m$NU)],
+      mat$alpha[is.na(m$ALPHA)],
+      ifelse(rsd, diag(mat$theta), if (is.null(mat$delta)) 1 else mat$delta)[is.na(item_scales(m))],
+      mat$gamma[is.na(m$GAMMA)],
+      mat$kappa[is.na(m$KAPPA)])
+  }, MODEL$MODELS, vector_to_matrices(MODEL, PARAMETER_VECTOR)), use.names = FALSE)
 }

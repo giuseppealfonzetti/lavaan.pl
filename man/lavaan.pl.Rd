@@ -11,6 +11,7 @@ lavaan.pl(
   data,
   model.type = c("sem", "cfa"),
   std.lv = FALSE,
+  ordered = TRUE,
   estimator = "PML",
   estimator.args = list(ncores = 1, computevar_numderiv = FALSE),
   start = NULL,
@@ -23,6 +24,7 @@ pmlcfa(
   model,
   data,
   std.lv = FALSE,
+  ordered = TRUE,
   estimator = "PML",
   estimator.args = list(ncores = 1, computevar_numderiv = FALSE),
   start = NULL,
@@ -35,6 +37,7 @@ pmlsem(
   model,
   data,
   std.lv = FALSE,
+  ordered = TRUE,
   estimator = "PML",
   estimator.args = list(ncores = 1, computevar_numderiv = FALSE),
   start = NULL,
@@ -50,7 +53,7 @@ for more information. Alternatively, a parameter table (eg. the output of
 the \code{\link[lavaan:lavaanify]{lavaan::lavaanify()}} function) is also accepted.}
 
 \item{data}{A data frame containing the observed variables used in the model.
-Ordinal items must be declared as ordered factors.}
+Items are ordinal unless \code{ordered} says otherwise.}
 
 \item{model.type}{The lavaan function whose defaults are used, \code{"sem"} or \code{"cfa"}.}
 
@@ -58,6 +61,10 @@ Ordinal items must be declared as ordered factors.}
 fixing their (residual) variances to 1.0. If \code{FALSE}, the metric of each
 latent variable is determined by fixing the factor loading of the first
 indicator to 1.0.}
+
+\item{ordered}{\code{TRUE} to treat all items as ordinal, \code{FALSE} for the lavaan default (only the ordered factors of
+\code{data}), or the names of the ordinal items. With \code{TRUE}, numeric columns with non-integer values or more than 10
+categories are an error.}
 
 \item{estimator}{The estimator, which must be \code{"PML"}.}
 
@@ -70,8 +77,9 @@ indicator to 1.0.}
 \item{verbose}{If \code{TRUE}, print additional information during the estimation
 process.}
 
-\item{...}{Additional arguments for \code{\link[lavaan:lavaan]{lavaan::lavaan()}}, including \code{optim.method} (\code{"SA-QN"}, \code{"SA"} or \code{"QN"})
-and \code{samplestats = FALSE}, which skips lavaan's sample statistics (faster, for simulations).}
+\item{...}{Additional arguments for \code{\link[lavaan:lavaan]{lavaan::lavaan()}}, including \code{optim.method} (\code{"SA-QN"}, \code{"SA"} or \code{"QN"}),
+and, for faster fits in simulations, \code{test = "none"}, which skips the mean and variance adjusted test, and
+\code{samplestats = FALSE}, which skips lavaan's sample statistics.}
 }
 \value{
 An object of class \code{\link[=lavaan.pl-class]{lavaan.pl}}.

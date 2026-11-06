@@ -1,7 +1,7 @@
 #### Fitting functions ####
 lavaan_pl_fitters <- list(
-  cfa = function(...) lavaan.pl::pmlcfa(..., control = set_qn_control()),
-  sem = function(...) lavaan.pl::pmlsem(..., control = set_qn_control())
+  cfa = function(...) lavaan.pl::pmlcfa(..., ordered = FALSE, control = set_qn_control()),
+  sem = function(...) lavaan.pl::pmlsem(..., ordered = FALSE, control = set_qn_control())
 )
 lavaan_pml_fitters <- list(
   cfa = function(...) lavaan::cfa(..., estimator = "PML"),
@@ -31,7 +31,7 @@ for (item in c("A2", "A3", "C2", "C3")) {
 bfi_600 <- bfi_sample(eight_items, 600)
 bfi_800 <- bfi_sample(twelve_items, 800)
 
-simulated_loadings <- lavaan.pl:::build_constr_mat(12, 2, "simple")
+simulated_loadings <- build_constr_mat(12, 2, "simple")
 simulated_loadings[is.na(simulated_loadings)] <- c(
   .4,
   .5,
@@ -46,7 +46,7 @@ simulated_loadings[is.na(simulated_loadings)] <- c(
   .8,
   .9
 )
-simulated_complete <- lavaan.pl:::sim_data(
+simulated_complete <- sim_data(
   1000,
   simulated_loadings,
   c(-1.5, .5, 1.5),

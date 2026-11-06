@@ -5,53 +5,53 @@
 \title{Control options of the pairwise stochastic approximation}
 \usage{
 set_sa_control(
-  PAIRS_PER_ITERATION = 16,
-  ALPHA = 0.2,
-  ADAM_EPOCHS = NULL,
-  PRECONDITION_EPOCHS = 3,
-  MAX_PRECONDITION_EPOCHS = 20,
-  AVERAGE_EPOCHS = 50,
-  TOL = 0.05,
-  DECAY = 0.75,
-  AVG_FROM = 0.25,
-  GAIN = c("auto", "hessian", "diagonal"),
-  SEED = 123
+  pairs_per_iteration = 16,
+  alpha = 0.2,
+  adam_epochs = NULL,
+  precondition_epochs = 3,
+  max_precondition_epochs = 20,
+  average_epochs = 50,
+  tol = 0.05,
+  decay = 0.75,
+  avg_from = 0.25,
+  gain = c("auto", "hessian", "diagonal"),
+  seed = 123
 )
 }
 \arguments{
-\item{PAIRS_PER_ITERATION}{Number of item pairs drawn at each iteration.}
+\item{pairs_per_iteration}{Number of item pairs drawn at each iteration.}
 
-\item{ALPHA}{Step length of the Adam phase, divided by the square root of the number of
+\item{alpha}{Step length of the Adam phase, divided by the square root of the number of
 iterations per epoch.}
 
-\item{ADAM_EPOCHS}{Maximum number of epochs of the Adam phase. If \code{NULL}, 5, or as many as make 150 iterations on small
+\item{adam_epochs}{Maximum number of epochs of the Adam phase. If \code{NULL}, 5, or as many as make 150 iterations on small
 models, whose epochs are short.}
 
-\item{PRECONDITION_EPOCHS}{Number of epochs of the preconditioning phase, which draws each pair once per epoch,
+\item{precondition_epochs}{Number of epochs of the preconditioning phase, which draws each pair once per epoch,
 recomputes the observed information as the gain after each epoch, and takes stochastic Newton steps with it. The
 gain is then frozen, unless the observed information is not positive definite. With \code{0}, the gain is computed at
 the end of the Adam phase.}
 
-\item{MAX_PRECONDITION_EPOCHS}{Maximum number of epochs of the preconditioning phase while the observed information
+\item{max_precondition_epochs}{Maximum number of epochs of the preconditioning phase while the observed information
 is not positive definite.}
 
-\item{AVERAGE_EPOCHS}{Number of epochs of the averaged phase, at least 1.}
+\item{average_epochs}{Number of epochs of the averaged phase, at least 1.}
 
-\item{TOL}{Absolute change of the pairwise log-likelihood at the epoch average, per free parameter, below which, at
+\item{tol}{Absolute change of the pairwise log-likelihood at the epoch average, per free parameter, below which, at
 two consecutive epochs, the Adam or the preconditioning phase ends before its maximum.}
 
-\item{DECAY}{Exponent of the step length decay in the averaged phase, in \eqn{(1/2, 1)}.}
+\item{decay}{Exponent of the step length decay in the averaged phase, in \eqn{(1/2, 1)}.}
 
-\item{AVG_FROM}{Fraction of the averaged phase discarded before averaging.}
+\item{avg_from}{Fraction of the averaged phase discarded before averaging.}
 
-\item{GAIN}{Gain of the preconditioning and averaged phases: \code{"hessian"} (inverse observed information),
+\item{gain}{Gain of the preconditioning and averaged phases: \code{"hessian"} (inverse observed information),
 \code{"diagonal"} (Adam's diagonal preconditioner, no preconditioning phase), or \code{"auto"} (\code{"hessian"} up to 2000 free
 parameters).}
 
-\item{SEED}{Seed of the pair sampling.}
+\item{seed}{Seed of the pair sampling.}
 }
 \value{
-An object of class \code{latpl_sa_control} to be passed to \code{\link[=lavaan.pl]{lavaan.pl()}} via \code{control}.
+An object of class \code{lavaanpl_sa_control} to be passed to \code{\link[=lavaan.pl]{lavaan.pl()}} via \code{control}.
 }
 \description{
 The \code{SA} method. It draws item pairs at each iteration, uniformly and independently across iterations, and runs in

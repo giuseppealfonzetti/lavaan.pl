@@ -24,7 +24,7 @@ lavTestLRT <- function(object, ..., model_names = NULL) {
 
   names(mods) <- make.unique(model_names)
   mods <- mods[order(vapply(mods, function(x) x@test[[1]]$df, numeric(1)))]
-  fits <- lapply(mods, get_latpl_fit)
+  fits <- lapply(mods, get_lavaanpl_internal)
   stat_delta <- df_delta <- rep(NA, length(mods))
   for (m in seq_len(length(mods) - 1)) {
     out <- compute_plrt(fits[[m + 1]], H1 = fits[[m]])$model

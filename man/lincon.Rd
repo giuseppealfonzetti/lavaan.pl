@@ -7,7 +7,7 @@
 lincon(MODEL, NTHR)
 }
 \arguments{
-\item{MODEL}{Model object from \code{\link[=set_latpl_model]{set_latpl_model()}} or \code{\link[=set_latpl_groups]{set_latpl_groups()}}.}
+\item{MODEL}{Model object from \code{\link[=lavaanpl_groups]{lavaanpl_groups()}}.}
 
 \item{NTHR}{Number of thresholds in each group.}
 }
@@ -19,6 +19,6 @@ vector, and the positions \code{free_idx} of the free parameters in it.
 Linear constraints on the parameters
 }
 \seealso{
-\code{\link[=fit_latpl]{fit_latpl()}}, \code{\link[=theta_names]{theta_names()}}
+\code{\link[=fit_lavaanpl]{fit_lavaanpl()}}, \code{\link[=parameter_names]{parameter_names()}}
 }
 \keyword{internal}

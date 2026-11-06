@@ -1,11 +1,13 @@
+source("fixtures/simulate.R")
 #### Data and models ####
-loadings_structure <- lavaan.pl:::build_constr_mat(9, 3, "simple")
+loadings_structure <- build_constr_mat(9, 3, "simple")
 loadings_structure[4, 1] <- NA
+loadings_markers <- replace(loadings_structure, cbind(c(1, 4, 7), 1:3), 1)
 latent_correlations <- matrix(.3, 3, 3)
 diag(latent_correlations) <- 1
-items <- lavaan.pl:::sim_data(
+items <- sim_data(
   300,
-  lavaan.pl:::gen_loadings(loadings_structure, SEED = 1, LB = .4, UB = .8),
+  gen_loadings(loadings_structure, SEED = 1, LB = .4, UB = .8),
   c(-1, 0.3, 1),
   latent_correlations,
   SEED = 3
@@ -14,7 +16,7 @@ items[, 1:3] <- 1 * (items[, 1:3] >= 2)
 items_missing <- items
 set.seed(4)
 items_missing[sample(length(items_missing), 150)] <- NA
-data_missing <- lavaan.pl:::set_latpl_data(items_missing, MISSING = "available.cases")
+data_missing <- lavaan.pl:::lavaanpl_data(items_missing, MISSING = "available.cases")
 regressions <- matrix(0, 3, 3)
 regressions[2, 1] <- regressions[3, 1] <- regressions[3, 2] <- NA
 residual_covariances <- matrix(0, 9, 9)
@@ -99,7 +101,7 @@ pair_gradients <- function(fit, theta) {
 }
 
 expect_derivatives <- function(fit) {
-  block <- lavaan.pl:::theta_block(fit$model, sum(fit$data$cat - 1))
+  block <- lavaan.pl:::parameter_blocks(fit$model, sum(fit$data$cat - 1))
   size <- function(name) sum(block == name)
   theta <- numeric(length(block))
   theta[block == "tau"] <- unlist(rep(
@@ -127,7 +129,7 @@ expect_derivatives <- function(fit) {
     function(x) pl(x, 1L)$gradient,
     theta
   ) /
-    fit$dims$n
+    fit$data$n
   scores <- unit_scores(fit, theta)
   expect_equal(
     gradient,
@@ -141,7 +143,7 @@ expect_derivatives <- function(fit) {
   )
   expect_equal(hj$gradient, gradient)
   expect_equal(colSums(scores), gradient)
-  expect_equal(hj$J, crossprod(scores) / fit$dims$n)
+  expect_equal(hj$J, crossprod(scores) / fit$data$n)
   if (!any(fit$data$numeric)) {
     per_pair <- pair_gradients(fit, theta)
     expect_equal(rowSums(per_pair), gradient)
@@ -163,10 +165,10 @@ expect_derivatives <- function(fit) {
 }
 
 engine_only <- function(data, model) {
-  suppressWarnings(lavaan.pl:::fit_latpl(
+  suppressWarnings(lavaan.pl:::fit_lavaanpl(
     data,
     model,
-    CONTROL = set_qn_control(MAXEVAL = 1)
+    CONTROL = set_qn_control(maxeval = 1)
   ))
 }
 
@@ -176,13 +178,12 @@ for (latent_form in c("orthogonal", "lkj", "direct")) {
     for (structural in c(FALSE, TRUE)) {
       expect_derivatives(engine_only(
         data_missing,
-        lavaan.pl:::set_latpl_model(
-          loadings_structure,
-          STDLV = stdlv,
-          CORRFLAG = latent_form != "orthogonal",
+        lavaan.pl:::lavaanpl_model(
+          if (stdlv) loadings_structure else loadings_markers,
+          PSI = replace(matrix(if (latent_form == "orthogonal") 0 else NA, 3, 3), cbind(1:3, 1:3), if (stdlv) 1 else NA),
           LATCOV = if (latent_form == "direct") "direct" else "lkj",
-          REGMAT = if (structural) regressions,
-          RESCOV = if (structural) residual_covariances
+          BETA = if (structural) regressions,
+          THETA = if (structural) residual_covariances
         )
       ))
     }
@@ -200,16 +201,16 @@ for (parameterization in c("delta", "theta")) {
         }
         expect_derivatives(engine_only(
           data_missing,
-          lavaan.pl:::set_latpl_model(
-            loadings_structure,
-            STDLV = FALSE,
+          lavaan.pl:::lavaanpl_model(
+            loadings_markers,
+            PSI = matrix(NA, 3, 3),
             LATCOV = latent_form,
-            REGMAT = if (structural) regressions,
-            RESCOV = if (structural || parameterization == "theta") rescov,
+            BETA = if (structural) regressions,
+            THETA = if (structural || parameterization == "theta") rescov,
             PARAMETERIZATION = parameterization,
-            INTERCEPTS = c(NA, 0.1, NA, NA, 0, NA, -0.1, NA, NA),
-            MEANS = c(NA, 0.2, NA),
-            SCALES = if (parameterization == "delta") {
+            NU = c(NA, 0.1, NA, NA, 0, NA, -0.1, NA, NA),
+            ALPHA = c(NA, 0.2, NA),
+            DELTA = if (parameterization == "delta") {
               c(NA, 1.1, NA, NA, 1, NA, 0.9, NA, NA)
             }
           )
@@ -221,20 +222,20 @@ for (parameterization in c("delta", "theta")) {
 
 #### Gradient, H, J and Jacobians with two groups, the second with a mean structure ####
 local({
-  data_two_groups <- lavaan.pl:::set_latpl_data(
+  data_two_groups <- lavaan.pl:::lavaanpl_data(
     items_missing,
     MISSING = "available.cases",
     GROUP = rep(c("a", "b"), length.out = nrow(items_missing))
   )
-  model_two_groups <- lavaan.pl:::set_latpl_groups(list(
-    lavaan.pl:::set_latpl_model(loadings_structure, LATCOV = "direct"),
-    lavaan.pl:::set_latpl_model(
-      loadings_structure,
-      STDLV = FALSE,
+  model_two_groups <- lavaan.pl:::lavaanpl_groups(list(
+    lavaan.pl:::lavaanpl_model(loadings_structure, LATCOV = "direct"),
+    lavaan.pl:::lavaanpl_model(
+      loadings_markers,
+      PSI = matrix(NA, 3, 3),
       PARAMETERIZATION = "theta",
-      RESCOV = diag(c(NA, 1, NA, 1, 1, 1, 1, 1, 1)),
-      INTERCEPTS = c(NA, 0.1, rep(0, 7)),
-      MEANS = c(NA, 0, 0.2)
+      THETA = diag(c(NA, 1, NA, 1, 1, 1, 1, 1, 1)),
+      NU = c(NA, 0.1, rep(0, 7)),
+      ALPHA = c(NA, 0, 0.2)
     )
   ))
   expect_derivatives(engine_only(data_two_groups, model_two_groups))
@@ -247,7 +248,7 @@ if (at_home()) local({
     rbinom(nrow(items_missing), 1, .5),
     sample(c(-1, 0, 2), nrow(items_missing), TRUE)
   )
-  data_covariates <- lavaan.pl:::set_latpl_data(
+  data_covariates <- lavaan.pl:::lavaanpl_data(
     items_missing,
     MISSING = "available.cases",
     X = covariates
@@ -262,12 +263,12 @@ if (at_home()) local({
       for (structural in c(FALSE, TRUE)) {
         expect_derivatives(engine_only(
           data_covariates,
-          lavaan.pl:::set_latpl_model(
-            loadings_structure,
-            STDLV = stdlv,
+          lavaan.pl:::lavaanpl_model(
+            if (stdlv) loadings_structure else loadings_markers,
+            PSI = if (!stdlv) matrix(NA, 3, 3),
             LATCOV = latent_form,
-            REGMAT = if (structural) regressions,
-            RESCOV = if (structural) residual_covariances,
+            BETA = if (structural) regressions,
+            THETA = if (structural) residual_covariances,
             GAMMA = gamma,
             KAPPA = kappa
           )
@@ -277,31 +278,31 @@ if (at_home()) local({
   }
   expect_derivatives(engine_only(
     data_covariates,
-    lavaan.pl:::set_latpl_model(
-      loadings_structure,
-      STDLV = FALSE,
+    lavaan.pl:::lavaanpl_model(
+      loadings_markers,
+      PSI = matrix(NA, 3, 3),
       PARAMETERIZATION = "theta",
-      RESCOV = diag(c(NA, 1.2, NA, 1, NA, 0.8, NA, 1, NA)),
-      INTERCEPTS = c(NA, 0.1, NA, NA, 0, NA, -0.1, NA, NA),
-      MEANS = c(NA, 0.2, NA),
+      THETA = diag(c(NA, 1.2, NA, 1, NA, 0.8, NA, 1, NA)),
+      NU = c(NA, 0.1, NA, NA, 0, NA, -0.1, NA, NA),
+      ALPHA = c(NA, 0.2, NA),
       GAMMA = gamma,
       KAPPA = kappa
     )
   ))
   expect_derivatives(engine_only(
     data_covariates,
-    lavaan.pl:::set_latpl_model(
-      loadings_structure,
-      STDLV = FALSE,
-      REGMAT = regressions,
-      INTERCEPTS = c(NA, 0.1, NA, NA, 0, NA, -0.1, NA, NA),
-      MEANS = c(NA, 0.2, NA),
-      SCALES = c(NA, 1.1, NA, NA, 1, NA, 0.9, NA, NA),
+    lavaan.pl:::lavaanpl_model(
+      loadings_markers,
+      PSI = matrix(NA, 3, 3),
+      BETA = regressions,
+      NU = c(NA, 0.1, NA, NA, 0, NA, -0.1, NA, NA),
+      ALPHA = c(NA, 0.2, NA),
+      DELTA = c(NA, 1.1, NA, NA, 1, NA, 0.9, NA, NA),
       GAMMA = gamma,
       KAPPA = kappa
     )
   ))
-  data_covariate_groups <- lavaan.pl:::set_latpl_data(
+  data_covariate_groups <- lavaan.pl:::lavaanpl_data(
     items_missing,
     MISSING = "available.cases",
     GROUP = rep(c("a", "b"), length.out = nrow(items_missing)),
@@ -309,9 +310,9 @@ if (at_home()) local({
   )
   expect_derivatives(engine_only(
     data_covariate_groups,
-    lavaan.pl:::set_latpl_groups(list(
-      lavaan.pl:::set_latpl_model(loadings_structure, GAMMA = gamma),
-      lavaan.pl:::set_latpl_model(loadings_structure, KAPPA = kappa)
+    lavaan.pl:::lavaanpl_groups(list(
+      lavaan.pl:::lavaanpl_model(loadings_structure, GAMMA = gamma),
+      lavaan.pl:::lavaanpl_model(loadings_structure, KAPPA = kappa)
     ))
   ))
 })
@@ -324,14 +325,14 @@ if (at_home()) local({
   mixed[, numeric_items] <- 0.5 * mixed[, numeric_items] + rnorm(3 * nrow(items))
   mixed[sample(length(mixed), 100)] <- NA
   covariates <- cbind(rnorm(nrow(items)), rbinom(nrow(items), 1, .5))
-  data_mixed <- lavaan.pl:::set_latpl_data(mixed, MISSING = "pairwise", NUMERIC = numeric_items)
-  data_covariates <- lavaan.pl:::set_latpl_data(
+  data_mixed <- lavaan.pl:::lavaanpl_data(mixed, MISSING = "pairwise", NUMERIC = numeric_items)
+  data_covariates <- lavaan.pl:::lavaanpl_data(
     mixed,
     MISSING = "pairwise",
     NUMERIC = numeric_items,
     X = covariates
   )
-  data_groups <- lavaan.pl:::set_latpl_data(
+  data_groups <- lavaan.pl:::lavaanpl_data(
     mixed,
     MISSING = "pairwise",
     NUMERIC = numeric_items,
@@ -346,20 +347,20 @@ if (at_home()) local({
     for (stdlv in c(TRUE, FALSE)) {
       for (structural in c(FALSE, TRUE)) {
         model_arguments <- list(
-          loadings_structure,
-          STDLV = stdlv,
+          if (stdlv) loadings_structure else loadings_markers,
+          PSI = if (!stdlv) matrix(NA, 3, 3),
           LATCOV = latent_form,
-          REGMAT = if (structural) regressions,
-          RESCOV = if (structural) residual_covariances,
+          BETA = if (structural) regressions,
+          THETA = if (structural) replace(residual_covariances, cbind(which(numeric_items), which(numeric_items)), NA),
           NUMERIC = numeric_items
         )
         expect_derivatives(engine_only(
           data_mixed,
-          do.call(lavaan.pl:::set_latpl_model, model_arguments)
+          do.call(lavaan.pl:::lavaanpl_model, model_arguments)
         ))
         expect_derivatives(engine_only(
           data_covariates,
-          do.call(lavaan.pl:::set_latpl_model, c(model_arguments, list(GAMMA = gamma, KAPPA = kappa)))
+          do.call(lavaan.pl:::lavaanpl_model, c(model_arguments, list(GAMMA = gamma, KAPPA = kappa)))
         ))
       }
     }
@@ -368,13 +369,13 @@ if (at_home()) local({
   rescov_theta[1, 2] <- rescov_theta[2, 1] <- NA
   expect_derivatives(engine_only(
     data_covariates,
-    lavaan.pl:::set_latpl_model(
-      loadings_structure,
-      STDLV = FALSE,
+    lavaan.pl:::lavaanpl_model(
+      loadings_markers,
+      PSI = matrix(NA, 3, 3),
       PARAMETERIZATION = "theta",
-      RESCOV = rescov_theta,
-      INTERCEPTS = c(NA, 0.1, NA, NA, NA, NA, -0.1, NA, NA),
-      MEANS = c(NA, 0.2, NA),
+      THETA = rescov_theta,
+      NU = c(NA, 0.1, NA, NA, NA, NA, -0.1, NA, NA),
+      ALPHA = c(NA, 0.2, NA),
       GAMMA = gamma,
       KAPPA = kappa,
       NUMERIC = numeric_items
@@ -382,13 +383,14 @@ if (at_home()) local({
   ))
   expect_derivatives(engine_only(
     data_covariates,
-    lavaan.pl:::set_latpl_model(
-      loadings_structure,
-      STDLV = FALSE,
-      REGMAT = regressions,
-      INTERCEPTS = c(NA, 0.1, NA, NA, 0.2, NA, -0.1, NA, NA),
-      MEANS = c(NA, 0.2, NA),
-      SCALES = c(NA, 1.1, NA, NA, 1.3, NA, 0.9, NA, NA),
+    lavaan.pl:::lavaanpl_model(
+      loadings_markers,
+      PSI = matrix(NA, 3, 3),
+      BETA = regressions,
+      NU = c(NA, 0.1, NA, NA, 0.2, NA, -0.1, NA, NA),
+      ALPHA = c(NA, 0.2, NA),
+      THETA = diag(c(NA, 0, 0, 0, 1.3^2, 0, 0, 0, NA)),
+      DELTA = c(1, 1.1, NA, NA, 1, NA, 0.9, NA, NA),
       GAMMA = gamma,
       KAPPA = kappa,
       NUMERIC = numeric_items
@@ -396,9 +398,9 @@ if (at_home()) local({
   ))
   expect_derivatives(engine_only(
     data_groups,
-    lavaan.pl:::set_latpl_groups(list(
-      lavaan.pl:::set_latpl_model(loadings_structure, GAMMA = gamma, NUMERIC = numeric_items),
-      lavaan.pl:::set_latpl_model(loadings_structure, KAPPA = kappa, NUMERIC = numeric_items)
+    lavaan.pl:::lavaanpl_groups(list(
+      lavaan.pl:::lavaanpl_model(loadings_structure, GAMMA = gamma, NUMERIC = numeric_items),
+      lavaan.pl:::lavaanpl_model(loadings_structure, KAPPA = kappa, NUMERIC = numeric_items)
     ))
   ))
 })
@@ -412,22 +414,22 @@ local({
   mixed[sample(length(mixed), 40)] <- NA
   covariates <- cbind(rnorm(nrow(mixed)), rbinom(nrow(mixed), 1, .5))
   cases <- list(
-    lavaan.pl:::set_latpl_data(items[, 4:9], X = covariates[, 2, drop = FALSE]),
-    lavaan.pl:::set_latpl_data(items_missing[, 4:9], MISSING = "available.cases", X = covariates[, 2, drop = FALSE]),
-    lavaan.pl:::set_latpl_data(items[, 4:9], X = covariates),
-    lavaan.pl:::set_latpl_data(mixed, MISSING = "pairwise", NUMERIC = numeric_items),
-    lavaan.pl:::set_latpl_data(mixed, MISSING = "pairwise", NUMERIC = numeric_items, X = covariates)
+    lavaan.pl:::lavaanpl_data(items[, 4:9], X = covariates[, 2, drop = FALSE]),
+    lavaan.pl:::lavaanpl_data(items_missing[, 4:9], MISSING = "available.cases", X = covariates[, 2, drop = FALSE]),
+    lavaan.pl:::lavaanpl_data(items[, 4:9], X = covariates),
+    lavaan.pl:::lavaanpl_data(mixed, MISSING = "pairwise", NUMERIC = numeric_items),
+    lavaan.pl:::lavaanpl_data(mixed, MISSING = "pairwise", NUMERIC = numeric_items, X = covariates)
   )
   for (data in cases) {
     numeric_item <- data$numeric
     nx <- ncol(data$X)
     engine_data <- lavaan.pl:::engine(
       data,
-      lavaan.pl:::set_latpl_model(
-        lavaan.pl:::build_constr_mat(6, 2, "simple"),
+      lavaan.pl:::lavaanpl_groups(list(lavaan.pl:::lavaanpl_model(
+        build_constr_mat(6, 2, "simple"),
         GAMMA = if (nx) matrix(0, 2, nx),
         NUMERIC = numeric_item
-      )
+      )))
     )$data[[1]]
     items_block <- c(
       unlist(lapply((data$cat - 1)[!numeric_item], function(m) seq(-0.8, 0.8, length.out = m))),
@@ -469,11 +471,11 @@ local({
 #### Frequency weights give the H and J of replicated rows ####
 local({
   items_complete <- items[, 4:9]
-  model <- lavaan.pl:::set_latpl_model(lavaan.pl:::build_constr_mat(6, 2, "simple"))
+  model <- lavaan.pl:::lavaanpl_model(build_constr_mat(6, 2, "simple"))
   set.seed(2)
   weights <- sample(1:3, nrow(items_complete), replace = TRUE)
-  fit_weighted <- lavaan.pl:::fit_latpl(
-    lavaan.pl:::set_latpl_data(
+  fit_weighted <- lavaan.pl:::fit_lavaanpl(
+    lavaan.pl:::lavaanpl_data(
       items_complete,
       WEIGHTS = weights,
       WEIGHTS_TYPE = "frequency"
@@ -481,14 +483,14 @@ local({
     model,
     CONTROL = set_qn_control()
   )
-  fit_replicated <- lavaan.pl:::fit_latpl(
-    lavaan.pl:::set_latpl_data(items_complete[
+  fit_replicated <- lavaan.pl:::fit_lavaanpl(
+    lavaan.pl:::lavaanpl_data(items_complete[
       rep(seq_len(nrow(items_complete)), weights),
     ]),
     model,
     CONTROL = set_qn_control()
   )
-  theta <- fit_weighted$theta + 0.05
+  theta <- fit_weighted$parameter_vector + 0.05
   hj_weighted <- lavaan.pl:::cpp_HJ(
     theta,
     fit_weighted$engine$model,
@@ -506,17 +508,17 @@ local({
 #### J with design weights and clusters sums the weighted unit scores within clusters ####
 local({
   items_complete <- items[, 4:9]
-  model <- lavaan.pl:::set_latpl_model(lavaan.pl:::build_constr_mat(6, 2, "simple"))
+  model <- lavaan.pl:::lavaanpl_model(build_constr_mat(6, 2, "simple"))
   set.seed(2)
   weights <- sample(1:3, nrow(items_complete), replace = TRUE)
   clusters <- rep(1:30, length.out = nrow(items_complete))
-  fit_unweighted <- lavaan.pl:::fit_latpl(lavaan.pl:::set_latpl_data(items_complete), model, CONTROL = set_qn_control())
-  fit_clustered <- lavaan.pl:::fit_latpl(
-    lavaan.pl:::set_latpl_data(items_complete, WEIGHTS = weights, CLUSTER = clusters),
+  fit_unweighted <- lavaan.pl:::fit_lavaanpl(lavaan.pl:::lavaanpl_data(items_complete), model, CONTROL = set_qn_control())
+  fit_clustered <- lavaan.pl:::fit_lavaanpl(
+    lavaan.pl:::lavaanpl_data(items_complete, WEIGHTS = weights, CLUSTER = clusters),
     model,
     CONTROL = set_qn_control()
   )
-  theta <- fit_unweighted$theta + 0.05
+  theta <- fit_unweighted$parameter_vector + 0.05
   hj <- lavaan.pl:::cpp_HJ(
     theta,
     fit_clustered$engine$model,
@@ -533,21 +535,21 @@ local({
 #### J with clusters in two groups sums the unit scores within the clusters of each group ####
 local({
   items_complete <- items[, 4:9]
-  model <- lavaan.pl:::set_latpl_model(lavaan.pl:::build_constr_mat(6, 2, "simple"))
-  model_two_groups <- lavaan.pl:::set_latpl_groups(list(model, model))
+  model <- lavaan.pl:::lavaanpl_model(build_constr_mat(6, 2, "simple"))
+  model_two_groups <- lavaan.pl:::lavaanpl_groups(list(model, model))
   group <- rep(1:2, each = 150)
   clusters <- rep(1:15, length.out = 300)
-  fit_unclustered <- lavaan.pl:::fit_latpl(
-    lavaan.pl:::set_latpl_data(items_complete, GROUP = group),
+  fit_unclustered <- lavaan.pl:::fit_lavaanpl(
+    lavaan.pl:::lavaanpl_data(items_complete, GROUP = group),
     model_two_groups,
     CONTROL = set_qn_control()
   )
-  fit_clustered <- lavaan.pl:::fit_latpl(
-    lavaan.pl:::set_latpl_data(items_complete, CLUSTER = clusters, GROUP = group),
+  fit_clustered <- lavaan.pl:::fit_lavaanpl(
+    lavaan.pl:::lavaanpl_data(items_complete, CLUSTER = clusters, GROUP = group),
     model_two_groups,
     CONTROL = set_qn_control()
   )
-  theta <- fit_unclustered$theta + 0.05
+  theta <- fit_unclustered$parameter_vector + 0.05
   hj <- lavaan.pl:::cpp_HJ(
     theta,
     fit_clustered$engine$model,
@@ -564,7 +566,7 @@ local({
 
 #### Gradient and blocks of the Hessian of the saturated model ####
 local({
-  data <- lavaan.pl:::set_latpl_data(items_missing[, 4:9], MISSING = "available.cases")
+  data <- lavaan.pl:::lavaanpl_data(items_missing[, 4:9], MISSING = "available.cases")
   engine_data <- list(
     N = data$n,
     C_VEC = data$cat,

@@ -16,6 +16,6 @@ The unconstrained latent correlation parameters, one per pair of latent variable
 LKJ parameters from a correlation matrix
 }
 \seealso{
-\code{\link[=lkj]{lkj()}}, \code{\link[=par2theta]{par2theta()}}
+\code{\link[=lkj]{lkj()}}, \code{\link[=matrices_to_vector]{matrices_to_vector()}}
 }
 \keyword{internal}

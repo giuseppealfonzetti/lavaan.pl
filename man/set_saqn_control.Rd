@@ -5,55 +5,55 @@
 \title{Control options of quasi-Newton from the burn-in of stochastic approximation}
 \usage{
 set_saqn_control(
-  PAIRS_PER_ITERATION = 16,
-  ALPHA = 0.2,
-  ADAM_EPOCHS = NULL,
-  PRECONDITION_EPOCHS = 3,
-  MAX_PRECONDITION_EPOCHS = 20,
-  TOL = 0.05,
-  SEED = 123,
-  NSTARTS = 1,
-  GRTOL = 1e-06,
-  XTOL = 1e-12,
-  STEPMAX = 1,
-  MAXEVAL = 500
+  pairs_per_iteration = 16,
+  alpha = 0.2,
+  adam_epochs = NULL,
+  precondition_epochs = 3,
+  max_precondition_epochs = 20,
+  tol = 0.05,
+  seed = 123,
+  nstarts = 1,
+  grtol = 1e-06,
+  xtol = 1e-12,
+  stepmax = 1,
+  maxeval = 500
 )
 }
 \arguments{
-\item{PAIRS_PER_ITERATION}{Number of item pairs drawn at each iteration.}
+\item{pairs_per_iteration}{Number of item pairs drawn at each iteration.}
 
-\item{ALPHA}{Step length of the Adam phase, divided by the square root of the number of
+\item{alpha}{Step length of the Adam phase, divided by the square root of the number of
 iterations per epoch.}
 
-\item{ADAM_EPOCHS}{Maximum number of epochs of the Adam phase. If \code{NULL}, 5, or as many as make 150 iterations on small
+\item{adam_epochs}{Maximum number of epochs of the Adam phase. If \code{NULL}, 5, or as many as make 150 iterations on small
 models, whose epochs are short.}
 
-\item{PRECONDITION_EPOCHS}{Number of epochs of the preconditioning phase, which draws each pair once per epoch,
+\item{precondition_epochs}{Number of epochs of the preconditioning phase, which draws each pair once per epoch,
 recomputes the observed information as the gain after each epoch, and takes stochastic Newton steps with it. The
 gain is then frozen, unless the observed information is not positive definite. With \code{0}, the gain is computed at
 the end of the Adam phase.}
 
-\item{MAX_PRECONDITION_EPOCHS}{Maximum number of epochs of the preconditioning phase while the observed information
+\item{max_precondition_epochs}{Maximum number of epochs of the preconditioning phase while the observed information
 is not positive definite.}
 
-\item{TOL}{Absolute change of the pairwise log-likelihood at the epoch average, per free parameter, below which, at
+\item{tol}{Absolute change of the pairwise log-likelihood at the epoch average, per free parameter, below which, at
 two consecutive epochs, the Adam or the preconditioning phase ends before its maximum.}
 
-\item{SEED}{Seed of the pair sampling.}
+\item{seed}{Seed of the pair sampling.}
 
-\item{NSTARTS}{Number of full runs from the same starting values, with seeds \code{SEED}, \code{SEED + 1} and so on. The highest
+\item{nstarts}{Number of full runs from the same starting values, with seeds \code{seed}, \code{seed + 1} and so on. The highest
 pairwise log-likelihood is kept, with a warning if the runs disagree. Each run adds its full cost.}
 
-\item{GRTOL}{Tolerance on the largest absolute gradient element.}
+\item{grtol}{Tolerance on the largest absolute gradient element.}
 
-\item{XTOL}{Tolerance on the relative step length.}
+\item{xtol}{Tolerance on the relative step length.}
 
-\item{STEPMAX}{Initial maximal step length of the trust region.}
+\item{stepmax}{Initial maximal step length of the trust region.}
 
-\item{MAXEVAL}{Maximum number of function evaluations.}
+\item{maxeval}{Maximum number of function evaluations.}
 }
 \value{
-An object of class \code{latpl_saqn_control} to be passed to \code{\link[=lavaan.pl]{lavaan.pl()}} via \code{control}.
+An object of class \code{lavaanpl_saqn_control} to be passed to \code{\link[=lavaan.pl]{lavaan.pl()}} via \code{control}.
 }
 \description{
 The \code{SA-QN} method: the Adam and preconditioning phases of \code{\link[=set_sa_control]{set_sa_control()}}, without the averaged phase, followed by

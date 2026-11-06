@@ -1,14 +1,14 @@
-#' Show method for the output of fit_latpl()
-#' @param x Object of class latpl_fit
+#' Show method for the output of fit_lavaanpl()
+#' @param x Object of class lavaanpl_internal
 #' @param ... Additional arguments
 #' @keywords internal
 #' @export
-print.latpl_fit <- function(x, ...){
+print.lavaanpl_internal <- function(x, ...){
 
   cat( "- Dimensions:\n",
-       "  - Sample size:", x$dims$n, "\n",
-       "  - Items:", x$dims$p,  "(", x$dims$pairs, " pairs)\n",
-       "  - Groups:", x$dims$ngroups, "\n",
+       "  - Sample size:", x$data$n, "\n",
+       "  - Items:", x$data$p,  "(", x$data$pairs, " pairs)\n",
+       "  - Groups:", x$data$ngroups, "\n",
        "  - Latent traits:", x$dims$q,"\n\n",
        "- Free parameters:\n",
        "  - Thresholds:", x$dims$nthr, "\n",
@@ -31,42 +31,42 @@ print.latpl_fit <- function(x, ...){
     cat(
       "- Estimate from the", x$method, "method (ucminf).\n\n",
       "   Estimation time:", round(x$RTime, 2), "s\n",
-      "   Data reduction:", round(x$data$freqTime,2), "s (in set_latpl_data())\n",
+      "   Data reduction:", round(x$data$freqTime,2), "s (in lavaanpl_data())\n",
       "   Cores used:", x$cores, "\n",
 
-      "\n- Use get_par() to extract parameter estimates."
+      "\n- Use vector_to_matrices() to extract the model matrices."
 
     )
   }else{
     cat(
       "- Estimate from the ", x$method, " method\n\n",
-      "    Pairs per iteration:", x$stoFit$pairs_per_iteration, " out of ", x$dims$pairs, "\n",
-      "    Epochs: Adam", x$stoFit$adam_epochs, "| preconditioning", x$stoFit$precondition_epochs, "| averaged", x$control$AVERAGE_EPOCHS,
+      "    Pairs per iteration:", x$stoFit$pairs_per_iteration, " out of ", x$data$pairs, "\n",
+      "    Epochs: Adam", x$stoFit$adam_epochs, "| preconditioning", x$stoFit$precondition_epochs, "| averaged", x$control$average_epochs,
       "(", x$stoFit$epoch_length, "iterations each, gain:", x$stoFit$gain, ")\n",
       "    Rejected steps:", x$stoFit$rejections, "(", x$stoFit$rejections_averaging, "in the averaged phase )\n",
       "    Converged:", x$stoFit$converged, "\n",
       "    Largest distance from the optimum:", if (isTRUE(x$stoFit$check$pd)) signif(x$stoFit$check$distance, 2) else "not available", "standard errors\n",
       "    Estimation time:", round(x$RTime, 2), "s\n",
-      "    Data reduction:", round(x$data$freqTime,2), "s (in set_latpl_data())\n",
+      "    Data reduction:", round(x$data$freqTime,2), "s (in lavaanpl_data())\n",
       "    Cores used:", x$cores, "\n",
 
 
-      "\n- Use get_par() to extract parameter estimates."
+      "\n- Use vector_to_matrices() to extract the model matrices."
     )
   }
   invisible(x)
 }
 
-#' Print method for `latpl_data` objects
+#' Print method for `lavaanpl_data` objects
 #'
-#' @param x A `latpl_data` object.
+#' @param x A `lavaanpl_data` object.
 #' @param ... Ignored.
 #'
-#' @rdname set_latpl_data
+#' @rdname lavaanpl_data
 #' @export
-print.latpl_data <- function(x, ...) {
+print.lavaanpl_data <- function(x, ...) {
   cat(
-    "<latpl_data>", x$n, "observations,", x$p, "items (", x$p * (x$p - 1) / 2, "pairs )\n",
+    "<lavaanpl_data>", x$n, "observations,", x$p, "items (", x$pairs, "pairs )\n",
     " Numeric items:", sum(x$numeric), "\n",
     " Categories per ordinal item:", if (all(x$numeric)) "none" else paste(range(x$cat[!x$numeric]), collapse = " to "), "\n",
     " Missing values:", sum(is.na(x$Y)), "(", x$missing, ")\n",
@@ -78,109 +78,82 @@ print.latpl_data <- function(x, ...) {
   invisible(x)
 }
 
-#' Print method for `latpl_model` objects
+#' Print method for `lavaanpl_model` objects
 #'
-#' @param x A `latpl_model` object.
+#' @param x A `lavaanpl_model` object.
 #' @param ... Ignored.
 #'
-#' @rdname set_latpl_model
+#' @rdname lavaanpl_model
 #' @export
-print.latpl_model <- function(x, ...) {
+print.lavaanpl_model <- function(x, ...) {
   cat(
-    "<latpl_model>", x$p, "items,", x$q, "latent variables\n",
-    " Free loadings:", sum(is.na(x$CONSTRMAT)), "\n",
-    " Latent correlations:", if (x$q == 1) "none" else if (!x$CORRFLAG) "fixed to zero" else if (identical(x$LATCOV, "direct")) "direct" else "LKJ", "\n",
-    " Latent variances:", if (anyNA(x$CONSTRLOGSD)) "free" else "fixed", "\n",
-    " Free regressions:", sum(is.na(x$REGMAT)), "\n",
-    " Free residual covariances:", sum(is.na(x$RESCOV[upper.tri(x$RESCOV)])), "\n",
+    "<lavaanpl_model>", x$p, "items,", x$q, "latent variables\n",
+    " Free loadings:", sum(is.na(x$LAMBDA)), "\n",
+    " Latent correlations:", if (x$q == 1) "none" else if (x$LATCOV == "none") "fixed to zero" else if (x$LATCOV == "direct") "direct" else "LKJ", "\n",
+    " Latent variances:", if (anyNA(diag(x$PSI))) "free" else "fixed", "\n",
+    " Free regressions:", sum(is.na(x$BETA)), "\n",
+    " Free residual covariances:", sum(is.na(x$THETA[upper.tri(x$THETA)])), "\n",
     " Parameterization:", x$PARAMETERIZATION, "\n",
-    " Free intercepts, latent means, scales:", sum(is.na(x$CONSTRINT)), sum(is.na(x$CONSTRMEAN)), sum(is.na(x$CONSTRLOGSCALE)), "\n",
+    " Free intercepts, latent means, scales:", sum(is.na(x$NU)), sum(is.na(x$ALPHA)), sum(is.na(item_scales(x))), "\n",
     " Free effects of covariates:", sum(is.na(x$GAMMA)) + sum(is.na(x$KAPPA)), "\n",
-    " Linear constraints:", NROW(x$CONSTRAINTS$A), "\n",
-    " Identification:", if (x$STDLV) "standardised latent variables" else "marker loadings", "\n"
+    " Linear constraints:", NROW(x$CONSTRAINTS$A), "\n"
   )
   invisible(x)
 }
 
-#' Extract parameters
-#'
-#' @param OBJ Object of class latpl_fit.
-#' @param OPTION Can take values \tabular{ll}{
-#'    \code{'transformed'} \tab Transformed vector of parameters, with interpretable latent correlations and standard
-#'    deviations, scale factors and residual variances. \cr
-#'     \tab \cr
-#'    \code{'list'} \tab The model matrices, as returned by [theta2par()]. \cr
-#' }
-#' @param THETA Parameter vector.
-#' @keywords internal
-get_par <- function(OBJ, OPTION = c("list", "transformed"), THETA = OBJ$theta) {
-  OPTION <- match.arg(OPTION)
-  if (OPTION == "list") return(theta2par(OBJ$model, THETA))
-  models <- if (inherits(OBJ$model, "latpl_groups")) OBJ$model$MODELS else list(OBJ$model)
-  nthr <- sum(OBJ$data$cat - 1)
-  d <- vapply(models, function(x) length(theta_block(x, nthr)), numeric(1))
-  unlist(Map(function(m, th) {
-    block <- theta_block(m, nthr)
-    R <- stats::cov2cor(theta2par(m, th)$latent_correlations)
-    c(th[block %in% c("tau", "lambda")], if (any(block == "corr")) R[upper.tri(R)], exp(th[block == "logsd"]),
-      th[block %in% c("beta", "rescov", "nu", "alpha")], exp((1 + (m$PARAMETERIZATION == "theta" | m$NUMERIC)[is.na(m$CONSTRLOGSCALE)]) * th[block == "scale"]),
-      th[block %in% c("gamma", "kappa")])
-  }, models, split(THETA, rep(seq_along(d), d))), use.names = FALSE)
-}
-
 #' Compute variance of the estimates
-#' @param OBJ Object of class latpl_fit
+#' @param OBJ Object of class lavaanpl_internal
 #' @param NUMDERIV TRUE if the hessian must be computed using \link[numDeriv]{jacobian}
 #' @return A list with the Jacobian `trJacob` of the transformation to
 #'   interpretable parameters, `H`, `J`, the diagonal of the sandwich variance
 #'   `asymptotic_variance` on the transformed scale, `optimisation_noise` (SA
 #'   fits only), the optimisation noise matrix `noise` on the optimisation scale
 #'   (SA fits only), the Newton step to the optimum `step`, its size in standard errors of
-#'   each parameter `distance`, the estimates `theta` and the timing `RTime`.
+#'   each parameter `distance`, the estimates `parameter_vector` and the timing `RTime`.
 #' @keywords internal
 compute_var <- function(OBJ, NUMDERIV = FALSE) {
-  if (!NUMDERIV && identical(OBJ$vars$theta, OBJ$theta) && !is.null(OBJ$theta)) return(OBJ$vars)
+  if (!NUMDERIV && identical(OBJ$vars$parameter_vector, OBJ$parameter_vector) && !is.null(OBJ$parameter_vector)) return(OBJ$vars)
   start_time <- Sys.time()
   lc <- OBJ$lincon
   full <- function(x) as.vector(lc$K %*% x + lc$c)
-  xf <- OBJ$theta[lc$free_idx]
-  lat <- OBJ$block %in% c("corr", "logsd", "scale")
-  trJacob <- diag(length(OBJ$theta))
+  xf <- OBJ$parameter_vector[lc$free_idx]
+  lat <- OBJ$blocks %in% c("corr", "logsd", "scale")
+  trJacob <- diag(length(OBJ$parameter_vector))
   if (any(lat)) {
     trJacob[lat, lat] <- numDeriv::jacobian(function(x) {
-      get_par(OBJ, "transformed", replace(OBJ$theta, lat, x))[lat]
-    }, OBJ$theta[lat])
+      transform_parameters(OBJ$model, replace(OBJ$parameter_vector, lat, x))[lat]
+    }, OBJ$parameter_vector[lat])
   }
   trJacob <- trJacob %*% lc$K
   RcppParallel::setThreadOptions(numThreads = OBJ$cores)
   on.exit(RcppParallel::setThreadOptions(numThreads = 1))
-  HJ <- cpp_HJ(OBJ$theta, OBJ$engine$model, OBJ$engine$data, OBJ$method == "SA")
+  HJ <- cpp_HJ(OBJ$parameter_vector, OBJ$engine$model, OBJ$engine$data, OBJ$method == "SA")
   H <- crossprod(lc$K, HJ$H %*% lc$K)
   J <- crossprod(lc$K, HJ$J %*% lc$K)
   if (NUMDERIV) {
-    H <- numDeriv::jacobian(function(x) -as.vector(crossprod(lc$K, cpp_pl(full(x), OBJ$engine$model, OBJ$engine$data, 1L)$gradient)) / OBJ$dims$n, xf)
+    H <- numDeriv::jacobian(function(x) -as.vector(crossprod(lc$K, cpp_pl(full(x), OBJ$engine$model, OBJ$engine$data, 1L)$gradient)) / OBJ$data$n, xf)
   }
   R <- tryCatch(chol(H), error = function(e) NULL)
   if (is.null(R)) {
-    stop(structure(class = c("latpl_not_pd", "error", "condition"), list(message = "H not positive definite.", call = NULL)))
+    stop(structure(class = c("lavaanpl_not_pd", "error", "condition"), list(message = "H not positive definite.", call = NULL)))
   }
   invH <- chol2inv(R)
   vcov <- trJacob %*% invH %*% J %*% invH %*% t(trJacob)
   opt_noise <- NA
   noise <- NULL
   if (OBJ$method == "SA") {
-    P <- OBJ$dims$pairs
+    P <- OBJ$data$pairs
     ppi <- OBJ$stoFit$pairs_per_iteration
-    n <- OBJ$dims$n
+    n <- OBJ$data$n
     G <- crossprod(lc$K, HJ$gradient) / n
     V <- (P - ppi) / (ppi * (P - 1)) * (P * crossprod(lc$K, HJ$pairvar %*% lc$K) / n^2 - tcrossprod(G))
     noise <- invH %*% V %*% invH / OBJ$stoFit$averaged
     opt_noise <- diag(trJacob %*% noise %*% t(trJacob))
   }
-  step <- as.vector(invH %*% crossprod(lc$K, HJ$gradient)) / OBJ$dims$n
-  se <- sqrt(diag(vcov) / OBJ$dims$n)
+  step <- as.vector(invH %*% crossprod(lc$K, HJ$gradient)) / OBJ$data$n
+  se <- sqrt(diag(vcov) / OBJ$data$n)
   list(trJacob = trJacob, H = H, J = J, asymptotic_variance = diag(vcov),
        optimisation_noise = opt_noise, noise = noise, step = step,
-       distance = ifelse(se > 0, abs(as.vector(trJacob %*% step)) / se, 0), theta = OBJ$theta,
+       distance = ifelse(se > 0, abs(as.vector(trJacob %*% step)) / se, 0), parameter_vector = OBJ$parameter_vector,
        RTime = as.numeric(difftime(Sys.time(), start_time, units = "secs")))
 }
