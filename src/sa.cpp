@@ -171,7 +171,7 @@ Rcpp::List cpp_sa(
     Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(s.asDiagonal() * (0.5 * (H + H.transpose())) * s.asDiagonal());
     pd = es.eigenvalues().minCoeff() > 1e-6;
     Eigen::VectorXd ev = es.eigenvalues().cwiseAbs();
-    ev = ev.cwiseMax(DAMP * ev.maxCoeff());
+    ev = ev.array() + DAMP * ev.maxCoeff();
     GM = s.asDiagonal() * es.eigenvectors() * ev.cwiseInverse().asDiagonal() * es.eigenvectors().transpose() * s.asDiagonal();
     return GM.allFinite();
   };
