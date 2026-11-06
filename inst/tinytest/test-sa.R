@@ -508,7 +508,6 @@ local({
   expect_equal(lavaan.pl:::fit_lavaanpl(data, model, CONTROL = set_saqn_control(seed = 7))$parameter_vector, fit_saqn$parameter_vector, tolerance = 1e-4)
   expect_null(lavaan.pl:::compute_var(fit_saqn)$noise)
   expect_null(fit_saqn$stoFit$invh)
-  expect_error(sa_diagnostics(fit_saqn), "not fitted by stochastic approximation")
   burn <- lavaan.pl:::run_sa(fit_saqn$init, data, fit_saqn$engine, fit_saqn$lincon, set_saqn_control(), FALSE)
   expect_equal(dim(burn$invh), rep(length(fit_saqn$parameter_vector), 2))
   fit_flat <- lavaan.pl:::fit_lavaanpl(data, model, CONTROL = set_qn_control(), START = burn$parameter_vector)

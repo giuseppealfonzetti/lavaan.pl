@@ -66,7 +66,12 @@ The call to the `pmlcfa()` function is made as for `lavaan::cfa()`:
 # Fit the model
 fit <- pmlcfa(model = mod, data = bfi, std.lv = TRUE, test = "mean.var.adjusted")
 summary(fit)
+```
 
+Consult diagnostics:
+
+```{r}
+diagnostics(fit)
 ```
 
 
@@ -77,7 +82,7 @@ plot(fit, type = "objective")
 
 Look at the parameter traces along the optimisation
 ```{r trace}
-plot(fit, type = "trace")
+plot(fit, type = "noise")
 ```
 
 Extract coefficients

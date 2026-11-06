@@ -6,7 +6,10 @@
 #' @export
 get_lavaanpl_internal <- function(object) {
   if (!inherits(object, "lavaan.pl")) {
-    stop("`object` must come from lavaan.pl(), pmlcfa() or pmlsem().", call. = FALSE)
+    stop(
+      "`object` must come from lavaan.pl(), pmlcfa() or pmlsem().",
+      call. = FALSE
+    )
   }
   object@external$lavaanpl_internal
 }

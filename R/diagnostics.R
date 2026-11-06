@@ -1,158 +1,167 @@
-#' Fit behind a stochastic approximation object
+#' Free parameters of a fit, with their precision
 #'
-#' @param object Object of class lavaanpl_internal, or a `lavaan.pl` object from [lavaan.pl()].
-#' @return The object of class lavaanpl_internal.
-#' @seealso [sa_diagnostics()], [plot.lavaan.pl()], [sa_stability()]
+#' @param object A `lavaan.pl` object from [lavaan.pl()].
+#' @return A data frame with one row per free parameter: `name`, `block`, `estimate`, standard error `se` and the
+#'   distance from the optimum in standard errors `distance`, and with stochastic approximation the standard deviation of
+#'   the optimisation noise `noise` and its ratio to the standard error `ratio`. Without a positive definite observed
+#'   information, all but the estimates are `NA`.
+#' @seealso [diagnostics()]
 #' @keywords internal
-sa_fit <- function(object) {
-  fit <- if (inherits(object, "lavaan.pl")) get_lavaanpl_internal(object) else object
-  if (!inherits(fit, "lavaanpl_internal")) stop("`object` must come from pmlcfa() or pmlsem().", call. = FALSE)
-  if (fit$method != "SA") stop("`object` was not fitted by stochastic approximation.", call. = FALSE)
-  fit
-}
-
-#' Parameters of a stochastic approximation fit
-#'
-#' @param FIT Object of class lavaanpl_internal, from stochastic approximation.
-#' @return A data frame with one row per free parameter: `name`, `block`, `estimate`, standard error `se`, and, when the
-#'   observed information is positive definite, standard deviation of the optimisation noise `noise`, its ratio to the
-#'   standard error `ratio` and the distance from the optimum in standard errors `distance`.
-#' @seealso [sa_diagnostics()]
-#' @keywords internal
-sa_parameters <- function(FIT) {
-  free <- FIT$lincon$free_idx
-  out <- data.frame(name = parameter_names(FIT$data, FIT$model), block = FIT$blocks, estimate = transform_parameters(FIT$model, FIT$parameter_vector),
-                    se = NA, noise = NA, ratio = NA, distance = NA)
-  vars <- tryCatch(compute_var(FIT), lavaanpl_not_pd = function(e) NULL)
+fit_parameters <- function(object) {
+  fit <- get_lavaanpl_internal(object)
+  vars <- object@external$vars
+  if (is.null(vars)) {
+    vars <- tryCatch(compute_var(fit), lavaanpl_not_pd = function(e) NULL)
+  }
+  out <- data.frame(
+    name = parameter_names(fit$data, fit$model),
+    block = fit$blocks,
+    estimate = transform_parameters(fit$model, fit$parameter_vector),
+    se = NA,
+    distance = NA
+  )
+  if (fit$method == "SA") {
+    out[c("noise", "ratio")] <- NA
+  }
   if (!is.null(vars)) {
-    out$se <- sqrt(vars$asymptotic_variance / FIT$data$n)
-    out$noise <- sqrt(pmax(vars$optimisation_noise, 0))
-    out$ratio <- ifelse(out$se > 0, out$noise / out$se, 0)
+    out$se <- sqrt(vars$asymptotic_variance / fit$data$n)
     out$distance <- vars$distance
+    if (fit$method == "SA") {
+      out$noise <- sqrt(pmax(vars$optimisation_noise, 0))
+      out$ratio <- ifelse(out$se > 0, out$noise / out$se, 0)
+    }
   }
-  out[free, ]
+  out[fit$lincon$free_idx, ]
 }
 
-#' Diagnostics of the stochastic approximation
+#' Diagnostics of the optimisation
 #'
-#' Reports whether the run behaved, and how precise its estimate is. The optimisation noise is the variability due to the
-#' pairs sampled, on top of the statistical variability; the distance is how far the estimate is from the exact pairwise
-#' likelihood estimate, predicted from the gradient without fitting it.
+#' Reports how the optimiser behaved and whether its estimate is at the optimum of the pairwise likelihood, for every
+#' method. The distance is how far the estimate is from that optimum, in standard errors, predicted from the gradient. With
+#' stochastic approximation, the optimisation noise is the variability due to the pairs sampled, on top of the
+#' statistical variability.
 #'
-#' @param object A `lavaan.pl` object from [lavaan.pl()], fitted by stochastic approximation.
-#' @param target Largest ratio of the optimisation noise to the standard error used to suggest a number of epochs.
-#' @return An object of class `lavaanpl_sa_diagnostics`: a list with `converged`, the checks `checks`, the summary of the
-#'   phases `phases`, the settings `settings`, the table of free parameters `parameters` from `sa_parameters()`, its
-#'   summary by block `blocks`, and the value of `average_epochs` predicted to reach `target` in `epochs_needed`.
+#' @param object A `lavaan.pl` object from [lavaan.pl()].
+#' @return An object of class `lavaanpl_diagnostics`: a list with the `method`, `converged` as in
+#'   `lavInspect(object, "converged")`, the run time `seconds`, the table of the phases `phases` (epochs and seconds; for
+#'   quasi-Newton, each evaluation of the pairwise likelihood counts as one epoch), the table of the checks `checks`
+#'   (`check`, `value`, and `ok`, `NA` when there is no rule), and the table of the free parameters `parameters`.
+#' @seealso [plot.lavaan.pl()]
 #' @export
-sa_diagnostics <- function(object, target = 0.1) {
-  fit <- sa_fit(object)
-  stopifnot(is.numeric(target), length(target) == 1, target > 0)
+diagnostics <- function(object) {
+  fit <- get_lavaanpl_internal(object)
+  pars <- fit_parameters(object)
   st <- fit$stoFit
-  pars <- sa_parameters(fit)
+  qn <- fit$numFit
+  sa <- fit$method != "QN"
+  num <- fit$method != "SA"
+  burn <- if (sa) unname(st$time[c("adam", "precondition")]) else NULL
+  last <- if (num) {
+    fit$RTime - sum(burn, if (sa) st$time[["monitor"]])
+  } else {
+    st$time[["averaging"]]
+  }
   phases <- data.frame(
-    phase = c("Adam", "Preconditioning", "Averaged"),
-    epochs = c(st$adam_epochs, st$precondition_epochs, fit$control$average_epochs),
-    iterations = c(st$adam_epochs, st$precondition_epochs, fit$control$average_epochs) * st$epoch_length,
-    seconds = unname(c(st$time[["adam"]], st$time[["precondition"]], st$time[["averaging"]]))
+    phase = c(
+      if (sa) c("Adam", "Preconditioning"),
+      if (num) "QN" else "Averaged"
+    ),
+    epochs = c(
+      if (sa) c(st$adam_epochs, st$precondition_epochs),
+      if (num) qn$info[["neval"]] else fit$control$average_epochs
+    ),
+    seconds = c(burn, last)
   )
-  summarise <- function(x) {
-    data.frame(block = x$block[1], parameters = nrow(x), median_ratio = stats::median(x$ratio), max_ratio = max(x$ratio),
-               max_distance = max(x$distance))
+  pd <- !all(is.na(pars$se))
+  worst <- function(x) {
+    if (pd) {
+      paste0(format(signif(max(x), 2)), " (", pars$name[which.max(x)], ")")
+    } else {
+      "not available"
+    }
   }
-  worst <- suppressWarnings(max(pars$ratio, na.rm = TRUE))
+  check <- function(name, value, ok = NA) {
+    data.frame(check = name, value = as.character(value), ok = ok)
+  }
+  checks <- rbind(
+    check("Observed information positive definite", pd, pd),
+    check(
+      "Largest coordinate one-Newton-step/standard error",
+      worst(pars$distance),
+      if (pd && !num) max(pars$distance) <= max(1, 4 * max(pars$ratio)) else NA
+    )
+  )
+  if (!num) {
+    checks <- rbind(
+      checks,
+      check("Largest optimisation noise / standard error", worst(pars$ratio)),
+      check("Burn-in ended at a plateau", st$plateau),
+      check(
+        "Skipped steps in the averaged phase",
+        st$skipped_averaging,
+        st$skipped_averaging == 0
+      ),
+      check("Rejected steps", st$rejections)
+    )
+  } else {
+    checks <- rbind(
+      checks,
+      check("QN", qn$message),
+      check(
+        "QN evaluations",
+        paste(qn$info[["neval"]], "out of", fit$control$maxeval),
+        qn$info[["neval"]] < fit$control$maxeval
+      ),
+      check(
+        "Largest gradient per observation",
+        format(signif(qn$info[["maxgradient"]], 2)),
+        qn$info[["maxgradient"]] < 1e-3
+      )
+    )
+    if (length(st$start_logl) > 1) {
+      spread <- diff(range(st$start_logl))
+      checks <- rbind(
+        checks,
+        check(
+          "Pairwise log-likelihood spread across starts",
+          format(signif(spread, 2)),
+          spread <= 1e-3
+        )
+      )
+    }
+  }
   out <- list(
-    converged = st$converged,
-    checks = c(plateau = st$plateau, skipped = st$skipped_averaging, rejected = st$rejections, positive_definite = st$check$pd,
-               distance = st$check$distance),
+    method = fit$method,
+    converged = object@optim$converged,
+    seconds = fit$RTime,
     phases = phases,
-    settings = list(method = fit$method, pairs = st$pairs_per_iteration, total_pairs = fit$data$pairs,
-                    epoch_length = st$epoch_length, gain = st$gain, averaged = st$averaged, seconds = fit$RTime),
-    parameters = pars,
-    blocks = do.call(rbind, lapply(split(pars, factor(pars$block, unique(pars$block))), summarise)),
-    worst_ratio = worst,
-    epochs_needed = if (is.finite(worst) && worst > 0) ceiling(fit$control$average_epochs * (worst / target)^2) else NA,
-    target = target
+    checks = checks,
+    parameters = pars
   )
-  rownames(out$blocks) <- NULL
-  class(out) <- "lavaanpl_sa_diagnostics"
+  class(out) <- "lavaanpl_diagnostics"
   out
 }
 
 #' @export
-print.lavaanpl_sa_diagnostics <- function(x, ...) {
-  s <- x$settings
-  cat(s$method, "fit:", if (isTRUE(x$converged)) "converged" else "NOT converged", "\n\n")
-  cat(" Pairs per iteration:", s$pairs, "of", s$total_pairs, "| epoch:", s$epoch_length, "iterations | gain:", s$gain, "\n")
+print.lavaanpl_diagnostics <- function(x, ...) {
+  cat(
+    x$method,
+    "fit:",
+    if (isTRUE(x$converged)) "converged" else "NOT converged",
+    paste0("(", signif(x$seconds, 3), " s)"),
+    "\n\n"
+  )
   print(x$phases, row.names = FALSE, digits = 3)
-  cat("\n Last burn-in phase ended at a plateau:", as.logical(x$checks[["plateau"]]), "\n",
-      "Skipped steps in the averaged phase:", x$checks[["skipped"]], "\n",
-      "Rejected steps:", x$checks[["rejected"]], "\n",
-      "Observed information positive definite:", as.logical(x$checks[["positive_definite"]]), "\n",
-      "Largest predicted distance from exact PML:", signif(x$checks[["distance"]], 2), "standard errors\n")
-  if (all(is.na(x$parameters$ratio))) {
-    cat("\n No standard errors, noise or distances: use set_qn_control() or other starting values.\n")
-    return(invisible(x))
-  }
-  cat("\n Optimisation noise relative to the standard error:\n")
-  print(x$blocks, row.names = FALSE, digits = 2)
-  if (!is.na(x$epochs_needed) && x$worst_ratio > x$target) {
-    cat("\n average_epochs =", x$epochs_needed, "would bring the largest ratio to about", x$target, "\n")
-  }
-  invisible(x)
-}
-
-#' Stability of the stochastic approximation across seeds
-#'
-#' Fits the same model and data with other seeds of the pair sampling, and compares the spread of the estimates with the
-#' optimisation noise predicted from a single fit.
-#'
-#' @param object A `lavaan.pl` object from [lavaan.pl()], fitted by stochastic approximation.
-#' @param seeds Seeds of the pair sampling.
-#' @return An object of class `lavaanpl_sa_stability`: a list with the table `parameters` of each free parameter (`name`,
-#'   `block`, standard error `se`, standard deviation across seeds `observed`, predicted noise `predicted`), the estimates
-#'   across seeds `estimates` and the number of converged fits `converged`.
-#' @export
-sa_stability <- function(object, seeds = 1:10) {
-  fit <- sa_fit(object)
-  stopifnot(is.numeric(seeds), length(seeds) > 1, !anyDuplicated(seeds))
-  fits <- lapply(seeds, function(seed) {
-    control <- fit$control
-    control$seed <- as.integer(seed)
-    suppressWarnings(fit_lavaanpl(fit$data, fit$model, CONTROL = control, START = fit$init, NCORES = fit$cores))
-  })
-  pars <- sa_parameters(fit)
-  estimates <- vapply(fits, function(x) transform_parameters(x$model, x$parameter_vector), numeric(length(fit$parameter_vector)))[fit$lincon$free_idx, , drop = FALSE]
-  out <- list(
-    parameters = data.frame(name = pars$name, block = pars$block, se = pars$se, observed = apply(estimates, 1, stats::sd),
-                            predicted = pars$noise),
-    estimates = estimates,
-    converged = sum(vapply(fits, function(x) x$stoFit$converged, logical(1)))
+  cat(
+    "\n",
+    paste0(
+      ifelse(x$checks$ok %in% FALSE, "! ", "  "),
+      x$checks$check,
+      ": ",
+      x$checks$value,
+      "\n"
+    ),
+    sep = ""
   )
-  class(out) <- "lavaanpl_sa_stability"
-  out
-}
-
-#' @export
-print.lavaanpl_sa_stability <- function(x, ...) {
-  p <- x$parameters
-  keep <- p$observed > 0 & p$predicted > 0
-  cat("Stochastic approximation across", ncol(x$estimates), "seeds:", x$converged, "converged\n\n",
-      "Standard deviation across seeds / standard error: median", signif(stats::median(p$observed / p$se), 2),
-      ", largest", signif(max(p$observed / p$se), 2), "\n",
-      "Predicted noise / observed: median", if (any(keep)) signif(stats::median((p$predicted / p$observed)[keep]), 2) else NA, "\n")
   invisible(x)
-}
-
-#' @export
-plot.lavaanpl_sa_stability <- function(x, ...) {
-  if (!requireNamespace("tinyplot", quietly = TRUE)) {
-    warning("{tinyplot} must be installed to plot; the data are returned.", call. = FALSE)
-    return(invisible(x$parameters))
-  }
-  do.call(tinyplot::tinyplot, list(
-    observed ~ predicted | block, data = x$parameters, pch = 19, xlab = "Predicted optimisation noise",
-    ylab = "Standard deviation across seeds", draw = quote(abline(0, 1, lty = 2, col = "lightgrey")), ...
-  ))
-  invisible(x$parameters)
 }

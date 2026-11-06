@@ -39,9 +39,17 @@ fit_lavaanpl <- function(
     inherits(CONTROL, c("lavaanpl_qn_control", "lavaanpl_sa_control")),
     DATA$p == MODEL$p
   )
-  if (inherits(MODEL, "lavaanpl_model")) MODEL <- lavaanpl_groups(list(MODEL))
+  if (inherits(MODEL, "lavaanpl_model")) {
+    MODEL <- lavaanpl_groups(list(MODEL))
+  }
   models <- MODEL$MODELS
-  if (!all(vapply(models, function(x) identical(x$NUMERIC, unname(DATA$numeric)), logical(1)))) {
+  if (
+    !all(vapply(
+      models,
+      function(x) identical(x$NUMERIC, unname(DATA$numeric)),
+      logical(1)
+    ))
+  ) {
     stop("DATA and MODEL must declare the same numeric items.")
   }
   if (DATA$ngroups != length(models)) {
@@ -52,7 +60,9 @@ fit_lavaanpl <- function(
   block <- parameter_blocks(MODEL, nthr)
   METHOD <- control_method(CONTROL)
   if (METHOD == "SA" && CONTROL$average_epochs == 0) {
-    stop("The SA method needs average_epochs of at least 1: use set_saqn_control() to skip the averaged phase.")
+    stop(
+      "The SA method needs average_epochs of at least 1: use set_saqn_control() to skip the averaged phase."
+    )
   }
   dims <- model_dims(DATA, MODEL)
   lc <- lincon(MODEL, nthr)
@@ -82,7 +92,9 @@ fit_lavaanpl <- function(
     free_block <- block[lc$free_idx]
     for (i in 1:20) {
       fit$init <- full(x)
-      if (implied_variance(MODEL, fit$init) < .95) break
+      if (implied_variance(MODEL, fit$init) < .95) {
+        break
+      }
       x[free_block == "lambda"] <- .8 * x[free_block == "lambda"]
       x[free_block == "logsd"] <- x[free_block == "logsd"] + log(.8)
     }
@@ -137,7 +149,10 @@ fit_lavaanpl <- function(
       NCORES
     )
     RcppParallel::setThreadOptions(numThreads = NCORES)
-    vector <- matrices_to_vector(MODEL, vector_to_matrices(warm$model, warm$parameter_vector))
+    vector <- matrices_to_vector(
+      MODEL,
+      vector_to_matrices(warm$model, warm$parameter_vector)
+    )
     x <- as.vector(solve(crossprod(lc$K), crossprod(lc$K, vector - lc$c)))
     cov_free <- block[lc$free_idx] == "corr"
     for (i in 1:20) {
@@ -168,12 +183,20 @@ fit_lavaanpl <- function(
     )
     fn <- function(x) {
       vector <- full(x)
-      val <- if (pd(vector)) -cpp_pl(vector, eng_std$model, eng_std$data)$pl / DATA$n else Inf
+      val <- if (pd(vector)) {
+        -cpp_pl(vector, eng_std$model, eng_std$data)$pl / DATA$n
+      } else {
+        Inf
+      }
       val <- if (is.finite(val)) val else Inf
       evals <<- evals + 1L
       if (val < best) {
         best <<- val
-        trail[[length(trail) + 1]] <<- list(epoch = evals, vector = vector, nll = val)
+        trail[[length(trail) + 1]] <<- list(
+          epoch = evals,
+          vector = vector,
+          nll = val
+        )
       }
       val
     }
@@ -203,7 +226,12 @@ fit_lavaanpl <- function(
         burn_control$seed <- CONTROL$seed + s - 1L
         burn <- run_sa(x0, std$data, eng_std, lc, burn_control, VERBOSE)
         start <- burn$parameter_vector
-        if (length(burn$invh) > 0) start_control$invhessian.lt <- burn$invh[lower.tri(burn$invh, diag = TRUE)]
+        if (length(burn$invh) > 0) {
+          start_control$invhessian.lt <- burn$invh[lower.tri(
+            burn$invh,
+            diag = TRUE
+          )]
+        }
       }
       if (VERBOSE) {
         message("- Optimising with ucminf...")
@@ -227,12 +255,20 @@ fit_lavaanpl <- function(
       if (s == 1 || opt$value < fit$numFit$value) {
         fit$numFit <- opt
         if (METHOD == "SA-QN") {
-          fit$stoFit <- burn[setdiff(names(burn), c("parameter_vector", "last_iterate", "burn_in_iterate", "invh"))]
-          fit$stoFit$path$parameter_vector <- lapply(burn$path$parameter_vector, std$from)
+          fit$stoFit <- burn[setdiff(
+            names(burn),
+            c("parameter_vector", "last_iterate", "burn_in_iterate", "invh")
+          )]
+          fit$stoFit$path$parameter_vector <- lapply(
+            burn$path$parameter_vector,
+            std$from
+          )
         }
       }
     }
-    if (METHOD == "SA-QN") fit$stoFit$start_logl <- -values * DATA$n
+    if (METHOD == "SA-QN") {
+      fit$stoFit$start_logl <- -values * DATA$n
+    }
     if (DATA$n * diff(range(values)) > 1e-3) {
       warning(
         "The ",
@@ -245,7 +281,10 @@ fit_lavaanpl <- function(
     }
     fit$parameter_vector <- std$from(full(fit$numFit$par))
     fit$numFit$par <- fit$parameter_vector[lc$free_idx]
-    if (!fit$numFit$convergence %in% 1:2 && fit$numFit$info[["maxgradient"]] > 1e-3) {
+    if (
+      !fit$numFit$convergence %in% 1:2 &&
+        fit$numFit$info[["maxgradient"]] > 1e-3
+    ) {
       warning(
         "ucminf stopped with a gradient of ",
         signif(fit$numFit$info[["maxgradient"]], 3),
@@ -258,7 +297,10 @@ fit_lavaanpl <- function(
       message("- Optimising via pairwise stochastic approximation...")
     }
     opt <- run_sa(std$to(fit$init), std$data, eng_std, lc, CONTROL, VERBOSE)
-    opt[c("parameter_vector", "last_iterate", "burn_in_iterate")] <- lapply(opt[c("parameter_vector", "last_iterate", "burn_in_iterate")], std$from)
+    opt[c("parameter_vector", "last_iterate", "burn_in_iterate")] <- lapply(
+      opt[c("parameter_vector", "last_iterate", "burn_in_iterate")],
+      std$from
+    )
     opt$path$parameter_vector <- lapply(opt$path$parameter_vector, std$from)
     if (opt$skipped_averaging > 0) {
       warning(
@@ -267,7 +309,8 @@ fit_lavaanpl <- function(
         call. = FALSE
       )
     }
-    opt$converged <- opt$skipped_averaging == 0 && all(is.finite(opt$parameter_vector))
+    opt$converged <- opt$skipped_averaging == 0 &&
+      all(is.finite(opt$parameter_vector))
     fit$stoFit <- opt[setdiff(names(opt), c("parameter_vector", "invh"))]
     fit$parameter_vector <- opt$parameter_vector
     fit <- check_sa(fit)
@@ -297,7 +340,10 @@ check_sa <- function(FIT) {
   if (FIT$dims$npar > 2000) {
     if (!FIT$stoFit$plateau) {
       FIT$stoFit$converged <- FALSE
-      warning("The Adam phase did not reach a plateau of the pairwise likelihood: increase adam_epochs.", call. = FALSE)
+      warning(
+        "The Adam phase did not reach a plateau of the pairwise likelihood: increase adam_epochs.",
+        call. = FALSE
+      )
     }
     return(FIT)
   }
@@ -314,7 +360,9 @@ check_sa <- function(FIT) {
   }
   se <- sqrt(vars$asymptotic_variance / FIT$data$n)
   distance <- FIT$stoFit$check$distance <- max(vars$distance)
-  FIT$stoFit$check$noise <- max((sqrt(pmax(vars$optimisation_noise, 0)) / se)[se > 0])
+  FIT$stoFit$check$noise <- max((sqrt(pmax(vars$optimisation_noise, 0)) / se)[
+    se > 0
+  ])
   if (distance > max(1, 4 * FIT$stoFit$check$noise)) {
     FIT$stoFit$converged <- FALSE
     warning(
@@ -327,7 +375,7 @@ check_sa <- function(FIT) {
     warning(
       "The SA estimate is ",
       signif(distance, 3),
-      " standard errors from the optimum of the pairwise likelihood on its worst parameter, because of the optimisation noise, which the standard errors account for. For more precision, increase average_epochs or use set_saqn_control(); see sa_diagnostics().",
+      " standard errors from the optimum of the pairwise likelihood on its worst parameter, because of the optimisation noise, which the standard errors account for. For more precision, increase average_epochs or use set_saqn_control(); see diagnostics().",
       call. = FALSE
     )
   }
@@ -351,18 +399,30 @@ check_sa <- function(FIT) {
 #' @keywords internal
 standardise_covariates <- function(DATA, MODEL, LINCON, NTHR) {
   raw <- list(data = DATA, model = NULL, to = identity, from = identity)
-  if (ncol(DATA$X) == 0) return(raw)
+  if (ncol(DATA$X) == 0) {
+    return(raw)
+  }
   models <- MODEL$MODELS
-  if (!any(vapply(models, function(x) ncol(x$GAMMA) > 0, logical(1)))) return(raw)
+  if (!any(vapply(models, function(x) ncol(x$GAMMA) > 0, logical(1)))) {
+    return(raw)
+  }
   centre <- colMeans(DATA$X)
   spread <- apply(DATA$X, 2, stats::sd)
   spread[spread == 0] <- 1
   block <- parameter_blocks(MODEL, NTHR)
-  touched <- block %in% c("tau", "gamma", "kappa") | (block == "nu" & any(DATA$numeric))
-  fixed_nu <- any(vapply(models, function(x) any(!is.na(x$NU[x$NUMERIC])), logical(1)))
+  touched <- block %in%
+    c("tau", "gamma", "kappa") |
+    (block == "nu" & any(DATA$numeric))
+  fixed_nu <- any(vapply(
+    models,
+    function(x) any(!is.na(x$NU[x$NUMERIC])),
+    logical(1)
+  ))
   if (fixed_nu || !all(which(touched) %in% LINCON$free_idx)) {
     if (any(abs(centre) > 3 * spread)) {
-      message("Constraints on thresholds, intercepts or effects of covariates prevent standardising the covariates: consider centring them.")
+      message(
+        "Constraints on thresholds, intercepts or effects of covariates prevent standardising the covariates: consider centring them."
+      )
     }
     return(raw)
   }
@@ -378,21 +438,38 @@ standardise_covariates <- function(DATA, MODEL, LINCON, NTHR) {
   std_data <- DATA
   std_data$X <- standard(DATA$X)
   std_data$strata <- lapply(DATA$strata, standard)
-  if (!is.null(DATA$val)) std_data$val$strata <- lapply(DATA$val$strata, standard)
+  if (!is.null(DATA$val)) {
+    std_data$val$strata <- lapply(DATA$val$strata, standard)
+  }
   map <- function(vector, from_model, to_model, to_standard) {
     pars <- vector_to_matrices(from_model, vector)
-    pars <- Map(function(par, m) {
-      if (is.null(par$gamma)) return(par)
-      gamma_raw <- if (to_standard) par$gamma else sweep(par$gamma, 2, spread, "/")
-      kappa_raw <- if (to_standard) par$kappa else sweep(par$kappa, 2, spread, "/")
-      loadings <- par$lambda %*% solve(diag(ncol(par$lambda)) - par$beta)
-      offset <- as.vector((loadings %*% gamma_raw + kappa_raw) %*% centre) * (if (to_standard) 1 else -1)
-      par$tau <- par$tau - rep(offset, DATA$cat - 1)
-      par$nu[m$NUMERIC] <- par$nu[m$NUMERIC] + offset[m$NUMERIC]
-      par$gamma <- if (to_standard) scale_x(par$gamma) else gamma_raw
-      par$kappa <- if (to_standard) scale_x(par$kappa) else kappa_raw
-      par
-    }, pars, models)
+    pars <- Map(
+      function(par, m) {
+        if (is.null(par$gamma)) {
+          return(par)
+        }
+        gamma_raw <- if (to_standard) {
+          par$gamma
+        } else {
+          sweep(par$gamma, 2, spread, "/")
+        }
+        kappa_raw <- if (to_standard) {
+          par$kappa
+        } else {
+          sweep(par$kappa, 2, spread, "/")
+        }
+        loadings <- par$lambda %*% solve(diag(ncol(par$lambda)) - par$beta)
+        offset <- as.vector((loadings %*% gamma_raw + kappa_raw) %*% centre) *
+          (if (to_standard) 1 else -1)
+        par$tau <- par$tau - rep(offset, DATA$cat - 1)
+        par$nu[m$NUMERIC] <- par$nu[m$NUMERIC] + offset[m$NUMERIC]
+        par$gamma <- if (to_standard) scale_x(par$gamma) else gamma_raw
+        par$kappa <- if (to_standard) scale_x(par$kappa) else kappa_raw
+        par
+      },
+      pars,
+      models
+    )
     matrices_to_vector(to_model, pars)
   }
   list(
@@ -431,7 +508,11 @@ engine <- function(DATA, MODEL, TABLES = NA) {
         CONSTRLOGSD = log(sqrt(diag(x$PSI))),
         CORRFLAG = match(x$LATCOV, c("none", "lkj", "direct")) - 1L,
         REGMAT = if (all(x$BETA %in% 0)) matrix(0, 0, 0) else x$BETA,
-        RESCOV = if (all(x$THETA[upper.tri(x$THETA)] %in% 0)) matrix(0, 0, 0) else x$THETA,
+        RESCOV = if (all(x$THETA[upper.tri(x$THETA)] %in% 0)) {
+          matrix(0, 0, 0)
+        } else {
+          x$THETA
+        },
         CONSTRINT = x$NU,
         CONSTRMEAN = x$ALPHA,
         CONSTRLOGSCALE = log(item_scales(x)),
@@ -442,7 +523,14 @@ engine <- function(DATA, MODEL, TABLES = NA) {
     }),
     data = lapply(seq_len(DATA$ngroups) - 1, function(g) {
       rows <- which(DATA$group == g)
-      key <- if (any(DATA$numeric)) seq_along(rows) else do.call(paste, as.data.frame(cbind(DATA$stratum[rows], DATA$Y[rows, , drop = FALSE])))
+      key <- if (any(DATA$numeric)) {
+        seq_along(rows)
+      } else {
+        do.call(
+          paste,
+          as.data.frame(cbind(DATA$stratum[rows], DATA$Y[rows, , drop = FALSE]))
+        )
+      }
       first <- !duplicated(key)
       id <- match(key, key[first])
       WM <- matrix(0, 0, 0)
@@ -462,9 +550,18 @@ engine <- function(DATA, MODEL, TABLES = NA) {
       }
       tables <- if (is.na(TABLES)) DATA$tables[g + 1] else TABLES
       freq <- if (tables == DATA$tables[g + 1]) {
-        if (tables) DATA$freq[ot[g + 1] * nc + seq_len(ns[g + 1] * nc)] else numeric(0)
+        if (tables) {
+          DATA$freq[ot[g + 1] * nc + seq_len(ns[g + 1] * nc)]
+        } else {
+          numeric(0)
+        }
       } else if (tables) {
-        cpp_pairs_freq(DATA$Y[rows, , drop = FALSE], DATA$cat, if (length(DATA$weights)) DATA$weights[rows] else numeric(0), DATA$stratum[rows])
+        cpp_pairs_freq(
+          DATA$Y[rows, , drop = FALSE],
+          DATA$cat,
+          if (length(DATA$weights)) DATA$weights[rows] else numeric(0),
+          DATA$stratum[rows]
+        )
       } else {
         numeric(0)
       }
@@ -523,14 +620,19 @@ start_values <- function(START, DATA, MODEL, VERBOSE) {
       for (j in which(DATA$numeric)) {
         seen <- rows & !is.na(DATA$Y[, j])
         centre[j] <- stats::weighted.mean(DATA$Y[seen, j], w[seen])
-        spread[j] <- sqrt(stats::weighted.mean((DATA$Y[seen, j] - centre[j])^2, w[seen]))
+        spread[j] <- sqrt(stats::weighted.mean(
+          (DATA$Y[seen, j] - centre[j])^2,
+          w[seen]
+        ))
       }
       start <- signed_loadings(DATA$Y[rows, , drop = FALSE], m, spread)
       free_scales <- is.na(item_scales(m))
       th[block == "lambda"] <- start$loadings[is.na(m$LAMBDA)]
       th[block == "logsd"] <- log(start$sd[is.na(diag(m$PSI))])
       th[block == "nu"] <- centre[is.na(m$NU)]
-      th[block == "scale"][m$NUMERIC[free_scales]] <- log(spread[m$NUMERIC & free_scales])
+      th[block == "scale"][m$NUMERIC[free_scales]] <- log(spread[
+        m$NUMERIC & free_scales
+      ])
       if (m$PARAMETERIZATION == "theta") {
         par <- vector_to_matrices(m, th)
         L <- par$lambda %*% solve(diag(m$q) - par$beta)
@@ -548,7 +650,11 @@ start_values <- function(START, DATA, MODEL, VERBOSE) {
   } else if (VERBOSE) {
     message("- Initialised at user-supplied values.")
   }
-  stopifnot(is.numeric(vector), length(vector) == length(parameter_blocks(MODEL, nthr)), all(is.finite(vector)))
+  stopifnot(
+    is.numeric(vector),
+    length(vector) == length(parameter_blocks(MODEL, nthr)),
+    all(is.finite(vector))
+  )
   if (!is.null(START) && implied_variance(MODEL, vector) > 1) {
     warning("Negative error variances implied by init parameters")
   }
@@ -575,8 +681,13 @@ signed_loadings <- function(Y, MODEL, SPREAD) {
   L[is.na(L)] <- .25
   for (h in seq_len(MODEL$q)) {
     S <- which(is.na(MODEL$LAMBDA[, h]) | MODEL$LAMBDA[, h] != 0)
-    if (length(S) < 2) next
-    R <- suppressWarnings(stats::cor(Y[rows, S, drop = FALSE], use = "pairwise.complete.obs"))
+    if (length(S) < 2) {
+      next
+    }
+    R <- suppressWarnings(stats::cor(
+      Y[rows, S, drop = FALSE],
+      use = "pairwise.complete.obs"
+    ))
     R[is.na(R)] <- 0
     e <- eigen(R, symmetric = TRUE)
     v <- pmin(pmax(e$vectors[, 1] * sqrt(max(e$values[1] - 1, .1)), -.9), .9)
@@ -586,8 +697,12 @@ signed_loadings <- function(Y, MODEL, SPREAD) {
       sd[h] <- abs(v[fix] * SPREAD[S[fix]] / MODEL$LAMBDA[S[fix], h])
       v <- v * sign(v[fix] * MODEL$LAMBDA[S[fix], h]) * SPREAD[S] / sd[h]
     } else {
-      if (is.na(variance[h])) sd[h] <- 1
-      if (!is.na(fix)) v <- v * sign(v[fix] * MODEL$LAMBDA[S[fix], h])
+      if (is.na(variance[h])) {
+        sd[h] <- 1
+      }
+      if (!is.na(fix)) {
+        v <- v * sign(v[fix] * MODEL$LAMBDA[S[fix], h])
+      }
       v <- v * SPREAD[S] / sd[h]
     }
     free <- is.na(MODEL$LAMBDA[S, h])
@@ -605,11 +720,20 @@ signed_loadings <- function(Y, MODEL, SPREAD) {
 #' @seealso [fit_lavaanpl()], [start_values()]
 #' @keywords internal
 implied_variance <- function(MODEL, PARAMETER_VECTOR) {
-  max(0, unlist(Map(function(m, par) {
-    if (m$PARAMETERIZATION != "delta") return(0)
-    L <- par$lambda %*% solve(diag(m$q) - par$beta)
-    (rowSums((L %*% par$psi) * L) * par$delta^2)[!m$NUMERIC]
-  }, MODEL$MODELS, vector_to_matrices(MODEL, PARAMETER_VECTOR))))
+  max(
+    0,
+    unlist(Map(
+      function(m, par) {
+        if (m$PARAMETERIZATION != "delta") {
+          return(0)
+        }
+        L <- par$lambda %*% solve(diag(m$q) - par$beta)
+        (rowSums((L %*% par$psi) * L) * par$delta^2)[!m$NUMERIC]
+      },
+      MODEL$MODELS,
+      vector_to_matrices(MODEL, PARAMETER_VECTOR)
+    ))
+  )
 }
 
 #' Stochastic approximation
@@ -629,7 +753,14 @@ run_sa <- function(START, DATA, ENGINE, LINCON, CONTROL, VERBOSE) {
   npar <- length(LINCON$free_idx)
   free <- npar < length(START)
   adam_epochs <- CONTROL$adam_epochs
-  if (is.null(adam_epochs)) adam_epochs <- max(5L, ceiling(150 / ceiling(DATA$pairs / min(CONTROL$pairs_per_iteration, DATA$pairs))))
+  if (is.null(adam_epochs)) {
+    adam_epochs <- max(
+      5L,
+      ceiling(
+        150 / ceiling(DATA$pairs / min(CONTROL$pairs_per_iteration, DATA$pairs))
+      )
+    )
+  }
   gain <- switch(
     CONTROL$gain,
     auto = as.integer(npar <= 2000),

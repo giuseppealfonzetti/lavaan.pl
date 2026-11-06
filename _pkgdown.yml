@@ -31,11 +31,10 @@ reference:
       - standardizedSolution
       - get_lavaanpl_internal
 
-  - title: Diagnostics of the stochastic approximation
+  - title: Diagnostics
     contents:
-      - sa_diagnostics
+      - diagnostics
       - plot.lavaan.pl
-      - sa_stability
 
   - title: Controls
     contents:

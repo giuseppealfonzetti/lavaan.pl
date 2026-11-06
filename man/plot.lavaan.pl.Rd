@@ -10,7 +10,7 @@
 \item{x}{A \code{lavaan.pl} object from \code{\link[=lavaan.pl]{lavaan.pl()}}.}
 
 \item{type}{\code{"trace"} for the estimates by parameter block, \code{"objective"} for the negative pairwise log-likelihood
-per unit (it is not monitored in the averaged phase), \code{"noise"} for the optimisation noise relative to the standard
+per unit (at the running average in the averaged phase, evaluated when plotting), \code{"noise"} for the optimisation noise relative to the standard
 error of each parameter, with stochastic approximation only.}
 
 \item{blocks}{Parameter blocks to show, such as \code{"lambda"} or \code{"tau"}. If \code{NULL}, all of them.}
@@ -26,5 +26,5 @@ preconditioning and averaging of the stochastic approximation, and quasi-Newton,
 likelihood counts as one epoch and only accepted steps are shown.
 }
 \seealso{
-\code{\link[=sa_diagnostics]{sa_diagnostics()}}
+\code{\link[=diagnostics]{diagnostics()}}
 }
