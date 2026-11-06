@@ -8,8 +8,7 @@
 create_lav_from_latpl <- function(fit, vars = NULL, template) {
   frees <- lavaan_matrices(template, "free")
   par_lav <- function(theta) {
-    fit$theta <- theta
-    pars <- get_par(fit, OPTION = "list")
+    pars <- theta2par(fit$model, theta)
     if (!inherits(fit$model, "latpl_groups")) pars <- list(pars)
     x <- numeric(template@Model@nx.free)
     for (g in seq_along(frees)) {
@@ -44,7 +43,7 @@ create_lav_from_latpl <- function(fit, vars = NULL, template) {
   out@optim$fx.group <- out@optim$logl.group <- NA
 
   # Change optim slot (depends whether it is numFit or stoFit) -----------------
-  if (fit$method %in% c("QN", "SA-QN")) {
+  if (fit$method != "SA") {
     out@optim$iterations <- as.integer(fit$numFit$info[["neval"]])
     out@optim$converged <- fit$numFit$convergence %in% c(1L, 2L) ||
       (fit$numFit$convergence == 4L && fit$numFit$info[["maxgradient"]] < template@Options$optim.dx.tol)
@@ -57,7 +56,7 @@ create_lav_from_latpl <- function(fit, vars = NULL, template) {
   # Change vcov slot -----------------------------------------------------------
   vcov <- NULL
   if (!is.null(vars)) {
-    lat <- theta_block(fit$model, sum(fit$data$cat - 1)) %in% c("corr", "logsd", "scale")
+    lat <- fit$block %in% c("corr", "logsd", "scale")
     delta <- matrix(0, length(x), length(fit$theta))
     delta[, !lat] <- numDeriv::jacobian(function(t) par_lav(replace(fit$theta, !lat, t)), fit$theta[!lat], method = "simple")
     if (any(lat)) delta[, lat] <- numDeriv::jacobian(function(t) par_lav(replace(fit$theta, lat, t)), fit$theta[lat])

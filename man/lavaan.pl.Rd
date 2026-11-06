@@ -12,8 +12,7 @@ lavaan.pl(
   model.type = c("sem", "cfa"),
   std.lv = FALSE,
   estimator = "PML",
-  estimator.args = list(init = set_init(), ncores = 1, valdata = NULL,
-    computevar_numderiv = FALSE),
+  estimator.args = list(ncores = 1, computevar_numderiv = FALSE),
   start = NULL,
   control = NULL,
   verbose = FALSE,
@@ -25,8 +24,7 @@ pmlcfa(
   data,
   std.lv = FALSE,
   estimator = "PML",
-  estimator.args = list(init = set_init(), ncores = 1, valdata = NULL,
-    computevar_numderiv = FALSE),
+  estimator.args = list(ncores = 1, computevar_numderiv = FALSE),
   start = NULL,
   control = NULL,
   verbose = FALSE,
@@ -38,8 +36,7 @@ pmlsem(
   data,
   std.lv = FALSE,
   estimator = "PML",
-  estimator.args = list(init = set_init(), ncores = 1, valdata = NULL,
-    computevar_numderiv = FALSE),
+  estimator.args = list(ncores = 1, computevar_numderiv = FALSE),
   start = NULL,
   control = NULL,
   verbose = FALSE,
@@ -64,8 +61,7 @@ indicator to 1.0.}
 
 \item{estimator}{The estimator, which must be \code{"PML"}.}
 
-\item{estimator.args}{A list with \code{init} (from \code{\link[=set_init]{set_init()}}), \code{ncores}, \code{valdata},
-\code{valgroup}, \code{valx} and \code{computevar_numderiv}.}
+\item{estimator.args}{A list with \code{ncores} and \code{computevar_numderiv}.}
 
 \item{start}{A vector of starting values in lavaan's free-parameter order.}
 

@@ -48,7 +48,7 @@ saturated <- function(fit, tau, rho, order, scores) {
 }
 
 implied_correlations <- function(fit, theta) {
-  par <- lavaan.pl:::get_par(replace(fit, "theta", list(theta)), OPTION = "list")
+  par <- lavaan.pl:::theta2par(fit$model, theta)
   implied <- par$loadings %*% par$latent_correlations %*% t(par$loadings)
   implied[upper.tri(implied)]
 }

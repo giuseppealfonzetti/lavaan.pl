@@ -29,7 +29,7 @@ fit <- lavaan.pl:::fit_latpl(data, model, CONTROL = set_qn_control())
 #### Covariates define the strata of the frequency tables ####
 local({
   expect_equal(nrow(data$strata[[1]]), 4)
-  expect_equal(length(data$freq), 4 * length(lavaan.pl:::pairs_freq(items, data$cat)))
+  expect_equal(length(data$freq), 4 * length(lavaan.pl:::cpp_pairs_freq(items, data$cat)))
   expect_equal(sum(data$freq), n * p * (p - 1) / 2)
   expect_equal(
     data$strata[[1]][data$stratum + 1, , drop = FALSE],
@@ -38,8 +38,8 @@ local({
   )
   first <- data$stratum == 0
   expect_equal(
-    data$freq[seq_along(lavaan.pl:::pairs_freq(items, data$cat))],
-    lavaan.pl:::pairs_freq(items[first, ], data$cat)
+    data$freq[seq_along(lavaan.pl:::cpp_pairs_freq(items, data$cat))],
+    lavaan.pl:::cpp_pairs_freq(items[first, ], data$cat)
   )
   expect_equal(fit$dims$nx, 2)
   expect_equal(fit$dims$ngam, 2)
@@ -178,10 +178,6 @@ local({
 local({
   expect_error(lavaan.pl:::set_latpl_data(items, X = binary[1:10, ]))
   expect_error(
-    lavaan.pl:::set_latpl_data(items, X = binary, VALDATA = items[1:10, ]),
-    "VALX"
-  )
-  expect_error(
     lavaan.pl:::fit_latpl(
       lavaan.pl:::set_latpl_data(items),
       lavaan.pl:::set_latpl_model(loadings_structure, GAMMA = matrix(NA, 1, 2)),
@@ -192,7 +188,7 @@ local({
   expect_error(lavaan.pl:::set_latpl_model(loadings_structure, GAMMA = matrix(NA, 2, 2)))
 })
 
-#### SA with covariates agrees with PML, with and without validation data ####
+#### SA with covariates agrees with PML ####
 local({
   se <- sqrt(lavaan.pl:::compute_var(fit)$asymptotic_variance / n)
   distance <- function(x) {
@@ -203,14 +199,6 @@ local({
   expect_true(distance(fit_sa) < 1)
   vars_sa <- lavaan.pl:::compute_var(fit_sa)
   expect_true(all(vars_sa$optimisation_noise >= 0))
-  data_val <- lavaan.pl:::set_latpl_data(
-    items,
-    X = binary,
-    VALDATA = items[1:500, ],
-    VALX = binary[1:500, ]
-  )
-  fit_val <- lavaan.pl:::fit_latpl(data_val, model, CONTROL = set_sa_control(PAIRS_PER_ITERATION = 4))
-  expect_true(distance(fit_val) < 1)
 })
 
 #### Frequency tables and individual observations give the same likelihood, gradient, H, J and pair variance ####
@@ -330,20 +318,6 @@ local({
   expect_true(max(abs(
     lavaan.pl:::get_par(fit_sa, OPTION = "transformed") - lavaan.pl:::get_par(fit_continuous, OPTION = "transformed")
   ) / se) < 1)
-  data_val <- lavaan.pl:::set_latpl_data(
-    items_continuous,
-    X = continuous,
-    VALDATA = items_continuous[1:500, ],
-    VALX = continuous[1:500, ]
-  )
-  fit_val <- lavaan.pl:::fit_latpl(
-    data_val,
-    model_continuous,
-    CONTROL = set_sa_control(PAIRS_PER_ITERATION = 4)
-  )
-  expect_true(max(abs(
-    lavaan.pl:::get_par(fit_val, OPTION = "transformed") - lavaan.pl:::get_par(fit_continuous, OPTION = "transformed")
-  ) / se) < 1)
 })
 
 #### The available-cases term is the weighted univariate likelihood given the covariates ####
@@ -442,16 +416,8 @@ local({
     pmlsem("f =~ y1 + y2 + y3 + y4 + y5 + y6\ny5 ~ y6", mimic),
     "exogenous covariates"
   )
-  fit_val <- pmlsem(
-    syntax,
-    mimic,
-    control = set_sa_control(PAIRS_PER_ITERATION = 4),
-    estimator.args = list(
-      valdata = items[1:300, ],
-      valx = binary[1:300, ]
-    )
-  )
-  expect_true(lavaan::lavInspect(fit_val, "converged"))
+  fit_sa <- pmlsem(syntax, mimic, control = set_sa_control(PAIRS_PER_ITERATION = 4))
+  expect_true(lavaan::lavInspect(fit_sa, "converged"))
   with_missing <- mimic
   with_missing$y2[1:100] <- NA
   fit_available <- pmlsem(syntax, with_missing, missing = "available.cases")
@@ -492,8 +458,7 @@ local({
   fit_started <- lavaan.pl:::fit_latpl(
     lavaan.pl:::set_latpl_data(items_age, X = cbind(age)),
     model_age,
-    INIT = set_init(METHOD = "SA"),
-    CONTROL = set_qn_control()
+    CONTROL = set_saqn_control()
   )
   expect_equal(pl(fit_started)$pl, pl(fit_centred)$pl, tolerance = 1e-8)
   fit_sa <- lavaan.pl:::fit_latpl(

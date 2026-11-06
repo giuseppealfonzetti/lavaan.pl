@@ -2,23 +2,18 @@
 % Please edit documentation in R/allMethods.R
 \name{compute_var}
 \alias{compute_var}
-\alias{compute_var.latpl_fit}
 \title{Compute variance of the estimates}
 \usage{
-compute_var(OBJ, NUMDERIV = FALSE, VERBOSE = FALSE)
-
-\method{compute_var}{latpl_fit}(OBJ, NUMDERIV = FALSE, VERBOSE = FALSE)
+compute_var(OBJ, NUMDERIV = FALSE)
 }
 \arguments{
 \item{OBJ}{Object of class latpl_fit}
 
 \item{NUMDERIV}{TRUE if the hessian must be computed using \link[numDeriv]{jacobian}}
-
-\item{VERBOSE}{TRUE if the function must print messages}
 }
 \value{
 A list with the Jacobian \code{trJacob} of the transformation to
-interpretable parameters, \code{H}, \code{J}, the sandwich \code{vcov} and its diagonal
+interpretable parameters, \code{H}, \code{J}, the diagonal of the sandwich variance
 \code{asymptotic_variance} on the transformed scale, \code{optimisation_noise} (SA
 fits only), the optimisation noise matrix \code{noise} on the optimisation scale
 (SA fits only), the Newton step to the optimum \code{step}, its size in standard errors of

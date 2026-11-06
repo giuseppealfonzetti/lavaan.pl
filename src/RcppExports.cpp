@@ -85,9 +85,9 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
-// pairs_freq
-Eigen::VectorXd pairs_freq(const Eigen::Map<Eigen::MatrixXd> Y, const Eigen::Map<Eigen::VectorXd> C_VEC, const Rcpp::NumericVector WEIGHTS, const Rcpp::NumericVector STRATA);
-RcppExport SEXP _lavaan_pl_pairs_freq(SEXP YSEXP, SEXP C_VECSEXP, SEXP WEIGHTSSEXP, SEXP STRATASEXP) {
+// cpp_pairs_freq
+Eigen::VectorXd cpp_pairs_freq(const Eigen::Map<Eigen::MatrixXd> Y, const Eigen::Map<Eigen::VectorXd> C_VEC, const Rcpp::NumericVector WEIGHTS, const Rcpp::NumericVector STRATA);
+RcppExport SEXP _lavaan_pl_cpp_pairs_freq(SEXP YSEXP, SEXP C_VECSEXP, SEXP WEIGHTSSEXP, SEXP STRATASEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -95,13 +95,13 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< const Eigen::Map<Eigen::VectorXd> >::type C_VEC(C_VECSEXP);
     Rcpp::traits::input_parameter< const Rcpp::NumericVector >::type WEIGHTS(WEIGHTSSEXP);
     Rcpp::traits::input_parameter< const Rcpp::NumericVector >::type STRATA(STRATASEXP);
-    rcpp_result_gen = Rcpp::wrap(pairs_freq(Y, C_VEC, WEIGHTS, STRATA));
+    rcpp_result_gen = Rcpp::wrap(cpp_pairs_freq(Y, C_VEC, WEIGHTS, STRATA));
     return rcpp_result_gen;
 END_RCPP
 }
 // cpp_sa
-Rcpp::List cpp_sa(const Eigen::Map<Eigen::VectorXd> START, const Eigen::Map<Eigen::MatrixXd> K, const Eigen::Map<Eigen::VectorXd> C, const Rcpp::List MODEL, const Rcpp::List DATA, const Rcpp::List VALDATA, const int PAIRS_PER_ITERATION, const double ALPHA, const int ADAM_EPOCHS, const int PRECONDITION_EPOCHS, const int MAX_PRECONDITION_EPOCHS, const int AVERAGE_EPOCHS, const double TOL, const double DECAY, const double AVG_FROM, const int GAIN, const int SEED, const bool ADAM_ONLY, const bool VERBOSE);
-RcppExport SEXP _lavaan_pl_cpp_sa(SEXP STARTSEXP, SEXP KSEXP, SEXP CSEXP, SEXP MODELSEXP, SEXP DATASEXP, SEXP VALDATASEXP, SEXP PAIRS_PER_ITERATIONSEXP, SEXP ALPHASEXP, SEXP ADAM_EPOCHSSEXP, SEXP PRECONDITION_EPOCHSSEXP, SEXP MAX_PRECONDITION_EPOCHSSEXP, SEXP AVERAGE_EPOCHSSEXP, SEXP TOLSEXP, SEXP DECAYSEXP, SEXP AVG_FROMSEXP, SEXP GAINSEXP, SEXP SEEDSEXP, SEXP ADAM_ONLYSEXP, SEXP VERBOSESEXP) {
+Rcpp::List cpp_sa(const Eigen::Map<Eigen::VectorXd> START, const Eigen::Map<Eigen::MatrixXd> K, const Eigen::Map<Eigen::VectorXd> C, const Rcpp::List MODEL, const Rcpp::List DATA, const int PAIRS_PER_ITERATION, const double ALPHA, const int ADAM_EPOCHS, const int PRECONDITION_EPOCHS, const int MAX_PRECONDITION_EPOCHS, const int AVERAGE_EPOCHS, const double TOL, const double DECAY, const double AVG_FROM, const int GAIN, const int SEED, const bool VERBOSE);
+RcppExport SEXP _lavaan_pl_cpp_sa(SEXP STARTSEXP, SEXP KSEXP, SEXP CSEXP, SEXP MODELSEXP, SEXP DATASEXP, SEXP PAIRS_PER_ITERATIONSEXP, SEXP ALPHASEXP, SEXP ADAM_EPOCHSSEXP, SEXP PRECONDITION_EPOCHSSEXP, SEXP MAX_PRECONDITION_EPOCHSSEXP, SEXP AVERAGE_EPOCHSSEXP, SEXP TOLSEXP, SEXP DECAYSEXP, SEXP AVG_FROMSEXP, SEXP GAINSEXP, SEXP SEEDSEXP, SEXP VERBOSESEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -110,7 +110,6 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< const Eigen::Map<Eigen::VectorXd> >::type C(CSEXP);
     Rcpp::traits::input_parameter< const Rcpp::List >::type MODEL(MODELSEXP);
     Rcpp::traits::input_parameter< const Rcpp::List >::type DATA(DATASEXP);
-    Rcpp::traits::input_parameter< const Rcpp::List >::type VALDATA(VALDATASEXP);
     Rcpp::traits::input_parameter< const int >::type PAIRS_PER_ITERATION(PAIRS_PER_ITERATIONSEXP);
     Rcpp::traits::input_parameter< const double >::type ALPHA(ALPHASEXP);
     Rcpp::traits::input_parameter< const int >::type ADAM_EPOCHS(ADAM_EPOCHSSEXP);
@@ -122,9 +121,8 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< const double >::type AVG_FROM(AVG_FROMSEXP);
     Rcpp::traits::input_parameter< const int >::type GAIN(GAINSEXP);
     Rcpp::traits::input_parameter< const int >::type SEED(SEEDSEXP);
-    Rcpp::traits::input_parameter< const bool >::type ADAM_ONLY(ADAM_ONLYSEXP);
     Rcpp::traits::input_parameter< const bool >::type VERBOSE(VERBOSESEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_sa(START, K, C, MODEL, DATA, VALDATA, PAIRS_PER_ITERATION, ALPHA, ADAM_EPOCHS, PRECONDITION_EPOCHS, MAX_PRECONDITION_EPOCHS, AVERAGE_EPOCHS, TOL, DECAY, AVG_FROM, GAIN, SEED, ADAM_ONLY, VERBOSE));
+    rcpp_result_gen = Rcpp::wrap(cpp_sa(START, K, C, MODEL, DATA, PAIRS_PER_ITERATION, ALPHA, ADAM_EPOCHS, PRECONDITION_EPOCHS, MAX_PRECONDITION_EPOCHS, AVERAGE_EPOCHS, TOL, DECAY, AVG_FROM, GAIN, SEED, VERBOSE));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -135,8 +133,8 @@ static const R_CallMethodDef CallEntries[] = {
     {"_lavaan_pl_cpp_rho", (DL_FUNC) &_lavaan_pl_cpp_rho, 3},
     {"_lavaan_pl_cpp_saturated", (DL_FUNC) &_lavaan_pl_cpp_saturated, 5},
     {"_lavaan_pl_cpp_saturated_traces", (DL_FUNC) &_lavaan_pl_cpp_saturated_traces, 8},
-    {"_lavaan_pl_pairs_freq", (DL_FUNC) &_lavaan_pl_pairs_freq, 4},
-    {"_lavaan_pl_cpp_sa", (DL_FUNC) &_lavaan_pl_cpp_sa, 19},
+    {"_lavaan_pl_cpp_pairs_freq", (DL_FUNC) &_lavaan_pl_cpp_pairs_freq, 4},
+    {"_lavaan_pl_cpp_sa", (DL_FUNC) &_lavaan_pl_cpp_sa, 17},
     {NULL, NULL, 0}
 };
 

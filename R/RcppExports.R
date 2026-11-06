@@ -33,11 +33,11 @@ cpp_saturated_traces <- function(HTT, HTR, D, B, ST, SR, N, FULL = FALSE) {
 #'   \eqn{l < k}, ordered by \eqn{k}, and within each pair the categories of \eqn{k} then \eqn{l}.
 #'   With `STRATA`, the tables of each stratum one after the other.
 #' @keywords internal
-pairs_freq <- function(Y, C_VEC, WEIGHTS = as.numeric( c()), STRATA = as.numeric( c())) {
-    .Call(`_lavaan_pl_pairs_freq`, Y, C_VEC, WEIGHTS, STRATA)
+cpp_pairs_freq <- function(Y, C_VEC, WEIGHTS = as.numeric( c()), STRATA = as.numeric( c())) {
+    .Call(`_lavaan_pl_cpp_pairs_freq`, Y, C_VEC, WEIGHTS, STRATA)
 }
 
-cpp_sa <- function(START, K, C, MODEL, DATA, VALDATA, PAIRS_PER_ITERATION, ALPHA, ADAM_EPOCHS, PRECONDITION_EPOCHS, MAX_PRECONDITION_EPOCHS, AVERAGE_EPOCHS, TOL, DECAY, AVG_FROM, GAIN, SEED, ADAM_ONLY = FALSE, VERBOSE = FALSE) {
-    .Call(`_lavaan_pl_cpp_sa`, START, K, C, MODEL, DATA, VALDATA, PAIRS_PER_ITERATION, ALPHA, ADAM_EPOCHS, PRECONDITION_EPOCHS, MAX_PRECONDITION_EPOCHS, AVERAGE_EPOCHS, TOL, DECAY, AVG_FROM, GAIN, SEED, ADAM_ONLY, VERBOSE)
+cpp_sa <- function(START, K, C, MODEL, DATA, PAIRS_PER_ITERATION, ALPHA, ADAM_EPOCHS, PRECONDITION_EPOCHS, MAX_PRECONDITION_EPOCHS, AVERAGE_EPOCHS, TOL, DECAY, AVG_FROM, GAIN, SEED, VERBOSE = FALSE) {
+    .Call(`_lavaan_pl_cpp_sa`, START, K, C, MODEL, DATA, PAIRS_PER_ITERATION, ALPHA, ADAM_EPOCHS, PRECONDITION_EPOCHS, MAX_PRECONDITION_EPOCHS, AVERAGE_EPOCHS, TOL, DECAY, AVG_FROM, GAIN, SEED, VERBOSE)
 }
 

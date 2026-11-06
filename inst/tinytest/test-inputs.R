@@ -8,19 +8,14 @@ two_factors[4:6, 2] <- NA
 local({
   ucminf_control <- set_qn_control()
   sa_control <- set_sa_control()
-  sa_init_control <- set_sa_init_control()
   expect_inherits(ucminf_control, "latpl_qn_control")
   expect_inherits(sa_control, "latpl_sa_control")
-  expect_inherits(sa_init_control, "latpl_sa_control")
   expect_equal(
     unclass(ucminf_control),
     list(GRTOL = 1e-6, XTOL = 1e-12, STEPMAX = 1, MAXEVAL = 500L)
   )
   expect_identical(sa_control$AVERAGE_EPOCHS, 50L)
   expect_identical(sa_control$GAIN, "auto")
-  expect_identical(sa_init_control$AVERAGE_EPOCHS, 0L)
-  expect_false("PRECONDITION_EPOCHS" %in% names(formals(set_sa_init_control)))
-  expect_identical(names(sa_control), names(sa_init_control))
 })
 
 #### Control constructors validate their arguments ####
@@ -37,16 +32,6 @@ local({
   expect_error(set_sa_control(DECAY = 0.4))
   expect_error(set_sa_control(AVG_FROM = 1))
   expect_error(set_sa_control(GAIN = "full"))
-  expect_error(set_sa_init_control(ALPHA = 0))
-})
-
-#### set_init() validates its arguments ####
-local({
-  expect_inherits(set_init(), "latpl_init")
-  expect_identical(set_init()$METHOD, "standard")
-  expect_error(set_init(METHOD = "custom"))
-  expect_error(set_init(THETA = c(1, Inf)))
-  expect_error(set_init(CONTROL = set_qn_control()))
 })
 
 #### lavaan.pl:::set_latpl_data() computes the frequencies and validates the data ####
@@ -55,15 +40,9 @@ local({
   expect_inherits(data, "latpl_data")
   expect_identical(c(data$n, data$p), dim(bfi_items))
   expect_equal(unname(data$cat), rep(6, 6))
-  expect_equal(data$freq, lavaan.pl:::pairs_freq(bfi_items, data$cat))
-  expect_null(data$valfreq)
-  expect_false(is.null(
-    lavaan.pl:::set_latpl_data(bfi_items, VALDATA = bfi_items[1:100, ])$valfreq
-  ))
+  expect_equal(data$freq, lavaan.pl:::cpp_pairs_freq(bfi_items, data$cat))
   expect_stdout(print(data), "<latpl_data>")
   expect_error(lavaan.pl:::set_latpl_data(bfi_items, MISSING = "complete"))
-  expect_error(lavaan.pl:::set_latpl_data(bfi_items, VALDATA = bfi_items[, 1:5]))
-  expect_error(lavaan.pl:::set_latpl_data(bfi_items, VALDATA = bfi_items + 1))
 })
 
 #### lavaan.pl:::set_latpl_data() drops incomplete rows under listwise deletion ####
@@ -89,45 +68,6 @@ local({
     sum(data$ufreq),
     sum(missing_per_row * (ncol(items_missing) - missing_per_row))
   )
-})
-
-#### lavaan.pl:::set_latpl_data() stacks the validation frequencies of each group ####
-local({
-  group <- rep(c("b", "a"), length.out = nrow(bfi_items))
-  validation <- bfi_items[1:200, ]
-  validation_group <- rep(c("a", "b"), each = 100)
-  data <- lavaan.pl:::set_latpl_data(
-    bfi_items,
-    GROUP = group,
-    VALDATA = validation,
-    VALGROUP = validation_group
-  )
-  expect_equal(
-    data$valfreq,
-    c(
-      lavaan.pl:::pairs_freq(validation[validation_group == "b", ], data$cat),
-      lavaan.pl:::pairs_freq(validation[validation_group == "a", ], data$cat)
-    )
-  )
-  expect_error(
-    lavaan.pl:::set_latpl_data(bfi_items, GROUP = group, VALDATA = validation),
-    "VALGROUP"
-  )
-  expect_error(
-    lavaan.pl:::set_latpl_data(
-      bfi_items,
-      GROUP = group,
-      VALDATA = validation,
-      VALGROUP = rep("c", 200)
-    ),
-    "labels of GROUP"
-  )
-  expect_error(lavaan.pl:::set_latpl_data(
-    bfi_items,
-    GROUP = group,
-    VALDATA = validation,
-    VALGROUP = validation_group[-1]
-  ))
 })
 
 #### lavaan.pl:::set_latpl_data() normalises the weights within groups ####
@@ -213,20 +153,20 @@ local({
   )
 })
 
-#### lavaan.pl:::pairs_freq() counts every pair once and skips missing responses ####
+#### lavaan.pl:::cpp_pairs_freq() counts every pair once and skips missing responses ####
 local({
   set.seed(123)
   p <- 10
   n <- 10
   binary <- matrix(as.numeric(rbinom(n * p, 1, .5)), n, p)
-  frequencies <- lavaan.pl:::pairs_freq(binary, rep(2, p))
+  frequencies <- lavaan.pl:::cpp_pairs_freq(binary, rep(2, p))
   pairs_per_row <- p * (p - 1) / 2
   expect_equal(length(frequencies), 4 * pairs_per_row)
   expect_equal(sum(frequencies), n * pairs_per_row)
   binary[1, 1] <- NA
-  expect_equal(sum(lavaan.pl:::pairs_freq(binary, rep(2, p))), n * pairs_per_row - (p - 1))
+  expect_equal(sum(lavaan.pl:::cpp_pairs_freq(binary, rep(2, p))), n * pairs_per_row - (p - 1))
   expect_equal(
-    sum(lavaan.pl:::pairs_freq(binary, rep(2, p), WEIGHTS = rep(2, n))),
+    sum(lavaan.pl:::cpp_pairs_freq(binary, rep(2, p), WEIGHTS = rep(2, n))),
     2 * (n * pairs_per_row - (p - 1))
   )
 })

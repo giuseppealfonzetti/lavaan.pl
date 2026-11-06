@@ -56,7 +56,7 @@ local({
 local({
   start <- fit_exact$init
   start[lavaan.pl:::theta_block(model, sum(data$cat - 1)) == "lambda"] <- 0
-  saddle <- suppressWarnings(lavaan.pl:::fit_latpl(data, model, CONTROL = set_sa_control(), INIT = set_init(THETA = start)))
+  saddle <- suppressWarnings(lavaan.pl:::fit_latpl(data, model, CONTROL = set_sa_control(), START = start))
   d <- sa_diagnostics(saddle)
   expect_false(d$converged)
   expect_true(all(is.na(d$parameters$ratio)))

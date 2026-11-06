@@ -221,21 +221,9 @@ local({
   )
 })
 
-#### Two groups with validation data are within one standard error ####
+#### Two groups are within one standard error ####
 local({
-  validation <- lavaan.pl:::sim_data(
-    400,
-    lavaan.pl:::gen_loadings(loadings_structure, SEED = 1, LB = .4, UB = .8),
-    c(-1.2, 0, 1.2),
-    latent_correlations,
-    SEED = 9
-  )
-  data_two_groups <- lavaan.pl:::set_latpl_data(
-    items,
-    GROUP = rep(1:2, each = n / 2),
-    VALDATA = validation,
-    VALGROUP = rep(1:2, each = 200)
-  )
+  data_two_groups <- lavaan.pl:::set_latpl_data(items, GROUP = rep(1:2, each = n / 2))
   model_two_groups <- lavaan.pl:::set_latpl_groups(list(
     lavaan.pl:::set_latpl_model(loadings_structure),
     lavaan.pl:::set_latpl_model(loadings_structure)
@@ -262,18 +250,9 @@ local({
       data,
       model,
       CONTROL = set_sa_control(),
-      INIT = set_init(THETA = replace(fit_pml$theta, 121, 5))
+      START = replace(fit_pml$theta, 121, 5)
     ),
     "outside the parameter space"
-  )
-})
-
-#### The Adam phase initialises ucminf ####
-local({
-  expect_equal(
-    lavaan.pl:::fit_latpl(data, model, INIT = set_init(METHOD = "SA"), CONTROL = set_qn_control())$theta,
-    fit_pml$theta,
-    tolerance = 1e-4
   )
 })
 
@@ -388,7 +367,7 @@ local({
   model_small <- lavaan.pl:::set_latpl_model(lavaan.pl:::build_constr_mat(6, 1, "simple"))
   start <- suppressWarnings(lavaan.pl:::fit_latpl(small, model_small, CONTROL = set_qn_control(MAXEVAL = 1)))$init
   start[lavaan.pl:::theta_block(model_small, sum(small$cat - 1)) == "lambda"] <- .01
-  fit_default <- lavaan.pl:::fit_latpl(small, model_small, CONTROL = set_sa_control(TOL = 1e-8), INIT = set_init(THETA = start))
+  fit_default <- lavaan.pl:::fit_latpl(small, model_small, CONTROL = set_sa_control(TOL = 1e-8), START = start)
   expect_equal(fit_default$stoFit$pairs_per_iteration, 15)
   expect_equal(fit_default$stoFit$epoch_length, 1)
   expect_equal(fit_default$stoFit$adam_epochs, 150)
@@ -396,7 +375,7 @@ local({
     small,
     model_small,
     CONTROL = set_sa_control(ADAM_EPOCHS = 2, PRECONDITION_EPOCHS = 1, MAX_PRECONDITION_EPOCHS = 1, AVERAGE_EPOCHS = 2, TOL = 1e-8),
-    INIT = set_init(THETA = start)
+    START = start
   ))
   expect_equal(fit_capped$stoFit$adam_epochs, 2)
   expect_equal(fit_capped$stoFit$precondition_epochs, 1)
@@ -419,7 +398,7 @@ local({
     CONTROL = set_sa_control(
       ALPHA = 1e-4, ADAM_EPOCHS = 1, PRECONDITION_EPOCHS = 0, MAX_PRECONDITION_EPOCHS = cap, AVERAGE_EPOCHS = 1
     ),
-    INIT = set_init(THETA = flat)
+    START = flat
   ))$stoFit$precondition_epochs
   expect_equal(still(0), 0)
   expect_true(still(20) > 0)
@@ -433,7 +412,7 @@ local({
   start <- suppressWarnings(lavaan.pl:::fit_latpl(small, model_small, CONTROL = set_qn_control(MAXEVAL = 1)))$init
   start[lavaan.pl:::theta_block(model_small, sum(small$cat - 1)) == "lambda"] <- 0
   expect_warning(
-    fit_saddle <- lavaan.pl:::fit_latpl(small, model_small, CONTROL = set_sa_control(), INIT = set_init(THETA = start)),
+    fit_saddle <- lavaan.pl:::fit_latpl(small, model_small, CONTROL = set_sa_control(), START = start),
     "not positive definite"
   )
   expect_false(fit_saddle$stoFit$converged)
@@ -512,7 +491,7 @@ local({
       small,
       model_small,
       CONTROL = set_sa_control(ALPHA = 1e-4, ADAM_EPOCHS = 1, PRECONDITION_EPOCHS = 0, AVERAGE_EPOCHS = 1),
-      INIT = set_init(THETA = far)
+      START = far
     ),
     "more than the optimisation noise explains"
   )
@@ -528,11 +507,11 @@ local({
   expect_null(lavaan.pl:::compute_var(fit_saqn)$noise)
   expect_null(fit_saqn$stoFit$invh)
   expect_error(sa_diagnostics(fit_saqn), "not fitted by stochastic approximation")
-  burn <- lavaan.pl:::run_sa(fit_saqn$init, data, fit_saqn$engine, fit_saqn$lincon, set_saqn_control(), FALSE, FALSE)
+  burn <- lavaan.pl:::run_sa(fit_saqn$init, data, fit_saqn$engine, fit_saqn$lincon, set_saqn_control(), FALSE)
   expect_equal(dim(burn$invh), rep(length(fit_saqn$theta), 2))
-  fit_flat <- lavaan.pl:::fit_latpl(data, model, CONTROL = set_qn_control(), INIT = set_init(THETA = burn$theta))
+  fit_flat <- lavaan.pl:::fit_latpl(data, model, CONTROL = set_qn_control(), START = burn$theta)
   expect_true(fit_saqn$numFit$info[["neval"]] < fit_flat$numFit$info[["neval"]])
-  expect_equal(length(lavaan.pl:::run_sa(fit_saqn$init, data, fit_saqn$engine, fit_saqn$lincon, set_sa_control(AVERAGE_EPOCHS = 1), FALSE, FALSE)$invh), 0)
+  expect_equal(length(lavaan.pl:::run_sa(fit_saqn$init, data, fit_saqn$engine, fit_saqn$lincon, set_sa_control(AVERAGE_EPOCHS = 1), FALSE)$invh), 0)
 })
 
 #### Several SA-QN starts keep the highest pairwise log-likelihood of the runs with those seeds ####
@@ -549,5 +528,4 @@ local({
 #### SA needs the averaged phase, whose noise enters the variance ####
 local({
   expect_error(lavaan.pl:::fit_latpl(data, model, CONTROL = set_sa_control(AVERAGE_EPOCHS = 0)), "AVERAGE_EPOCHS")
-  expect_error(lavaan.pl:::fit_latpl(data, model, CONTROL = set_sa_init_control()), "AVERAGE_EPOCHS")
 })

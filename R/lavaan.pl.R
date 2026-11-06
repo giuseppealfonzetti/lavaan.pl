@@ -22,8 +22,7 @@
 #'   latent variable is determined by fixing the factor loading of the first
 #'   indicator to 1.0.
 #' @param estimator The estimator, which must be `"PML"`.
-#' @param estimator.args A list with `init` (from [set_init()]), `ncores`, `valdata`,
-#'   `valgroup`, `valx` and `computevar_numderiv`.
+#' @param estimator.args A list with `ncores` and `computevar_numderiv`.
 #' @param start A vector of starting values in lavaan's free-parameter order.
 #' @param control Control object from [set_saqn_control()], [set_sa_control()] or [set_qn_control()], or `NULL`.
 #' @param verbose If `TRUE`, print additional information during the estimation
@@ -58,12 +57,7 @@ lavaan.pl <- function(
     model.type = c("sem", "cfa"),
     std.lv = FALSE,
     estimator = "PML",
-    estimator.args = list(
-      init = set_init(),
-      ncores = 1,
-      valdata = NULL,
-      computevar_numderiv = FALSE
-    ),
+    estimator.args = list(ncores = 1, computevar_numderiv = FALSE),
     start = NULL,
     control = NULL,
     verbose = FALSE,
@@ -80,11 +74,9 @@ lavaan.pl <- function(
     stop("`estimator` must be \"PML\"; use lavaan::", model.type, "() for other estimators.", call. = FALSE)
   }
   if (!is.null(lavargs$std.lv)) std.lv <- lavargs$std.lv
-  if (!is.null(estimator.args$method)) {
-    stop("`estimator.args$method` is no longer supported; use `optim.method`, e.g. `optim.method = \"QN\"`.", call. = FALSE)
-  }
-  if (any(c("init_method", "init_control", "cpp_control_init") %in% names(estimator.args))) {
-    stop("`estimator.args$init_method`, `init_control` and `cpp_control_init` are no longer supported; use `init = set_init(...)`.", call. = FALSE)
+  unknown <- setdiff(names(estimator.args), c("ncores", "computevar_numderiv"))
+  if (length(unknown)) {
+    stop("Unsupported `estimator.args`: ", paste(unknown, collapse = ", "), "; use `optim.method` for the method and `start` for starting values.", call. = FALSE)
   }
   method <- lavargs$optim.method
   if (!is.null(method) && !(length(method) == 1 && method %in% c("SA-QN", "SA", "QN"))) {
@@ -99,19 +91,8 @@ lavaan.pl <- function(
   if (!is.null(method) && !identical(method, control_method(control))) {
     stop("`control` is for ", control_method(control), ", but `optim.method` is ", method, ".", call. = FALSE)
   }
-  init <- estimator.args$init
-  if (is.null(init)) init <- set_init()
-  if (!inherits(init, "latpl_init")) {
-    stop("`estimator.args$init` must be created with `set_init()`.", call. = FALSE)
-  }
-  if (!is.null(init$THETA)) {
-    stop("Supply starting values through `start`, not `estimator.args$init`.", call. = FALSE)
-  }
   ncores <- estimator.args$ncores
   if (is.null(ncores)) ncores <- 1
-  valdata <- estimator.args$valdata
-  valgroup <- estimator.args$valgroup
-  valx <- estimator.args$valx
   computevar_numderiv <- estimator.args$computevar_numderiv
   if (is.null(computevar_numderiv)) computevar_numderiv <- FALSE
 
@@ -144,14 +125,13 @@ lavaan.pl <- function(
   template <- do.call(get(model.type, envir = asNamespace("lavaan")), lavargs)
 
   # Fit lavaan.pl -------------------------------------------------------------------
-  spec <- spec_from_lavaan(template, start, valdata, valgroup, valx)
-  init$THETA <- spec$THETA
+  spec <- spec_from_lavaan(template, start)
   # Send to lavaan.pl
   fit <- fit_latpl(
     DATA = spec$DATA,
     MODEL = spec$MODEL,
     CONTROL = control,
-    INIT = init,
+    START = spec$START,
     NCORES = ncores,
     VERBOSE = verbose
   )
@@ -160,8 +140,8 @@ lavaan.pl <- function(
   vars <- NULL
   if (lavargs$se != "none") {
     vars <- tryCatch(
-      compute_var(OBJ = fit, NUMDERIV = computevar_numderiv, VERBOSE = verbose),
-      latpl_not_pd = function(e) if (!fit$method %in% c("QN", "SA-QN")) NULL else stop(e)
+      compute_var(fit, NUMDERIV = computevar_numderiv),
+      latpl_not_pd = function(e) if (fit$method == "SA") NULL else stop(e)
     )
   }
 
@@ -177,12 +157,7 @@ pmlcfa <- function(
     data,
     std.lv = FALSE,
     estimator = "PML",
-    estimator.args = list(
-      init = set_init(),
-      ncores = 1,
-      valdata = NULL,
-      computevar_numderiv = FALSE
-    ),
+    estimator.args = list(ncores = 1, computevar_numderiv = FALSE),
     start = NULL,
     control = NULL,
     verbose = FALSE,
@@ -201,12 +176,7 @@ pmlsem <- function(
     data,
     std.lv = FALSE,
     estimator = "PML",
-    estimator.args = list(
-      init = set_init(),
-      ncores = 1,
-      valdata = NULL,
-      computevar_numderiv = FALSE
-    ),
+    estimator.args = list(ncores = 1, computevar_numderiv = FALSE),
     start = NULL,
     control = NULL,
     verbose = FALSE,

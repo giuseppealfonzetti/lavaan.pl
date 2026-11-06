@@ -2,14 +2,11 @@
 #'
 #' @param template Unfitted [lavaan::lavaan] object, created with `do.fit = FALSE`.
 #' @param start Starting values in lavaan's free-parameter order, or `NULL`.
-#' @param valdata Validation data passed to [set_latpl_data()] as `VALDATA`, or `NULL`.
-#' @param valgroup Group of each row of `valdata`, passed to [set_latpl_data()] as `VALGROUP`, or `NULL`.
-#' @param valx Covariates of `valdata`, passed to [set_latpl_data()] as `VALX`, or `NULL`.
-#' @return A list with the data object `DATA`, the model object `MODEL` and the starting values `THETA` for
+#' @return A list with the data object `DATA`, the model object `MODEL` and the starting values `START` for
 #'   [fit_latpl()].
 #' @seealso [lavaan.pl()], [create_lav_from_latpl()]
 #' @keywords internal
-spec_from_lavaan <- function(template, start = NULL, valdata = NULL, valgroup = NULL, valx = NULL) {
+spec_from_lavaan <- function(template, start = NULL) {
   pt <- lavaan::parTable(template)
   lv <- lavaan::lavNames(template, "lv")
   ovx <- lavaan::lavNames(template, "ov.x")
@@ -241,12 +238,11 @@ spec_from_lavaan <- function(template, start = NULL, valdata = NULL, valgroup = 
     weights <- unlist(template@Data@weights)
   }
   cluster <- if (isTRUE(template@Options$.clustered)) unlist(lapply(template@Data@Lp, function(x) x$cluster.idx[[2]]))
-  data_spec <- set_latpl_data(Reduce(rbind, X), valdata, MISSING = missing, WEIGHTS = weights,
+  data_spec <- set_latpl_data(Reduce(rbind, X), MISSING = missing, WEIGHTS = weights,
                               WEIGHTS_TYPE = template@Options$sampling.weights.type, CLUSTER = cluster,
                               GROUP = if (G > 1L) rep(template@Data@group.label, vapply(X, nrow, numeric(1))),
-                              VALGROUP = valgroup,
                               WEIGHTS_NORMALIZATION = if (normalization == "group") "group" else "total",
-                              X = if (length(ovx)) unname(Reduce(rbind, template@Data@eXo)), VALX = valx,
+                              X = if (length(ovx)) unname(Reduce(rbind, template@Data@eXo)),
                               NUMERIC = numeric_items)
 
   # Note: the values in lavaan.pl are always in the order of thresholds, loadings, latent
@@ -263,7 +259,7 @@ spec_from_lavaan <- function(template, start = NULL, valdata = NULL, valgroup = 
     init <- par2theta(model, if (G == 1L) pars[[1]] else pars)
   }
 
-  list(DATA = data_spec, MODEL = model, THETA = init)
+  list(DATA = data_spec, MODEL = model, START = init)
 }
 
 #' Model matrices of a lavaan model, for lavaan.pl

@@ -8,7 +8,7 @@ fit_latpl(
   DATA,
   MODEL,
   CONTROL = set_saqn_control(),
-  INIT = set_init(),
+  START = NULL,
   NCORES = 1,
   VERBOSE = FALSE
 )
@@ -21,7 +21,7 @@ fit_latpl(
 \item{CONTROL}{Control object, which selects the method: \code{\link[=set_saqn_control]{set_saqn_control()}} for
 \code{SA-QN}, \code{\link[=set_sa_control]{set_sa_control()}} for \code{SA}, \code{\link[=set_qn_control]{set_qn_control()}} for \code{QN}.}
 
-\item{INIT}{Starting values object from \code{\link[=set_init]{set_init()}}.}
+\item{START}{Starting parameter vector, in the order of \code{\link[=theta_names]{theta_names()}}. If \code{NULL}, default values.}
 
 \item{NCORES}{Integer value setting the number of threads to carry out the
 estimation.}

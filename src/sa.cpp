@@ -9,7 +9,6 @@ Rcpp::List cpp_sa(
     const Eigen::Map<Eigen::VectorXd> C,
     const Rcpp::List MODEL,
     const Rcpp::List DATA,
-    const Rcpp::List VALDATA,
     const int PAIRS_PER_ITERATION,
     const double ALPHA,
     const int ADAM_EPOCHS,
@@ -21,7 +20,6 @@ Rcpp::List cpp_sa(
     const double AVG_FROM,
     const int GAIN,
     const int SEED,
-    const bool ADAM_ONLY = false,
     const bool VERBOSE = false
 ){
   typedef std::chrono::steady_clock clk;
@@ -29,10 +27,9 @@ Rcpp::List cpp_sa(
 
   const model::Groups GS(MODEL, DATA);
   const int G = GS.G;
-  std::vector<pairs::Data> data, val;
+  std::vector<pairs::Data> data;
   for(int g = 0; g < G; g++){
     data.emplace_back(Rcpp::as<Rcpp::List>(DATA[g]));
-    val.emplace_back(Rcpp::as<Rcpp::List>(VALDATA[g]));
   }
   const double n = GS.n;
   const int P = GS.P, nu = std::min(PAIRS_PER_ITERATION, P), E = (P + nu - 1) / nu, df = START.size();
@@ -143,11 +140,11 @@ Rcpp::List cpp_sa(
     double ll = 0;
     for(int g = 0; g < G; g++){
       if(GS.S[g].direct && STS[g].Sig.llt().info() != Eigen::Success) return R_PosInf;
-      workers::PL w(STS[g], val[g], all[g], 0);
+      workers::PL w(STS[g], data[g], all[g], 0);
       RcppParallel::parallelReduce(0, all[g].size(), w);
       Eigen::VectorXd gd;
       Eigen::MatrixXd hd, ud;
-      pairs::univariate(STS[g], val[g], 0, w.ll, gd, hd, ud);
+      pairs::univariate(STS[g], data[g], 0, w.ll, gd, hd, ud);
       ll += w.ll;
     }
     return std::isfinite(ll) ? -ll / n : R_PosInf;
@@ -278,7 +275,7 @@ Rcpp::List cpp_sa(
 
   Eigen::MatrixXd Gm;
   Eigen::VectorXd Gd;
-  bool hessian = GAIN == 1 && !ADAM_ONLY;
+  bool hessian = GAIN == 1;
   double kappa = 1.0 / E;
   t0 = clk::now();
   const double mon0 = t_mon;
@@ -312,7 +309,7 @@ Rcpp::List cpp_sa(
 
   const int skipped_burn = skipped, rejections_burn = rejections;
   Eigen::VectorXd avg = x;
-  const int T2 = ADAM_ONLY ? 0 : AVERAGE_EPOCHS * E, T0 = static_cast<int>(AVG_FROM * T2);
+  const int T2 = AVERAGE_EPOCHS * E, T0 = static_cast<int>(AVG_FROM * T2);
   t0 = clk::now();
   for(int s = 1; s <= T2; s++){
     const double gam = kappa * std::pow(1.0 + static_cast<double>(s) / E, -DECAY);
@@ -334,7 +331,7 @@ Rcpp::List cpp_sa(
   t_avg = secs(t0);
 
   return Rcpp::List::create(
-    Rcpp::Named("theta") = full(ADAM_ONLY ? x_burn : avg),
+    Rcpp::Named("theta") = full(avg),
     Rcpp::Named("theta_last") = full(x),
     Rcpp::Named("theta_burn") = full(x_burn),
     Rcpp::Named("epoch_length") = E,

@@ -12,7 +12,7 @@
 #'@param MODEL Model object from [set_latpl_model()], or from [set_latpl_groups()] for several groups.
 #'@param CONTROL Control object, which selects the method: [set_saqn_control()] for
 #'  `SA-QN`, [set_sa_control()] for `SA`, [set_qn_control()] for `QN`.
-#'@param INIT Starting values object from [set_init()].
+#'@param START Starting parameter vector, in the order of [theta_names()]. If `NULL`, default values.
 #'@param NCORES Integer value setting the number of threads to carry out the
 #'  estimation.
 #'@param VERBOSE `TRUE` for verbose output
@@ -28,7 +28,7 @@ fit_latpl <- function(
   DATA,
   MODEL,
   CONTROL = set_saqn_control(),
-  INIT = set_init(),
+  START = NULL,
   NCORES = 1,
   VERBOSE = FALSE
 ) {
@@ -37,7 +37,6 @@ fit_latpl <- function(
     inherits(DATA, "latpl_data"),
     inherits(MODEL, c("latpl_model", "latpl_groups")),
     inherits(CONTROL, c("latpl_qn_control", "latpl_sa_control")),
-    inherits(INIT, "latpl_init"),
     DATA$p == MODEL$p
   )
   grouped <- inherits(MODEL, "latpl_groups")
@@ -68,6 +67,7 @@ fit_latpl <- function(
       dims = dims,
       method = METHOD,
       lincon = lc,
+      block = theta_block(MODEL, nthr),
       engine = eng,
       version = as.character(utils::packageVersion("lavaan.pl")),
       cores = NCORES
@@ -75,8 +75,8 @@ fit_latpl <- function(
     class = "latpl_fit"
   )
   full <- function(x) as.vector(lc$K %*% x + lc$c)
-  fit$init <- init_theta(INIT, DATA, dims, MODEL, VERBOSE)
-  if (is.null(INIT$THETA)) {
+  fit$init <- init_theta(START, DATA, dims, MODEL, VERBOSE)
+  if (is.null(START)) {
     x <- fit$init[lc$free_idx]
     free_block <- theta_block(MODEL, nthr)[lc$free_idx]
     for (i in 1:20) {
@@ -88,20 +88,6 @@ fit_latpl <- function(
   }
   std <- standardise_covariates(DATA, MODEL, lc, nthr)
   eng_std <- if (is.null(std$model)) eng else engine(std$data, std$model)
-  if (METHOD == "QN" && INIT$METHOD == "SA") {
-    if (VERBOSE) {
-      message("- Initialising with the SA Adam phase...")
-    }
-    fit$init <- std$from(run_sa(
-      std$to(fit$init),
-      std$data,
-      eng_std,
-      lc,
-      INIT$CONTROL,
-      TRUE,
-      FALSE
-    )$theta)
-  }
   nll <- function(theta) -cpp_pl(theta, eng$model, eng$data)$pl / dims$n
 
   # With the direct parametrisation, points with a non positive definite latent
@@ -155,11 +141,11 @@ fit_latpl <- function(
       DATA,
       warm_model,
       CONTROL,
-      set_init(THETA = par2theta(warm_model, theta2par(MODEL, fit$init))),
+      par2theta(warm_model, theta2par(MODEL, fit$init)),
       NCORES
     )
     RcppParallel::setThreadOptions(numThreads = NCORES)
-    theta <- par2theta(MODEL, get_par(warm, OPTION = "list"))
+    theta <- par2theta(MODEL, theta2par(warm$model, warm$theta))
     x <- as.vector(solve(crossprod(lc$K), crossprod(lc$K, theta - lc$c)))
     cov_free <- block[lc$free_idx] == "corr"
     for (i in 1:20) {
@@ -180,7 +166,7 @@ fit_latpl <- function(
   }
   fit$init <- full(fit$init[lc$free_idx])
 
-  if (METHOD %in% c("QN", "SA-QN")) {
+  if (METHOD != "SA") {
     x0 <- std$to(fit$init)
     qn_control <- list(
       grtol = CONTROL$GRTOL,
@@ -217,7 +203,7 @@ fit_latpl <- function(
         }
         burn_control <- CONTROL
         burn_control$SEED <- CONTROL$SEED + s - 1L
-        burn <- run_sa(x0, std$data, eng_std, lc, burn_control, FALSE, VERBOSE)
+        burn <- run_sa(x0, std$data, eng_std, lc, burn_control, VERBOSE)
         start <- burn$theta
         if (length(burn$invh) > 0) start_control$invhessian.lt <- burn$invh[lower.tri(burn$invh, diag = TRUE)]
       }
@@ -262,7 +248,7 @@ fit_latpl <- function(
     if (VERBOSE) {
       message("- Optimising via pairwise stochastic approximation...")
     }
-    opt <- run_sa(std$to(fit$init), std$data, eng_std, lc, CONTROL, FALSE, VERBOSE)
+    opt <- run_sa(std$to(fit$init), std$data, eng_std, lc, CONTROL, VERBOSE)
     opt[c("theta", "theta_last", "theta_burn")] <- lapply(opt[c("theta", "theta_last", "theta_burn")], std$from)
     opt$path$theta <- lapply(opt$path$theta, std$from)
     if (opt$skipped_averaging > 0) {
@@ -317,14 +303,10 @@ check_sa <- function(FIT) {
     )
     return(FIT)
   }
-  relative_noise <- function(v) {
-    se <- sqrt(v$asymptotic_variance / FIT$dims$n)
-    max((sqrt(pmax(v$optimisation_noise, 0)) / se)[se > 0])
-  }
-  FIT$stoFit$check$distance <- max(vars$distance)
-  FIT$stoFit$check$noise <- relative_noise(vars)
-  distance <- max(vars$distance)
-  if (distance > max(1, 4 * relative_noise(vars))) {
+  se <- sqrt(vars$asymptotic_variance / FIT$dims$n)
+  distance <- FIT$stoFit$check$distance <- max(vars$distance)
+  FIT$stoFit$check$noise <- max((sqrt(pmax(vars$optimisation_noise, 0)) / se)[se > 0])
+  if (distance > max(1, 4 * FIT$stoFit$check$noise)) {
     FIT$stoFit$converged <- FALSE
     warning(
       "The SA estimate is ",
@@ -475,7 +457,7 @@ engine <- function(DATA, MODEL, TABLES = NA) {
       freq <- if (tables == DATA$tables[g + 1]) {
         if (tables) DATA$freq[ot[g + 1] * nc + seq_len(ns[g + 1] * nc)] else numeric(0)
       } else if (tables) {
-        pairs_freq(DATA$Y[rows, , drop = FALSE], DATA$cat, if (length(DATA$weights)) DATA$weights[rows] else numeric(0), DATA$stratum[rows])
+        cpp_pairs_freq(DATA$Y[rows, , drop = FALSE], DATA$cat, if (length(DATA$weights)) DATA$weights[rows] else numeric(0), DATA$stratum[rows])
       } else {
         numeric(0)
       }
@@ -499,19 +481,19 @@ engine <- function(DATA, MODEL, TABLES = NA) {
 
 #' Starting values
 #'
-#' @param INIT Initialisation object from [set_init()].
+#' @param START Starting parameter vector, or `NULL`.
 #' @param DATA Data object from [set_latpl_data()].
 #' @param DIMS Dimensions from [latpl_dims()].
 #' @param MODEL Model object from [set_latpl_model()] or [set_latpl_groups()].
 #' @param VERBOSE If `TRUE`, report user-supplied starting values.
-#' @return The starting parameter vector: `INIT$THETA` when supplied, otherwise thresholds from the margins of each
+#' @return The starting parameter vector: `START` when supplied, otherwise thresholds from the margins of each
 #'   group and fixed values for the other parameters.
 #' @seealso [fit_latpl()], [spec_from_lavaan()]
 #' @keywords internal
-init_theta <- function(INIT, DATA, DIMS, MODEL, VERBOSE) {
+init_theta <- function(START, DATA, DIMS, MODEL, VERBOSE) {
   models <- if (inherits(MODEL, "latpl_groups")) MODEL$MODELS else list(MODEL)
   nthr <- sum(DATA$cat - 1)
-  theta <- INIT$THETA
+  theta <- START
   if (is.null(theta)) {
     w <- if (length(DATA$weights)) DATA$weights else rep(1, DATA$n)
     theta <- unlist(lapply(seq_along(models), function(g) {
@@ -560,7 +542,7 @@ init_theta <- function(INIT, DATA, DIMS, MODEL, VERBOSE) {
     message("- Initialised at user-supplied values.")
   }
   stopifnot(is.numeric(theta), length(theta) == DIMS$d, all(is.finite(theta)))
-  if (!is.null(INIT$THETA) && implied_variance(MODEL, theta) > 1) {
+  if (!is.null(START) && implied_variance(MODEL, theta) > 1) {
     warning("Negative error variances implied by init parameters")
   }
   theta
@@ -630,30 +612,14 @@ implied_variance <- function(MODEL, THETA) {
 #' @param DATA Data object from [set_latpl_data()].
 #' @param ENGINE Output of [engine()].
 #' @param LINCON Output of [lincon()].
-#' @param CONTROL Control object from [set_sa_control()] or [set_sa_init_control()].
-#' @param ADAM_ONLY If `TRUE`, stop after the Adam phase.
+#' @param CONTROL Control object from [set_sa_control()] or [set_saqn_control()].
 #' @param VERBOSE If `TRUE`, print progress.
 #' @return A list with the estimate `theta`, the last and end-of-burn-in iterates `theta_last` and `theta_burn`,
 #'   the epoch length and phase counts, the rejected and skipped steps, the trajectory `path` and the timings
 #'   `time`.
 #' @seealso [fit_latpl()], [set_sa_control()]
 #' @keywords internal
-run_sa <- function(START, DATA, ENGINE, LINCON, CONTROL, ADAM_ONLY, VERBOSE) {
-  valdata <- ENGINE$data
-  if (!is.null(DATA$val)) {
-    valdata <- lapply(seq_len(DATA$ngroups) - 1, function(g) {
-      rows <- DATA$val$group == g
-      list(
-        TABLES = DATA$val$tables[g + 1],
-        FREQ = if (DATA$val$tables[g + 1]) DATA$val$freq[[g + 1]] else numeric(0),
-        UFREQ = numeric(0),
-        X = t(DATA$val$strata[[g + 1]]),
-        S = DATA$val$stratum[rows],
-        W = rep(1, sum(rows)),
-        Y = DATA$val$Y[rows, , drop = FALSE]
-      )
-    })
-  }
+run_sa <- function(START, DATA, ENGINE, LINCON, CONTROL, VERBOSE) {
   npar <- length(LINCON$free_idx)
   free <- npar < length(START)
   pairs <- DATA$ngroups * DATA$p * (DATA$p - 1) / 2
@@ -671,7 +637,6 @@ run_sa <- function(START, DATA, ENGINE, LINCON, CONTROL, ADAM_ONLY, VERBOSE) {
     C = LINCON$c,
     MODEL = ENGINE$model,
     DATA = ENGINE$data,
-    VALDATA = valdata,
     PAIRS_PER_ITERATION = CONTROL$PAIRS_PER_ITERATION,
     ALPHA = CONTROL$ALPHA,
     ADAM_EPOCHS = as.integer(adam_epochs),
@@ -683,7 +648,6 @@ run_sa <- function(START, DATA, ENGINE, LINCON, CONTROL, ADAM_ONLY, VERBOSE) {
     AVG_FROM = CONTROL$AVG_FROM,
     GAIN = gain,
     SEED = CONTROL$SEED,
-    ADAM_ONLY = ADAM_ONLY,
     VERBOSE = VERBOSE
   )
   out$path$nll <- c(out$path$nll, rep(NA, sum(out$path$phase == 3)))

@@ -4,12 +4,19 @@
 \alias{get_par}
 \title{Extract parameters}
 \usage{
-get_par(OBJ, ...)
+get_par(OBJ, OPTION = c("list", "transformed"), THETA = OBJ$theta)
 }
 \arguments{
 \item{OBJ}{Object of class latpl_fit.}
 
-\item{...}{Additional arguments}
+\item{OPTION}{Can take values \tabular{ll}{
+\code{'transformed'} \tab Transformed vector of parameters, with interpretable latent correlations and standard
+deviations, scale factors and residual variances. \cr
+\tab \cr
+\code{'list'} \tab The model matrices, as returned by \code{\link[=theta2par]{theta2par()}}. \cr
+}}
+
+\item{THETA}{Parameter vector.}
 }
 \description{
 Extract parameters

@@ -7,7 +7,7 @@
 sa_fit <- function(OBJ) {
   fit <- if (inherits(OBJ, "lavaan.pl")) get_latpl_fit(OBJ) else OBJ
   if (!inherits(fit, "latpl_fit")) stop("OBJ must come from fit_latpl(), pmlcfa() or pmlsem().", call. = FALSE)
-  if (fit$method %in% c("QN", "SA-QN")) stop("OBJ was not fitted by stochastic approximation.", call. = FALSE)
+  if (fit$method != "SA") stop("OBJ was not fitted by stochastic approximation.", call. = FALSE)
   fit
 }
 
@@ -21,8 +21,7 @@ sa_fit <- function(OBJ) {
 #' @keywords internal
 sa_parameters <- function(FIT) {
   free <- FIT$lincon$free_idx
-  block <- theta_block(FIT$model, sum(FIT$data$cat - 1))
-  out <- data.frame(name = theta_names(FIT$data, FIT$model), block = block, estimate = get_par(FIT, OPTION = "transformed"),
+  out <- data.frame(name = theta_names(FIT$data, FIT$model), block = FIT$block, estimate = get_par(FIT, OPTION = "transformed"),
                     se = NA, noise = NA, ratio = NA, distance = NA)
   vars <- tryCatch(compute_var(FIT), latpl_not_pd = function(e) NULL)
   if (!is.null(vars)) {
@@ -116,12 +115,12 @@ plot_sa <- function(OBJ, WHAT = c("trajectory", "objective", "noise"), BLOCKS = 
   fit <- sa_fit(OBJ)
   WHAT <- match.arg(WHAT)
   path <- fit$stoFit$path
-  block <- theta_block(fit$model, sum(fit$data$cat - 1))
+  block <- fit$block
   ends <- tapply(path$iter, path$phase, max)[c("1", "2")]
   ends <- ends[!is.na(ends)]
   long <- switch(WHAT,
     trajectory = do.call(rbind, Map(function(iter, theta) {
-      data.frame(iter = iter, estimate = get_par(replace(fit, "theta", list(theta)), OPTION = "transformed"),
+      data.frame(iter = iter, estimate = get_par(fit, "transformed", theta),
                  id = seq_along(theta), block = block)
     }, path$iter, path$theta)),
     objective = data.frame(iter = path$iter, objective = path$nll)[path$phase < 3, ],
@@ -167,7 +166,7 @@ sa_stability <- function(OBJ, SEEDS = 1:10) {
   fits <- lapply(SEEDS, function(seed) {
     control <- fit$control
     control$SEED <- as.integer(seed)
-    suppressWarnings(fit_latpl(fit$data, fit$model, CONTROL = control, INIT = set_init(THETA = fit$init), NCORES = fit$cores))
+    suppressWarnings(fit_latpl(fit$data, fit$model, CONTROL = control, START = fit$init, NCORES = fit$cores))
   })
   pars <- sa_parameters(fit)
   estimates <- vapply(fits, get_par, numeric(length(fit$theta)), OPTION = "transformed")[fit$lincon$free_idx, , drop = FALSE]

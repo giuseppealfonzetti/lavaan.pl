@@ -10,21 +10,6 @@
 #'   saturated and independence fits `saturated` and `independence`, and the timing `RTime`.
 #' @keywords internal
 compute_plrt <- function(OBJ, VARS = compute_var(OBJ), H1 = NULL) {
-  UseMethod('compute_plrt')
-}
-#' Pairwise likelihood ratio test
-#' @param OBJ Object of class latpl_fit
-#' @param VARS Output of [compute_var()] for `OBJ`
-#' @param H1 Object of class latpl_fit in which `OBJ` is nested, or `NULL` to test `OBJ` against the
-#'   saturated model
-#' @return A list with the test of the model against `H1` or the saturated model `model` and, without
-#'   `H1`, of the independence model against the saturated model `baseline`. Each holds the
-#'   statistic `stat`, its degrees of freedom `df`, and the mean and variance adjusted `stat.scaled`
-#'   (`stat` divided by `scaling.factor`), `df.scaled` and `pvalue.scaled`. Also, without `H1`, the
-#'   saturated and independence fits `saturated` and `independence`, and the timing `RTime`.
-#' @keywords internal
-#' @export
-compute_plrt.latpl_fit <- function(OBJ, VARS = compute_var(OBJ), H1 = NULL) {
   start_time <- Sys.time()
   RcppParallel::setThreadOptions(numThreads = OBJ$cores)
   on.exit(RcppParallel::setThreadOptions(numThreads = 1))
@@ -328,7 +313,7 @@ plrt_fit <- function(OBJ, VARS) {
   r <- cpp_rho(OBJ$theta, OBJ$engine$model, eng)
   jac <- if (ncol(lc$K) < nrow(lc$K)) r$jacobian %*% lc$K else r$jacobian
   invH <- solve(VARS$H)
-  tpos <- which(theta_block(OBJ$model, nthr) == "tau")
+  tpos <- which(OBJ$block == "tau")
   if (dims$nx == 0 && nnum == 0 && all(tpos %in% lc$free_idx)) {
     psi <- which(!(lc$free_idx %in% tpos))
     G <- (invH %*% VARS$J %*% invH)[psi, psi, drop = FALSE]

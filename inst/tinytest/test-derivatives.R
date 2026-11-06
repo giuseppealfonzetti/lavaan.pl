@@ -39,7 +39,7 @@ unit_scores <- function(fit, theta) {
         unit_data[[group]]$W[sum(data$group[seq_len(i)] == data$group[i])] <- 1
       }
       stratum <- data$stratum[i]
-      freq <- lavaan.pl:::pairs_freq(response, data$cat)
+      freq <- lavaan.pl:::cpp_pairs_freq(response, data$cat)
       ufreq <- unlist(lapply(seq_len(data$p), function(j) {
         data$uweights[i] *
           (seq_len(data$cat[j]) - 1 == response[j] & !is.na(response[j]))

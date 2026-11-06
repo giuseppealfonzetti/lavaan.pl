@@ -26,7 +26,7 @@ local({
     lavaan.pl:::fit_latpl(
       data,
       lavaan.pl:::set_latpl_model(three_factors),
-      INIT = set_init(THETA = rep(0, 3)),
+      START = rep(0, 3),
       CONTROL = set_qn_control()
     ),
     "length"
@@ -66,28 +66,12 @@ local({
   expect_true(fit_short$numFit$info[["neval"]] <= 5)
 })
 
-#### Initialisation by SA reaches the same estimate from different starting values ####
-local({
-  fit_sa_init <- lavaan.pl:::fit_latpl(
-    lsat_data,
-    one_factor,
-    INIT = set_init(
-      METHOD = "SA",
-      CONTROL = set_sa_init_control(ADAM_EPOCHS = 100)
-    ),
-    CONTROL = set_qn_control()
-  )
-  fit_standard_init <- lavaan.pl:::fit_latpl(lsat_data, one_factor, CONTROL = set_qn_control())
-  expect_false(identical(fit_sa_init$init, fit_standard_init$init))
-  expect_equal(fit_sa_init$theta, fit_standard_init$theta, tolerance = 1e-4)
-})
-
 #### Numerical and analytic Hessians agree ####
 local({
   fit <- lavaan.pl:::fit_latpl(lsat_data, one_factor, CONTROL = set_qn_control())
   expect_equal(
-    lavaan.pl:::compute_var(fit, NUMDERIV = TRUE)$invH,
-    lavaan.pl:::compute_var(fit)$invH,
+    lavaan.pl:::compute_var(fit, NUMDERIV = TRUE)$H,
+    lavaan.pl:::compute_var(fit)$H,
     tolerance = 1e-5
   )
 })

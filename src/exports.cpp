@@ -240,7 +240,7 @@ Eigen::VectorXd cpp_saturated_traces(
 //'   With `STRATA`, the tables of each stratum one after the other.
 //' @keywords internal
 // [[Rcpp::export]]
-Eigen::VectorXd pairs_freq(const Eigen::Map<Eigen::MatrixXd> Y, const Eigen::Map<Eigen::VectorXd> C_VEC,
+Eigen::VectorXd cpp_pairs_freq(const Eigen::Map<Eigen::MatrixXd> Y, const Eigen::Map<Eigen::VectorXd> C_VEC,
                            const Rcpp::NumericVector WEIGHTS = Rcpp::NumericVector::create(),
                            const Rcpp::NumericVector STRATA = Rcpp::NumericVector::create()){
   const model::Layout L(C_VEC);

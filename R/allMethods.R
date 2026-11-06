@@ -23,7 +23,7 @@ print.latpl_fit <- function(x, ...){
        "  - Effects of covariates:", x$dims$ngam + x$dims$nkap, "\n",
        "  - Total:", x$dims$npar, "\n\n")
 
-  if(x$method %in% c('QN', 'SA-QN')){
+  if(x$method != 'SA'){
 
     if(x$method == 'SA-QN') cat(
       "- Burn-in epochs: Adam", x$stoFit$adam_epochs, "| preconditioning", x$stoFit$precondition_epochs, "\n"
@@ -73,8 +73,7 @@ print.latpl_data <- function(x, ...) {
     " Sampling weights:", if (length(x$weights)) "yes" else "none", "\n",
     " Clusters:", if (length(x$cluster)) length(unique(x$cluster)) else "none", "\n",
     " Groups:", x$ngroups, "\n",
-    " Covariates:", ncol(x$X), "(", sum(vapply(x$strata, nrow, numeric(1))), "strata )\n",
-    " Validation data:", if (is.null(x$valfreq)) "none" else "yes", "\n"
+    " Covariates:", ncol(x$X), "(", sum(vapply(x$strata, nrow, numeric(1))), "strata )\n"
   )
   invisible(x)
 }
@@ -106,29 +105,17 @@ print.latpl_model <- function(x, ...) {
 #' Extract parameters
 #'
 #' @param OBJ Object of class latpl_fit.
-#' @param ... Additional arguments
-#' @keywords internal
-get_par <- function(OBJ, ...) UseMethod('get_par')
-
-#' Extract parameters
-#'
-#' @param OBJ Object of class latpl_fit.
 #' @param OPTION Can take values \tabular{ll}{
-#'    \code{'raw'} \tab The parameter vector. \cr
-#'    \tab \cr
 #'    \code{'transformed'} \tab Transformed vector of parameters, with interpretable latent correlations and standard
 #'    deviations, scale factors and residual variances. \cr
 #'     \tab \cr
 #'    \code{'list'} \tab The model matrices, as returned by [theta2par()]. \cr
 #' }
-#' @param ... Additional arguments
+#' @param THETA Parameter vector.
 #' @keywords internal
-#' @export
-get_par.latpl_fit <- function(OBJ, OPTION = c("list", "raw", "transformed"), ...) {
+get_par <- function(OBJ, OPTION = c("list", "transformed"), THETA = OBJ$theta) {
   OPTION <- match.arg(OPTION)
-  if (OPTION == "raw") return(OBJ$theta)
-  par <- theta2par(OBJ$model, OBJ$theta)
-  if (OPTION == "list") return(par)
+  if (OPTION == "list") return(theta2par(OBJ$model, THETA))
   models <- if (inherits(OBJ$model, "latpl_groups")) OBJ$model$MODELS else list(OBJ$model)
   nthr <- sum(OBJ$data$cat - 1)
   d <- vapply(models, function(x) length(theta_block(x, nthr)), numeric(1))
@@ -138,42 +125,36 @@ get_par.latpl_fit <- function(OBJ, OPTION = c("list", "raw", "transformed"), ...
     c(th[block %in% c("tau", "lambda")], if (any(block == "corr")) R[upper.tri(R)], exp(th[block == "logsd"]),
       th[block %in% c("beta", "rescov", "nu", "alpha")], exp((1 + (m$PARAMETERIZATION == "theta" | m$NUMERIC)[is.na(m$CONSTRLOGSCALE)]) * th[block == "scale"]),
       th[block %in% c("gamma", "kappa")])
-  }, models, split(OBJ$theta, rep(seq_along(d), d))), use.names = FALSE)
+  }, models, split(THETA, rep(seq_along(d), d))), use.names = FALSE)
 }
 
 #' Compute variance of the estimates
 #' @param OBJ Object of class latpl_fit
 #' @param NUMDERIV TRUE if the hessian must be computed using \link[numDeriv]{jacobian}
-#' @param VERBOSE TRUE if the function must print messages
 #' @return A list with the Jacobian `trJacob` of the transformation to
-#'   interpretable parameters, `H`, `J`, the sandwich `vcov` and its diagonal
+#'   interpretable parameters, `H`, `J`, the diagonal of the sandwich variance
 #'   `asymptotic_variance` on the transformed scale, `optimisation_noise` (SA
 #'   fits only), the optimisation noise matrix `noise` on the optimisation scale
 #'   (SA fits only), the Newton step to the optimum `step`, its size in standard errors of
 #'   each parameter `distance`, the estimates `theta` and the timing `RTime`.
 #' @keywords internal
-compute_var <- function(OBJ, NUMDERIV = FALSE, VERBOSE = FALSE) UseMethod('compute_var')
-
-#' @rdname compute_var
-#' @export
-compute_var.latpl_fit <- function(OBJ, NUMDERIV = FALSE, VERBOSE = FALSE) {
+compute_var <- function(OBJ, NUMDERIV = FALSE) {
   if (!NUMDERIV && identical(OBJ$vars$theta, OBJ$theta) && !is.null(OBJ$theta)) return(OBJ$vars)
   start_time <- Sys.time()
   lc <- OBJ$lincon
   full <- function(x) as.vector(lc$K %*% x + lc$c)
   xf <- OBJ$theta[lc$free_idx]
-  if (VERBOSE) message("- Computing H and J...")
-  lat <- theta_block(OBJ$model, sum(OBJ$data$cat - 1)) %in% c("corr", "logsd", "scale")
+  lat <- OBJ$block %in% c("corr", "logsd", "scale")
   trJacob <- diag(length(OBJ$theta))
   if (any(lat)) {
     trJacob[lat, lat] <- numDeriv::jacobian(function(x) {
-      get_par(replace(OBJ, "theta", list(replace(OBJ$theta, lat, x))), OPTION = "transformed")[lat]
+      get_par(OBJ, "transformed", replace(OBJ$theta, lat, x))[lat]
     }, OBJ$theta[lat])
   }
   trJacob <- trJacob %*% lc$K
   RcppParallel::setThreadOptions(numThreads = OBJ$cores)
   on.exit(RcppParallel::setThreadOptions(numThreads = 1))
-  HJ <- cpp_HJ(OBJ$theta, OBJ$engine$model, OBJ$engine$data, !OBJ$method %in% c("QN", "SA-QN"))
+  HJ <- cpp_HJ(OBJ$theta, OBJ$engine$model, OBJ$engine$data, OBJ$method == "SA")
   H <- crossprod(lc$K, HJ$H %*% lc$K)
   J <- crossprod(lc$K, HJ$J %*% lc$K)
   if (NUMDERIV) {
@@ -187,7 +168,7 @@ compute_var.latpl_fit <- function(OBJ, NUMDERIV = FALSE, VERBOSE = FALSE) {
   vcov <- trJacob %*% invH %*% J %*% invH %*% t(trJacob)
   opt_noise <- NA
   noise <- NULL
-  if (!OBJ$method %in% c("QN", "SA-QN")) {
+  if (OBJ$method == "SA") {
     P <- OBJ$dims$pairs
     ppi <- OBJ$stoFit$pairs_per_iteration
     n <- OBJ$dims$n
@@ -198,7 +179,7 @@ compute_var.latpl_fit <- function(OBJ, NUMDERIV = FALSE, VERBOSE = FALSE) {
   }
   step <- as.vector(invH %*% crossprod(lc$K, HJ$gradient)) / OBJ$dims$n
   se <- sqrt(diag(vcov) / OBJ$dims$n)
-  list(trJacob = trJacob, H = H, invH = trJacob %*% invH, J = J, vcov = vcov, asymptotic_variance = diag(vcov),
+  list(trJacob = trJacob, H = H, J = J, asymptotic_variance = diag(vcov),
        optimisation_noise = opt_noise, noise = noise, step = step,
        distance = ifelse(se > 0, abs(as.vector(trJacob %*% step)) / se, 0), theta = OBJ$theta,
        RTime = as.numeric(difftime(Sys.time(), start_time, units = "secs")))

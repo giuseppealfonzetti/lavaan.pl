@@ -4,10 +4,10 @@
 \alias{init_theta}
 \title{Starting values}
 \usage{
-init_theta(INIT, DATA, DIMS, MODEL, VERBOSE)
+init_theta(START, DATA, DIMS, MODEL, VERBOSE)
 }
 \arguments{
-\item{INIT}{Initialisation object from \code{\link[=set_init]{set_init()}}.}
+\item{START}{Starting parameter vector, or \code{NULL}.}
 
 \item{DATA}{Data object from \code{\link[=set_latpl_data]{set_latpl_data()}}.}
 
@@ -18,7 +18,7 @@ init_theta(INIT, DATA, DIMS, MODEL, VERBOSE)
 \item{VERBOSE}{If \code{TRUE}, report user-supplied starting values.}
 }
 \value{
-The starting parameter vector: \code{INIT$THETA} when supplied, otherwise thresholds from the margins of each
+The starting parameter vector: \code{START} when supplied, otherwise thresholds from the margins of each
 group and fixed values for the other parameters.
 }
 \description{

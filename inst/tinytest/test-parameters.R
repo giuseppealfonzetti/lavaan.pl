@@ -88,7 +88,7 @@ local({
   expect_equal(lavaan.pl:::par2theta(model_two_groups, par), theta)
 })
 
-#### lavaan.pl:::get_par() returns the raw, listed and transformed parameters ####
+#### lavaan.pl:::get_par() returns the listed and transformed parameters ####
 local({
   bfi_items <- as.matrix(data.frame(lapply(bfi[, 1:6], as.numeric))) - 1
   fit <- lavaan.pl:::fit_latpl(
@@ -96,7 +96,6 @@ local({
     lavaan.pl:::set_latpl_model(lavaan.pl:::build_constr_mat(6, 2, "simple"), STDLV = FALSE),
     CONTROL = set_qn_control()
   )
-  expect_identical(lavaan.pl:::get_par(fit, OPTION = "raw"), fit$theta)
   par <- lavaan.pl:::get_par(fit)
   expect_identical(
     names(par),

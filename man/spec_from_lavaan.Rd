@@ -4,27 +4,15 @@
 \alias{spec_from_lavaan}
 \title{lavaan.pl inputs from a lavaan model}
 \usage{
-spec_from_lavaan(
-  template,
-  start = NULL,
-  valdata = NULL,
-  valgroup = NULL,
-  valx = NULL
-)
+spec_from_lavaan(template, start = NULL)
 }
 \arguments{
 \item{template}{Unfitted \link[lavaan:lavaan]{lavaan::lavaan} object, created with \code{do.fit = FALSE}.}
 
 \item{start}{Starting values in lavaan's free-parameter order, or \code{NULL}.}
-
-\item{valdata}{Validation data passed to \code{\link[=set_latpl_data]{set_latpl_data()}} as \code{VALDATA}, or \code{NULL}.}
-
-\item{valgroup}{Group of each row of \code{valdata}, passed to \code{\link[=set_latpl_data]{set_latpl_data()}} as \code{VALGROUP}, or \code{NULL}.}
-
-\item{valx}{Covariates of \code{valdata}, passed to \code{\link[=set_latpl_data]{set_latpl_data()}} as \code{VALX}, or \code{NULL}.}
 }
 \value{
-A list with the data object \code{DATA}, the model object \code{MODEL} and the starting values \code{THETA} for
+A list with the data object \code{DATA}, the model object \code{MODEL} and the starting values \code{START} for
 \code{\link[=fit_latpl]{fit_latpl()}}.
 }
 \description{

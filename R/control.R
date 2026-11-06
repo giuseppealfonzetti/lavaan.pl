@@ -2,9 +2,6 @@
 #'
 #'@param DATA Data matrix of dimension \eqn{n*p}. Categories of ordinal items must be
 #'  integers coded starting from zero.
-#'@param VALDATA Validation data used to monitor convergence of stochastic
-#'  approximations. If `NULL`, data passed via `DATA` is used for monitoring
-#'  purposes.
 #'@param MISSING Treatment of missing values (`NA`): `"listwise"` drops incomplete observations,
 #'  `"pairwise"` uses the complete pairs and `"available.cases"` the available cases of
 #'  Katsikatsou et al. (2022).
@@ -15,32 +12,27 @@
 #'  `NULL`, observations are independent.
 #'@param GROUP Group membership, one per observation, for multigroup models (see
 #'  [set_latpl_groups()]). Groups are numbered in order of appearance. If `NULL`, a single group.
-#'@param VALGROUP Group membership of each row of `VALDATA`, with the labels of `GROUP`. Required
-#'  with `VALDATA` and several groups.
 #'@param WEIGHTS_NORMALIZATION Normalisation of the sampling weights, as in lavaan: to the total
 #'  number of observations (`"total"`) or to the number of observations of each group (`"group"`).
 #'@param X Numeric matrix of covariates, one row per observation, on which the responses are
 #'  conditioned. Observations with missing covariates are removed. If `NULL`, no covariates.
-#'@param VALX Covariates of `VALDATA`. Required with `VALDATA` and `X`.
 #'@param NUMERIC Logical vector marking the numeric items. If `NULL`, all items are ordinal.
 #'
 #' @return An object of class `latpl_data` with the data matrix `Y`, its dimensions `n` and `p`,
 #'   the number of categories of each item `cat` (one for numeric items), the indicator of numeric
-#'   items `numeric`, the pairwise frequency tables `freq` and
-#'   `valfreq`, the treatment of missing values `missing`, the unit weights `uweights` and
+#'   items `numeric`, the pairwise frequency tables `freq`, the treatment of missing values `missing`, the unit weights `uweights` and
 #'   univariate frequencies `ufreq` of the available-cases term, the normalised sampling weights
 #'   `weights` and their factors on the scores `jweights`, the cluster indices `cluster`, the group
 #'   indices `group` (from zero) and their number `ngroups`, the covariates `X`, the stratum of each
 #'   observation within its group `stratum` (from zero) and the distinct covariate rows of each group
-#'   `strata`, whether each group uses frequency tables `tables` or its individual observations, the
-#'   validation data `val`, and the time spent computing the frequencies `freqTime`. With several
-#'   groups or strata, `freq`, `ufreq` and `valfreq` stack the tables of each group and, within it, of
-#'   each stratum.
+#'   `strata`, whether each group uses frequency tables `tables` or its individual observations, and
+#'   the time spent computing the frequencies `freqTime`. With several groups or strata, `freq` and
+#'   `ufreq` stack the tables of each group and, within it, of each stratum.
 #'
 #' @keywords internal
-set_latpl_data <- function(DATA, VALDATA = NULL, MISSING = c("listwise", "pairwise", "available.cases"),
+set_latpl_data <- function(DATA, MISSING = c("listwise", "pairwise", "available.cases"),
                           WEIGHTS = NULL, WEIGHTS_TYPE = c("design", "frequency"), CLUSTER = NULL, GROUP = NULL,
-                          VALGROUP = NULL, WEIGHTS_NORMALIZATION = c("total", "group"), X = NULL, VALX = NULL, NUMERIC = NULL) {
+                          WEIGHTS_NORMALIZATION = c("total", "group"), X = NULL, NUMERIC = NULL) {
   MISSING <- match.arg(MISSING)
   WEIGHTS_TYPE <- match.arg(WEIGHTS_TYPE)
   WEIGHTS_NORMALIZATION <- match.arg(WEIGHTS_NORMALIZATION)
@@ -61,7 +53,6 @@ set_latpl_data <- function(DATA, VALDATA = NULL, MISSING = c("listwise", "pairwi
   if (is.null(X)) X <- matrix(0, nrow(Y), 0)
   storage.mode(X) <- "double"
   G <- max(group) + 1
-  if (G > 1 && !is.null(VALDATA) && is.null(VALGROUP)) stop("VALGROUP is required with VALDATA and several groups.")
   keep_x <- stats::complete.cases(X)
   keep_y <- MISSING != "listwise" | stats::complete.cases(Y)
   if (!all(keep_x)) message(sum(!keep_x), " observations with missing covariates removed.")
@@ -108,28 +99,6 @@ set_latpl_data <- function(DATA, VALDATA = NULL, MISSING = c("listwise", "pairwi
       ufreq[at] <- ufreq[at] + added[, 1]
     }
   }
-  val <- NULL
-  if (!is.null(VALDATA)) {
-    stopifnot(
-      is.matrix(VALDATA),
-      is.numeric(VALDATA),
-      all(is.finite(VALDATA)),
-      ncol(VALDATA) == ncol(Y),
-      all(VALDATA[, !numeric] >= 0),
-      all(t(VALDATA)[!numeric, ] <= cat[!numeric] - 1),
-      is.null(VALGROUP) || length(VALGROUP) == nrow(VALDATA)
-    )
-    if (ncol(X) > 0 && is.null(VALX)) stop("VALX is required with VALDATA and X.")
-    if (is.null(VALX)) VALX <- matrix(0, nrow(VALDATA), 0)
-    stopifnot(is.matrix(VALX), is.numeric(VALX), all(is.finite(VALX)), nrow(VALX) == nrow(VALDATA), ncol(VALX) == ncol(X))
-    storage.mode(VALX) <- "double"
-    valgroup <- if (is.null(VALGROUP)) rep(0, nrow(VALDATA)) else match(VALGROUP, unique(GROUP)) - 1
-    if (anyNA(valgroup)) stop("VALGROUP must use the labels of GROUP.")
-    valY <- VALDATA
-    storage.mode(valY) <- "double"
-    valY[, !numeric] <- round(valY[, !numeric])
-    val <- c(list(Y = valY, group = valgroup), strata_index(VALX, valgroup, valY, cat, numeric(0)))
-  }
   out <- list(
     Y = Y,
     n = nrow(Y),
@@ -137,7 +106,6 @@ set_latpl_data <- function(DATA, VALDATA = NULL, MISSING = c("listwise", "pairwi
     cat = cat,
     numeric = numeric,
     freq = unlist(st$freq),
-    valfreq = unlist(val$freq),
     missing = MISSING,
     uweights = uweights,
     ufreq = ufreq,
@@ -150,7 +118,6 @@ set_latpl_data <- function(DATA, VALDATA = NULL, MISSING = c("listwise", "pairwi
     stratum = st$stratum,
     strata = st$strata,
     tables = st$tables,
-    val = val,
     freqTime = as.numeric(difftime(Sys.time(), freq_start_time, units = "secs"))
   )
   class(out) <- "latpl_data"
@@ -180,7 +147,7 @@ strata_index <- function(X, GROUP, Y, CAT, WEIGHTS) {
     out$stratum[rows] <- if (ncol(X)) match(key, key[first]) - 1 else 0
     out$tables[g] <- use_tables(nrow(out$strata[[g]]), Y[rows, , drop = FALSE], CAT, out$stratum[rows])
     if (out$tables[g]) {
-      out$freq[[g]] <- pairs_freq(Y[rows, , drop = FALSE], CAT, if (length(WEIGHTS)) WEIGHTS[rows] else numeric(0), out$stratum[rows])
+      out$freq[[g]] <- cpp_pairs_freq(Y[rows, , drop = FALSE], CAT, if (length(WEIGHTS)) WEIGHTS[rows] else numeric(0), out$stratum[rows])
     }
   }
   out
@@ -357,31 +324,6 @@ set_latpl_groups <- function(MODELS, CONSTRAINTS = NULL) {
   out
 }
 
-#' Starting values for pairwise likelihood estimation
-#'
-#' @param METHOD \tabular{ll}{ \code{'standard'} \tab Thresholds from the univariate margins,
-#'  signed loadings from the correlations among the items of each factor, regression coefficients
-#'  at `0.25`, uncorrelated latent variables, no residual covariances. \cr \tab \cr \code{'SA'} \tab The end point of the Adam phase of the
-#'  pairwise stochastic approximation ([set_sa_init_control()]), started from `THETA` or from the
-#'  `standard` values. With [set_sa_control()], the Adam phase is already part of the optimiser and
-#'  `'SA'` adds nothing. \cr }
-#' @param THETA Initialising vector. If `NULL`, the `standard` initialisation point is used.
-#' @param CONTROL Control object from [set_sa_init_control()], used when `METHOD = "SA"`.
-#'
-#' @return An object of class `latpl_init` to be passed to [lavaan.pl()] via `estimator.args$init`.
-#'
-#' @export
-set_init <- function(METHOD = c("standard", "SA"), THETA = NULL, CONTROL = set_sa_init_control()) {
-  METHOD <- match.arg(METHOD)
-  stopifnot(
-    is.null(THETA) || (is.numeric(THETA) && is.vector(THETA) && all(is.finite(THETA))),
-    inherits(CONTROL, "latpl_sa_control")
-  )
-  out <- list(METHOD = METHOD, THETA = THETA, CONTROL = CONTROL)
-  class(out) <- "latpl_init"
-  out
-}
-
 #' Control options of the quasi-Newton method
 #'
 #' The `QN` method: the exact pairwise likelihood estimate, by the BFGS optimiser of the \code{ucminf} package.
@@ -528,17 +470,3 @@ control_method <- function(CONTROL) {
   if (inherits(CONTROL, "latpl_sa_control")) "SA" else "QN"
 }
 
-#' Control options for the stochastic approximation initialisation
-#'
-#' Only the Adam phase of [set_sa_control()] runs, and its end point is the starting value of
-#' [set_qn_control()].
-#'
-#' @inheritParams set_sa_control
-#'
-#' @return An object of class `latpl_sa_control` to be passed to [set_init()] via `CONTROL`.
-#'
-#' @export
-set_sa_init_control <- function(PAIRS_PER_ITERATION = 16, ALPHA = 0.2, ADAM_EPOCHS = NULL, TOL = 0.05, SEED = 123) {
-  set_sa_control(PAIRS_PER_ITERATION = PAIRS_PER_ITERATION, ALPHA = ALPHA, ADAM_EPOCHS = ADAM_EPOCHS,
-                 AVERAGE_EPOCHS = 0, TOL = TOL, SEED = SEED)
-}

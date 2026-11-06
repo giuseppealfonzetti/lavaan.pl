@@ -4,7 +4,7 @@
 \alias{run_sa}
 \title{Stochastic approximation}
 \usage{
-run_sa(START, DATA, ENGINE, LINCON, CONTROL, ADAM_ONLY, VERBOSE)
+run_sa(START, DATA, ENGINE, LINCON, CONTROL, VERBOSE)
 }
 \arguments{
 \item{START}{Starting parameter vector.}
@@ -15,9 +15,7 @@ run_sa(START, DATA, ENGINE, LINCON, CONTROL, ADAM_ONLY, VERBOSE)
 
 \item{LINCON}{Output of \code{\link[=lincon]{lincon()}}.}
 
-\item{CONTROL}{Control object from \code{\link[=set_sa_control]{set_sa_control()}} or \code{\link[=set_sa_init_control]{set_sa_init_control()}}.}
-
-\item{ADAM_ONLY}{If \code{TRUE}, stop after the Adam phase.}
+\item{CONTROL}{Control object from \code{\link[=set_sa_control]{set_sa_control()}} or \code{\link[=set_saqn_control]{set_saqn_control()}}.}
 
 \item{VERBOSE}{If \code{TRUE}, print progress.}
 }
