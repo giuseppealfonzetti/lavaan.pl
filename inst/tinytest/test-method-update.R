@@ -9,4 +9,6 @@ local({
   expect_identical(refit@Options$std.lv, TRUE)
   expect_equal(lavaan::nobs(refit), 500L)
   expect_equal(length(coef(update(fit, model = "eta =~ y1 + y2 + y3 + y4"))), 8)
+  added <- update(fit, add = "y1 ~~ y2")
+  expect_equal(coef(added), coef(pmlcfa(paste(syntax, "y1 ~~ y2", sep = "\n"), items, std.lv = TRUE)))
 })

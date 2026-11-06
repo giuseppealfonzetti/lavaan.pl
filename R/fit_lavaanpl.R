@@ -169,7 +169,13 @@ fit_lavaanpl <- function(
     fn <- function(x) {
       vector <- full(x)
       val <- if (pd(vector)) -cpp_pl(vector, eng_std$model, eng_std$data)$pl / DATA$n else Inf
-      if (is.finite(val)) val else Inf
+      val <- if (is.finite(val)) val else Inf
+      evals <<- evals + 1L
+      if (val < best) {
+        best <<- val
+        trail[[length(trail) + 1]] <<- list(epoch = evals, vector = vector, nll = val)
+      }
+      val
     }
     gr <- function(x) {
       vector <- full(x)
@@ -202,6 +208,9 @@ fit_lavaanpl <- function(
       if (VERBOSE) {
         message("- Optimising with ucminf...")
       }
+      evals <- 0L
+      best <- Inf
+      trail <- list()
       opt <- ucminf::ucminf(
         start[lc$free_idx],
         fn,
@@ -209,10 +218,18 @@ fit_lavaanpl <- function(
         hessian = 0,
         control = start_control
       )
+      opt$path <- list(
+        epoch = vapply(trail, function(x) x$epoch, integer(1)),
+        parameter_vector = lapply(trail, function(x) std$from(x$vector)),
+        nll = vapply(trail, function(x) x$nll, numeric(1))
+      )
       values[s] <- opt$value
       if (s == 1 || opt$value < fit$numFit$value) {
         fit$numFit <- opt
-        if (METHOD == "SA-QN") fit$stoFit <- burn[setdiff(names(burn), c("parameter_vector", "last_iterate", "burn_in_iterate", "invh", "path"))]
+        if (METHOD == "SA-QN") {
+          fit$stoFit <- burn[setdiff(names(burn), c("parameter_vector", "last_iterate", "burn_in_iterate", "invh"))]
+          fit$stoFit$path$parameter_vector <- lapply(burn$path$parameter_vector, std$from)
+        }
       }
     }
     if (METHOD == "SA-QN") fit$stoFit$start_logl <- -values * DATA$n

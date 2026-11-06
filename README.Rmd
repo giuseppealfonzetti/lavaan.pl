@@ -30,7 +30,7 @@ pak::pak("giuseppealfonzetti/lavaan.pl")
 
 When the package is installed, you can load it with:
 
-```{r}
+```{r lib}
 library(lavaan.pl)
 ```
 
@@ -42,14 +42,14 @@ An example is given below.
 Consider the data containing 25 personality items measured on 6-point scale from the International Personality Item Pool (IPIP) dataset.
 The data set is available in the `{lavaan.pl}` package and can be loaded with the following code:
 
-```{r}
+```{r data}
 data("bfi")
 head(bfi)
 ```
 
 The `{lavaan}` model syntax to fit a confirmatory factor analysis model with 5 latent factors, where the first 5 items load on the first factor and so on, is:
 
-```{r}
+```{r lavaan-model}
 mod <- "
   opn =~ O1 + O2 + O3 + O4 + O5  # Openness
   con =~ C1 + C2 + C3 + C4 + C5  # Conscientiousness
@@ -62,14 +62,25 @@ mod <- "
 Users of `{lavaan}` will be familiar with this syntax. 
 The call to the `pmlcfa()` function is made as for `lavaan::cfa()`:
 
-```{r}
+```{r fit}
 # Fit the model
 fit <- pmlcfa(model = mod, data = bfi, std.lv = TRUE, test = "mean.var.adjusted")
 summary(fit)
+
 ```
 
 
-All^[Most :)--we're working on it!] `lavaan` methods should carry over, such as:
+Look at the pairwise log-likelihood along the optimisation
+```{r obj}
+plot(fit, type = "objective")
+```
+
+Look at the parameter traces along the optimisation
+```{r trace}
+plot(fit, type = "trace")
+```
+
+Extract coefficients
 
 ```{r}
 head(coef(fit), 10)
@@ -77,9 +88,34 @@ head(parameterestimates(fit, se = TRUE))
 head(fitted(fit)$cov)  # model-implied covariance matrix for the UVs
 ```
 
-And also plot from the `{semPlot}` package:
+## Comparing models
 
-```{r}
+Fit a restricted model, where openness and neuroticism are uncorrelated:
+
+```{r fit-restricted}
+fit_restricted <- update(fit, add = "opn ~~ 0*neu")
+```
+
+We can  use the composite likelihood versions of AIC and BIC for model selection
+
+```{r aic-bic}
+AIC(fit, fit_restricted)
+BIC(fit, fit_restricted)
+```
+
+or compare the two fits with the mean and variance adjusted pairwise likelihood ratio test via
+`lavTestLRT()`, or equivalently `anova()`, 
+```{r plrt}
+print(lavTestLRT(fit, fit_restricted))
+```
+
+
+
+## Compatibility with external packages
+
+Plot from the `{semPlot}` package:
+
+```{r semPlot}
 #| label: fig-bfi
 #| dev.args: !expr list(res = 300)
 library(semPlot)
@@ -100,17 +136,6 @@ semPaths(fit, whatLabels = "est", layout = "circle", residuals = FALSE,
          legend = FALSE)
 ```
 
-## Choosing the algorithm
-
-Three algorithms are available through `optim.method`. The default, `"SA-QN"`, gives the pairwise likelihood estimate by quasi-Newton, started from the burn-in of stochastic approximation and its curvature. `"SA"` is pairwise stochastic approximation with Polyak-Ruppert averaging, whose standard errors account for the optimisation noise. `"QN"` runs quasi-Newton from the starting values alone. `control` tunes them, for example `set_sa_control(average_epochs = 100)`. If a model may have several optima, `set_saqn_control(nstarts = 3)` runs `"SA-QN"` with three seeds, keeps the highest pairwise likelihood and warns if the runs disagree.
-
-With `"SA"`, `sa_diagnostics()` reports how the run behaved, how far the estimates are predicted to be from the pairwise likelihood estimate, and how much noise the sampling of pairs adds to the standard errors. See also `plot_sa()` and `sa_stability()`.
-
-```{r}
-fit_sa <- lavaan.pl::pmlcfa(mod, bfi, std.lv = TRUE, optim.method = "SA")
-sa_diagnostics(fit_sa)
-lavaan.pl::plot_sa(fit_sa)
-```
 
 ## Session information
 
@@ -119,71 +144,3 @@ lavaan.pl::plot_sa(fit_sa)
 sessionInfo()
 ```
 
-<!-- To fit a latent factor analysis model with 5 factors, where the first 5 items load on the first factor and so on, we can use the `fit_latpl()` function. -->
-<!-- In preparation, we must build the following objects to be supplied as a list to the `CONSTR_LIST` argument: -->
-
-<!-- - `CONSTRMAT`: A matrix of constraints on the factor loadings. -->
-<!-- - `CORRFLAG`: A flag indicating whether the factor correlations are estimated. -->
-<!-- - `CONSTRVAR`: A vector of constraints on the factor variances, if any. -->
-<!-- - `STDLV`: A flag indicating whether the factor loadings are standardised. -->
-<!-- - `CONSTRAINTS`: Linear equality constraints `list(A, b)` on the parameters, if any. -->
-
-<!-- The above ingredients are prepared using the code below. -->
-
-<!-- ```{r} -->
-<!-- p <- 25         # number of items -->
-<!-- q <- 5          # number of factors -->
-<!-- n <- nrow(bfi)  # number of observations -->
-
-<!-- # Convert data frame to matrix, with each item taking values 0,1,2,...,5 -->
-<!-- D <- as.matrix(data.frame(lapply(bfi[, 1:p], as.numeric))) - 1 -->
-<!-- head(D) -->
-
-<!-- # Constraint matrix: NA indicate free loadings -->
-<!-- constrmat <- build_constr_mat(P = p, Q = q, STRUCT = "simple") -->
-<!-- head(constrmat, 12) -->
-
-<!-- # Build constraint list -->
-<!-- constr_list <- list( -->
-<!--   CONSTRMAT = constrmat, -->
-<!--   CORRFLAG = TRUE, -->
-<!--   CONSTRVAR = rep(1, q),  # these options standardise the   -->
-<!--   STDLV = TRUE,           # factor variances -->
-<!--   CONSTRAINTS = NULL -->
-<!-- ) -->
-<!-- ``` -->
-
-<!-- We can now fit the factor model: -->
-
-<!-- ```{r} -->
-<!-- fit <- fit_latpl( -->
-<!--   DATA = D,  -->
-<!--   CONSTR_LIST = constr_list, -->
-<!--   METHOD = "ucminf", -->
-<!--   VERBOSE = TRUE -->
-<!-- ) -->
-<!-- print(fit) -->
-<!-- ``` -->
-
-<!-- The default method is using the optimiser from the `{ucminf}` package, which works well for small data sizes. -->
-<!-- Alternatively, the user may choose `METHOD = "SA"` to turn on the stochastic approximation algorithm. -->
-<!-- Use the function `get_par()` to extract the parameter estimates: -->
-
-<!-- ```{r} -->
-<!-- get_par(fit) -->
-<!-- ``` -->
-
-<!-- Computing the standard errors is done separately using the `compute_var()` function: -->
-
-<!-- ```{r} -->
-<!-- var <- compute_var(OBJ = fit, DATA = D, VERBOSE = TRUE) -->
-<!-- str(var) -->
-
-<!-- # Standard errors -->
-<!-- head(sqrt(diag(var$vcov) / n)) -->
-<!-- ``` -->
-
-<!-- ## `{lavaan}` wrapper -->
-
-<!-- This package also provides a user-friendly `{lavaan}`-style interface to estimate factor analysis models using the `pmlcfa()` function. -->
-<!-- Let's rerun the above example, but this time using the stochastic approximation algorithm. -->

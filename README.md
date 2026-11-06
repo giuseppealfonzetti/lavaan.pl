@@ -69,7 +69,7 @@ The call to the `pmlcfa()` function is made as for `lavaan::cfa()`:
 fit <- pmlcfa(model = mod, data = bfi, std.lv = TRUE, test = "mean.var.adjusted")
 summary(fit)
 #> lavaan.pl 0.1.0.9002 
-#> lavaan 0.7-2 ended normally after 12 iterations
+#> lavaan 0.7-3 ended normally after 12 iterations
 #> 
 #>   Estimator                                        PML
 #>   Optimization method                            SA-QN
@@ -303,17 +303,28 @@ summary(fit)
 #>     agr               1.000                           
 #>     neu               1.000                           
 #> 
+
 ```
 
 
-All^[Most :)--we're working on it!] `lavaan` methods should carry over, such as:
+Look at the pairwise log-likelihood along the optimisation
+``` r
+plot(fit, type = "objective")
+```
+![](<man/figures/README-obj-1.png>)
+
+Look at the parameter traces along the optimisation
+``` r
+plot(fit, type = "trace")
+```
+![](<man/figures/README-trace-1.png>)
+
+Extract coefficients
 
 ``` r
 head(coef(fit), 10)
-#>    opn=~O1    opn=~O2    opn=~O3    opn=~O4    opn=~O5    con=~C1    con=~C2 
-#>  0.6474239 -0.4443220  0.8077955  0.1355670 -0.4862490  0.5644095  0.5707376 
-#>    con=~C3    con=~C4    con=~C5 
-#>  0.5430037 -0.7602739 -0.7055654 
+#>    opn=~O1    opn=~O2    opn=~O3    opn=~O4    opn=~O5    con=~C1    con=~C2    con=~C3    con=~C4    con=~C5 
+#>  0.6474239 -0.4443220  0.8077955  0.1355670 -0.4862490  0.5644095  0.5707376  0.5430037 -0.7602739 -0.7055654 
 head(parameterestimates(fit, se = TRUE))
 ```
 |lhs|op|rhs|est|se|z|pvalue|ci.lower|ci.upper|
@@ -339,7 +350,53 @@ head(fitted(fit)$cov)  # model-implied covariance matrix for the UVs
 |C1| 0.118|-0.081| 0.147| 0.025|-0.088| 1.000| 0.322| 0.306|-0.429|-0.398|-0.119|-0.160| 0.152| 0.163| 0.137|-0.070| 0.138| 0.161| 0.114| 0.161|-0.142|-0.136|-0.128|-0.113|-0.097|
 
 
-And also plot from the `{semPlot}` package:
+## Comparing models
+
+Fit a restricted model, where openness and neuroticism are uncorrelated:
+
+``` r
+fit_restricted <- update(fit, add = "opn ~~ 0*neu")
+```
+
+We can  use the composite likelihood versions of AIC and BIC for model selection
+
+``` r
+AIC(fit, fit_restricted)
+```
+| |df|AIC|
+|---|--:|--:|
+|fit|3140.013|4268143|
+|fit_restricted|3130.981|4268273|
+
+
+``` r
+BIC(fit, fit_restricted)
+```
+| |df|BIC|
+|---|--:|--:|
+|fit|3140.013|4286081|
+|fit_restricted|3130.981|4286159|
+
+
+or compare the two fits with the mean and variance adjusted pairwise likelihood ratio test via
+`lavTestLRT()`, or equivalently `anova()`, 
+``` r
+print(lavTestLRT(fit, fit_restricted))
+#> 
+#> Mean and Variance Adjusted Chi-Squared Difference Test (method = “mean.var.adjusted.PLRT”, lavaan.pl)
+#> 
+#>                 Df  PL_AIC  PL_BIC  Chisq Chisq diff Df diff Pr(>Chisq)    
+#> fit            265 4268143 4286081 4584.0                                  
+#> fit_restricted 266 4268273 4286159 4732.2     17.005       1  3.728e-05 ***
+#> ---
+#> Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+```
+
+
+
+## Compatibility with external packages
+
+Plot from the `{semPlot}` package:
 
 ``` r
 library(semPlot)
@@ -361,39 +418,6 @@ semPaths(fit, whatLabels = "est", layout = "circle", residuals = FALSE,
 ```
 ![](<man/figures/README-fig-bfi-1.png>)
 
-## Choosing the algorithm
-
-Three algorithms are available through `optim.method`. The default, `"SA-QN"`, gives the pairwise likelihood estimate by quasi-Newton, started from the burn-in of stochastic approximation and its curvature. `"SA"` is pairwise stochastic approximation with Polyak-Ruppert averaging, whose standard errors account for the optimisation noise. `"QN"` runs quasi-Newton from the starting values alone. `control` tunes them, for example `set_sa_control(AVERAGE_EPOCHS = 100)`. If a model may have several optima, `set_saqn_control(NSTARTS = 3)` runs `"SA-QN"` with three seeds, keeps the highest pairwise likelihood and warns if the runs disagree.
-
-With `"SA"`, `sa_diagnostics()` reports how the run behaved, how far the estimates are predicted to be from the pairwise likelihood estimate, and how much noise the sampling of pairs adds to the standard errors. See also `plot_sa()` and `sa_stability()`.
-
-``` r
-fit_sa <- lavaan.pl::pmlcfa(mod, bfi, std.lv = TRUE, optim.method = "SA")
-sa_diagnostics(fit_sa)
-#> SA fit: converged 
-#> 
-#>  Pairs per iteration: 16 of 300 | epoch: 19 iterations | gain: hessian 
-#>            phase epochs iterations seconds
-#>             Adam      8        152  0.0142
-#>  Preconditioning      3         57  0.0312
-#>         Averaged     50        950  0.0907
-#> 
-#>  Last burn-in phase ended at a plateau: FALSE 
-#>  Skipped steps in the averaged phase: 0 
-#>  Rejected steps: 101 
-#>  Observed information positive definite: TRUE 
-#>  Largest predicted distance from exact PML: 0.68 standard errors
-#> 
-#>  Optimisation noise relative to the standard error:
-#>   block parameters median_ratio max_ratio max_distance
-#>     tau        125       0.0023      0.01       0.0086
-#>  lambda         25       0.3426      0.87       0.6776
-#>    corr         10       0.2282      0.39       0.4464
-#> 
-#>  AVERAGE_EPOCHS = 3797 would bring the largest ratio to about 0.1 
-lavaan.pl::plot_sa(fit_sa)
-```
-![](<man/figures/README-chunk-8-1.png>)
 
 ## Session information
 
@@ -404,11 +428,11 @@ sessionInfo()
 #> Running under: macOS Golden Gate 27.0.1
 #> 
 #> Matrix products: default
-#> BLAS:   /Library/Frameworks/R.framework/Versions/4.6/Resources/lib/libRblas.0.dylib 
+#> BLAS:   /System/Library/Frameworks/Accelerate.framework/Versions/A/Frameworks/vecLib.framework/Versions/A/libBLAS.dylib 
 #> LAPACK: /Library/Frameworks/R.framework/Versions/4.6/Resources/lib/libRlapack.dylib;  LAPACK version 3.12.1
 #> 
 #> locale:
-#> [1] C.UTF-8/C.UTF-8/C.UTF-8/C/C.UTF-8/C.UTF-8
+#> [1] en_US.UTF-8/en_US.UTF-8/en_US.UTF-8/C/en_US.UTF-8/en_US.UTF-8
 #> 
 #> time zone: Europe/Rome
 #> tzcode source: internal
@@ -417,102 +441,21 @@ sessionInfo()
 #> [1] stats     graphics  grDevices utils     datasets  methods   base     
 #> 
 #> other attached packages:
-#> [1] semPlot_1.2.0        lavaan_0.7-2         lavaan.pl_0.1.0.9002
+#> [1] semPlot_1.2.0        lavaan.pl_0.1.0.9002
 #> 
 #> loaded via a namespace (and not attached):
-#>  [1] gtable_0.3.6        xfun_0.60           ggplot2_4.0.3      
-#>  [4] htmlwidgets_1.6.4   psych_2.6.5         lattice_0.23-1     
-#>  [7] numDeriv_2016.8-1.1 quadprog_1.5-8      vctrs_0.7.3        
-#> [10] tools_4.6.1         generics_0.1.4      stats4_4.6.1       
-#> [13] parallel_4.6.1      tibble_3.3.1        cluster_2.1.8.2    
-#> [16] ucminf_1.2.3        pkgconfig_2.0.3     qgraph_1.10.1      
-#> [19] Matrix_1.7-6        data.table_1.18.6.1 checkmate_2.3.4    
-#> [22] RColorBrewer_1.1-3  S7_0.2.2            RcppParallel_6.2.1 
-#> [25] lifecycle_1.0.5     compiler_4.6.1      farver_2.1.2       
-#> [28] stringr_1.6.0       mnormt_2.1.2        codetools_0.2-20   
-#> [31] litedown_0.11       glasso_1.11         htmltools_0.5.9    
-#> [34] fdrtool_1.2.18      htmlTable_2.5.0     Formula_1.2-6      
-#> [37] pillar_1.11.1       Hmisc_5.2-6         abind_1.4-8        
-#> [40] rpart_4.1.27        nlme_3.1-169        gtools_3.9.5       
-#> [43] commonmark_2.0.0    tidyselect_1.2.1    digest_0.6.39      
-#> [46] stringi_1.8.9       dplyr_1.2.1         reshape2_1.4.5     
-#> [49] tinyplot_0.8.0      fastmap_1.2.0       grid_4.6.1         
-#> [52] colorspace_2.1-4    cli_3.6.6           magrittr_2.0.5     
-#> [55] base64enc_0.1-6     pbivnorm_0.6.0      foreign_0.8-91     
-#> [58] corpcor_1.6.10      scales_1.4.0        backports_1.5.1    
-#> [61] rmarkdown_2.31      jpeg_0.1-11         igraph_2.3.3       
-#> [64] otel_0.2.0          nnet_7.3-20         gridExtra_2.3.1    
-#> [67] RcppEigen_0.3.4.0.2 png_0.1-9           pbapply_1.7-4      
-#> [70] evaluate_1.0.5      knitr_1.51          rlang_1.3.0        
-#> [73] Rcpp_1.1.2          glue_1.8.1          rstudioapi_0.19.0  
-#> [76] R6_2.6.1            plyr_1.8.9         
+#>  [1] gtable_0.3.6        xfun_0.60           ggplot2_4.0.3       htmlwidgets_1.6.4   psych_2.6.5         lattice_0.23-1     
+#>  [7] numDeriv_2016.8-1.1 quadprog_1.5-8      vctrs_0.7.3         tools_4.6.1         generics_0.1.4      stats4_4.6.1       
+#> [13] parallel_4.6.1      tibble_3.3.1        cluster_2.1.8.2     ucminf_1.2.3        pkgconfig_2.0.3     qgraph_1.10.1      
+#> [19] Matrix_1.7-6        data.table_1.18.6.1 checkmate_2.3.4     RColorBrewer_1.1-3  S7_0.2.2            RcppParallel_6.2.1 
+#> [25] lifecycle_1.0.5     compiler_4.6.1      farver_2.1.2        stringr_1.6.0       mnormt_2.1.2        codetools_0.2-20   
+#> [31] litedown_0.11       glasso_1.11         htmltools_0.5.9     fdrtool_1.2.18      htmlTable_2.5.0     Formula_1.2-6      
+#> [37] pillar_1.11.1       Hmisc_5.2-6         abind_1.4-8         rpart_4.1.27        nlme_3.1-169        lavaan_0.7-3       
+#> [43] gtools_3.9.5        commonmark_2.0.0    tidyselect_1.2.1    digest_0.6.39       stringi_1.8.9       dplyr_1.2.1        
+#> [49] reshape2_1.4.5      tinyplot_0.8.0      fastmap_1.2.0       grid_4.6.1          colorspace_2.1-4    cli_3.6.6          
+#> [55] magrittr_2.0.5      base64enc_0.1-6     pbivnorm_0.6.0      foreign_0.8-91      corpcor_1.6.10      scales_1.4.0       
+#> [61] backports_1.5.1     rmarkdown_2.31      jpeg_0.1-11         igraph_2.3.3        otel_0.2.0          nnet_7.3-20        
+#> [67] gridExtra_2.3.1     RcppEigen_0.3.4.0.2 png_0.1-9           pbapply_1.7-4       evaluate_1.0.5      knitr_1.51         
+#> [73] rlang_1.3.0         Rcpp_1.1.2          glue_1.8.1          rstudioapi_0.19.0   R6_2.6.1            plyr_1.8.9         
 ```
 
-<!-- To fit a latent factor analysis model with 5 factors, where the first 5 items load on the first factor and so on, we can use the `fit_latpl()` function. -->
-<!-- In preparation, we must build the following objects to be supplied as a list to the `CONSTR_LIST` argument: -->
-
-<!-- - `CONSTRMAT`: A matrix of constraints on the factor loadings. -->
-<!-- - `CORRFLAG`: A flag indicating whether the factor correlations are estimated. -->
-<!-- - `CONSTRVAR`: A vector of constraints on the factor variances, if any. -->
-<!-- - `STDLV`: A flag indicating whether the factor loadings are standardised. -->
-<!-- - `CONSTRAINTS`: Linear equality constraints `list(A, b)` on the parameters, if any. -->
-
-<!-- The above ingredients are prepared using the code below. -->
-
-<!-- ```{r} -->
-<!-- p <- 25         # number of items -->
-<!-- q <- 5          # number of factors -->
-<!-- n <- nrow(bfi)  # number of observations -->
-
-<!-- # Convert data frame to matrix, with each item taking values 0,1,2,...,5 -->
-<!-- D <- as.matrix(data.frame(lapply(bfi[, 1:p], as.numeric))) - 1 -->
-<!-- head(D) -->
-
-<!-- # Constraint matrix: NA indicate free loadings -->
-<!-- constrmat <- build_constr_mat(P = p, Q = q, STRUCT = "simple") -->
-<!-- head(constrmat, 12) -->
-
-<!-- # Build constraint list -->
-<!-- constr_list <- list( -->
-<!--   CONSTRMAT = constrmat, -->
-<!--   CORRFLAG = TRUE, -->
-<!--   CONSTRVAR = rep(1, q),  # these options standardise the   -->
-<!--   STDLV = TRUE,           # factor variances -->
-<!--   CONSTRAINTS = NULL -->
-<!-- ) -->
-<!-- ``` -->
-
-<!-- We can now fit the factor model: -->
-
-<!-- ```{r} -->
-<!-- fit <- fit_latpl( -->
-<!--   DATA = D,  -->
-<!--   CONSTR_LIST = constr_list, -->
-<!--   METHOD = "ucminf", -->
-<!--   VERBOSE = TRUE -->
-<!-- ) -->
-<!-- print(fit) -->
-<!-- ``` -->
-
-<!-- The default method is using the optimiser from the `{ucminf}` package, which works well for small data sizes. -->
-<!-- Alternatively, the user may choose `METHOD = "SA"` to turn on the stochastic approximation algorithm. -->
-<!-- Use the function `get_par()` to extract the parameter estimates: -->
-
-<!-- ```{r} -->
-<!-- get_par(fit) -->
-<!-- ``` -->
-
-<!-- Computing the standard errors is done separately using the `compute_var()` function: -->
-
-<!-- ```{r} -->
-<!-- var <- compute_var(OBJ = fit, DATA = D, VERBOSE = TRUE) -->
-<!-- str(var) -->
-
-<!-- # Standard errors -->
-<!-- head(sqrt(diag(var$vcov) / n)) -->
-<!-- ``` -->
-
-<!-- ## `{lavaan}` wrapper -->
-
-<!-- This package also provides a user-friendly `{lavaan}`-style interface to estimate factor analysis models using the `pmlcfa()` function. -->
-<!-- Let's rerun the above example, but this time using the stochastic approximation algorithm. -->

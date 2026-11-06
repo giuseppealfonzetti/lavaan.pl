@@ -2,7 +2,7 @@
 #'
 #' @param object Object of class lavaanpl_internal, or a `lavaan.pl` object from [lavaan.pl()].
 #' @return The object of class lavaanpl_internal.
-#' @seealso [sa_diagnostics()], [plot_sa()], [sa_stability()]
+#' @seealso [sa_diagnostics()], [plot.lavaan.pl()], [sa_stability()]
 #' @keywords internal
 sa_fit <- function(object) {
   fit <- if (inherits(object, "lavaan.pl")) get_lavaanpl_internal(object) else object
@@ -100,53 +100,6 @@ print.lavaanpl_sa_diagnostics <- function(x, ...) {
     cat("\n average_epochs =", x$epochs_needed, "would bring the largest ratio to about", x$target, "\n")
   }
   invisible(x)
-}
-
-#' Plots of the stochastic approximation
-#'
-#' @param object A `lavaan.pl` object from [lavaan.pl()], fitted by stochastic approximation.
-#' @param type `"trajectory"` for the estimates across iterations by parameter block, `"objective"` for the pairwise
-#'   likelihood along the burn-in (it is not monitored in the averaged phase), `"noise"` for the optimisation noise
-#'   relative to the standard error of each parameter.
-#' @param blocks Parameter blocks to show, such as `"lambda"` or `"tau"`. If `NULL`, all of them.
-#' @return The plotted data, invisibly. Without the tinyplot package, a warning and the data.
-#' @export
-plot_sa <- function(object, type = c("trajectory", "objective", "noise"), blocks = NULL) {
-  fit <- sa_fit(object)
-  type <- match.arg(type)
-  path <- fit$stoFit$path
-  block <- fit$blocks
-  ends <- tapply(path$iter, path$phase, max)[c("1", "2")]
-  ends <- ends[!is.na(ends)]
-  long <- switch(type,
-    trajectory = do.call(rbind, Map(function(iter, vector) {
-      data.frame(iter = iter, estimate = transform_parameters(fit$model, vector),
-                 id = seq_along(vector), block = block)
-    }, path$iter, path$parameter_vector)),
-    objective = data.frame(iter = path$iter, objective = path$nll)[path$phase < 3, ],
-    noise = sa_parameters(fit)
-  )
-  if (!is.null(blocks) && type != "objective") long <- long[long$block %in% blocks, ]
-  if (!requireNamespace("tinyplot", quietly = TRUE)) {
-    warning("{tinyplot} must be installed to plot; the data are returned.", call. = FALSE)
-    return(invisible(long))
-  }
-  phases <- bquote(abline(v = .(ends), lty = 2, col = "lightgrey"))
-  switch(type,
-    trajectory = do.call(tinyplot::tinyplot, list(
-      estimate ~ iter | factor(id), data = long, facet = ~block, type = "l", legend = FALSE, col = "black",
-      xlab = "Iterations", ylab = "Estimates", draw = phases
-    )),
-    objective = do.call(tinyplot::tinyplot, list(
-      objective ~ iter, data = long, type = "b", pch = 19, xlab = "Iterations", ylab = "Negative pairwise log-likelihood per unit",
-      draw = phases
-    )),
-    noise = do.call(tinyplot::tinyplot, list(
-      ratio ~ seq_along(ratio), data = long, facet = ~block, type = "h", xlab = "Parameter",
-      ylab = "Optimisation noise / standard error"
-    ))
-  )
-  invisible(long)
 }
 
 #' Stability of the stochastic approximation across seeds

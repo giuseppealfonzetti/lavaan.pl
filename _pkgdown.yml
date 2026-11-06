@@ -34,7 +34,7 @@ reference:
   - title: Diagnostics of the stochastic approximation
     contents:
       - sa_diagnostics
-      - plot_sa
+      - plot.lavaan.pl
       - sa_stability
 
   - title: Controls

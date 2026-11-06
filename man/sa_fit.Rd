@@ -16,6 +16,6 @@ The object of class lavaanpl_internal.
 Fit behind a stochastic approximation object
 }
 \seealso{
-\code{\link[=sa_diagnostics]{sa_diagnostics()}}, \code{\link[=plot_sa]{plot_sa()}}, \code{\link[=sa_stability]{sa_stability()}}
+\code{\link[=sa_diagnostics]{sa_diagnostics()}}, \code{\link[=plot.lavaan.pl]{plot.lavaan.pl()}}, \code{\link[=sa_stability]{sa_stability()}}
 }
 \keyword{internal}

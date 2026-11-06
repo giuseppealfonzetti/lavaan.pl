@@ -24,6 +24,8 @@ names(frame) <- paste0("y", seq_len(p))
 syntax <- "f1 =~ y1 + y2 + y3 + y4 + y5 + y6\nf2 =~ y7 + y8 + y9 + y10 + y11 + y12"
 fit_lavaan <- lavaan.pl::pmlcfa(syntax, frame, std.lv = TRUE, optim.method = "SA")
 fit_exact <- lavaan.pl:::fit_lavaanpl(data, model, CONTROL = set_qn_control())
+fit_saqn <- lavaan.pl::pmlcfa(syntax, frame, std.lv = TRUE)
+fit_qn <- lavaan.pl::pmlcfa(syntax, frame, std.lv = TRUE, optim.method = "QN")
 
 #### sa_diagnostics() reports the run, per parameter and by block ####
 local({
@@ -48,7 +50,7 @@ local({
   d <- sa_diagnostics(fit_lavaan)
   expect_equal(nrow(d$parameters), fit_lavaan@external$lavaanpl_internal$dims$npar)
   expect_error(sa_diagnostics(fit_exact), "not fitted by stochastic approximation")
-  expect_error(plot_sa(fit_exact), "not fitted by stochastic approximation")
+  expect_error(plot(fit_qn, "noise"), "not fitted by stochastic approximation")
   expect_error(sa_stability(fit_exact), "not fitted by stochastic approximation")
   expect_error(sa_diagnostics(1), "must come from")
 })
@@ -64,19 +66,36 @@ local({
   expect_stdout(print(d), "NOT converged")
 })
 
-#### plot_sa() returns the data of each view ####
+#### plot() returns the data of each view, with every phase ####
 local({
   grDevices::pdf(NULL)
   on.exit(grDevices::dev.off())
-  trajectory <- plot_sa(fit, "trajectory")
-  expect_equal(nrow(trajectory), length(fit$parameter_vector) * length(fit$stoFit$path$iter))
-  expect_equal(unique(trajectory$iter), fit$stoFit$path$iter)
-  expect_equal(unique(plot_sa(fit, "trajectory", blocks = "lambda")$block), "lambda")
-  objective <- plot_sa(fit, "objective")
-  expect_true(all(is.finite(objective$objective)))
-  noise <- plot_sa(fit_lavaan, "noise")
-  expect_equal(nrow(noise), fit_lavaan@external$lavaanpl_internal$dims$npar)
-  expect_error(plot_sa(fit, "other"))
+  internal <- fit_lavaan@external$lavaanpl_internal
+  trace <- plot(fit_lavaan)
+  expect_equal(nrow(trace), length(internal$parameter_vector) * length(internal$stoFit$path$iter))
+  expect_equal(unique(trace$epoch), internal$stoFit$path$iter / internal$stoFit$epoch_length)
+  expect_equal(levels(droplevels(trace$phase)), c("Adam", "Preconditioning", "Averaged"))
+  expect_equal(unique(plot(fit_lavaan, "trace", blocks = "lambda")$block), "lambda")
+  expect_true(all(is.finite(plot(fit_lavaan, "objective")$objective)))
+  expect_equal(nrow(plot(fit_lavaan, "noise")), internal$dims$npar)
+
+  saqn <- fit_saqn@external$lavaanpl_internal
+  path <- saqn$numFit$path
+  expect_equal(tail(path$parameter_vector, 1)[[1]], saqn$parameter_vector)
+  expect_true(all(diff(path$nll) < 0))
+  trace <- plot(fit_saqn)
+  expect_equal(levels(droplevels(trace$phase)), c("Adam", "Preconditioning", "QN"))
+  expect_true(all(diff(unique(trace$epoch)) > 0))
+  expect_true(all(is.finite(plot(fit_saqn, "objective")$objective)))
+  expect_error(plot(fit_saqn, "noise"), "not fitted by stochastic approximation")
+
+  qn <- fit_qn@external$lavaanpl_internal
+  expect_equal(qn$numFit$path$parameter_vector[[1]], qn$init)
+  expect_equal(tail(qn$numFit$path$parameter_vector, 1)[[1]], qn$parameter_vector)
+  trace <- plot(fit_qn)
+  expect_equal(levels(droplevels(trace$phase)), "QN")
+  expect_equal(min(trace$epoch), 0)
+  expect_error(plot(fit_qn, "other"))
 })
 
 #### sa_stability() compares the seeds with the predicted noise ####
