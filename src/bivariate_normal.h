@@ -1,6 +1,5 @@
-#ifndef bivariateNormal_H
-#define bivariateNormal_H
-const double pi = 3.1415926535897;
+#ifndef bivariate_normal_H
+#define bivariate_normal_H
 #include <Rcpp.h>
 
 
@@ -11,17 +10,12 @@ const double pi = 3.1415926535897;
 namespace binorm{
 
 
-  double dbvnorm( double X, double Y, double RHO, bool USE_LOG);
+  double dbvnorm(double A, double B, double RHO);
 
   //pbv_rcpp_pbvnorm0 (Drezner & Wesolowksy, 1990, JCSC)
-  double pbvnorm( double H1, double HK, double R);
+  double pbvnorm(double A, double B, double RHO);
 
 
 }
-
-
-
-
-
 
 #endif

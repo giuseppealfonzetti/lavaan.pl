@@ -7,21 +7,22 @@
 compute_plrt(OBJ, VARS = compute_var(OBJ), H1 = NULL)
 }
 \arguments{
-\item{OBJ}{Object of class lavaanpl_internal}
+\item{OBJ}{Object of class \code{lavaanpl_internal} from \code{\link[=fit_lavaanpl]{fit_lavaanpl()}}.}
 
-\item{VARS}{Output of \code{\link[=compute_var]{compute_var()}} for \code{OBJ}}
+\item{VARS}{Output of \code{\link[=compute_var]{compute_var()}} for \code{OBJ}.}
 
-\item{H1}{Object of class lavaanpl_internal in which \code{OBJ} is nested, or \code{NULL} to test \code{OBJ} against the
-saturated model}
+\item{H1}{Object of class \code{lavaanpl_internal} in which \code{OBJ} is nested, or \code{NULL} to test \code{OBJ} against the
+saturated model.}
 }
 \value{
-A list with the test of the model against \code{H1} or the saturated model \code{model} and, without
-\code{H1}, of the independence model against the saturated model \code{baseline}. Each holds the
-statistic \code{stat}, its degrees of freedom \code{df}, and the mean and variance adjusted \code{stat.scaled}
-(\code{stat} divided by \code{scaling.factor}), \code{df.scaled} and \code{pvalue.scaled}. Also, without \code{H1}, the
-saturated and independence fits \code{saturated} and \code{independence}, and the timing \code{RTime}.
+A list with the test \code{model} of \code{OBJ} against \code{H1} or the saturated model, as returned by \code{\link[=plrt_adjust]{plrt_adjust()}},
+and the timing \code{RTime}. Without \code{H1}, also the test \code{baseline} of the independence model against the saturated
+model and the fits \code{saturated} and \code{independence}.
 }
 \description{
 Pairwise likelihood ratio test
+}
+\seealso{
+\code{\link[=plrt_nested]{plrt_nested()}}, \code{\link[=plrt_fit]{plrt_fit()}}
 }
 \keyword{internal}

@@ -85,7 +85,7 @@ local({
   expect_true(all(is.finite(objective$objective)))
   expect_equal(nrow(objective), length(internal$stoFit$path$iter))
   expect_true("Averaged" %in% objective$phase)
-  expect_equal(tail(objective$objective, 1), -lavaan.pl:::cpp_pl(internal$parameter_vector, internal$engine$model, internal$engine$data)$pl / internal$data$n)
+  expect_equal(tail(objective$objective, 1), -lavaan.pl:::cpp_pl(internal$parameter_vector, internal$cpp_inputs$model, internal$cpp_inputs$data)$pl / internal$data$n)
   expect_equal(nrow(plot(fit_lavaan, "noise")), internal$dims$npar)
 
   saqn <- fit_saqn@external$lavaanpl_internal

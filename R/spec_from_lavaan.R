@@ -171,14 +171,10 @@ spec_from_lavaan <- function(template, start = NULL) {
 
 #' Model matrices of a lavaan model, for lavaan.pl
 #'
-#' lavaan represents the regression of an item on a covariate with a phantom latent variable named after the item.
-#' Here the phantom is removed: its row of `gamma` is the row of the item in `kappa`, its row of `beta` that of the
-#' item in `lambda`, its variance the residual variance of the item and its mean the intercept of the item.
-#'
 #' @param template Unfitted [lavaan::lavaan] object.
 #' @param WHAT `"free"`, `"est"` or `"start"` for [lavaan::lavInspect()], or a list of the model matrices of each group.
-#' @return A list with the matrices of each group, including `gamma` (latent variables on covariates) and `kappa`
-#'   (items on covariates).
+#' @return A list with the matrices of each group, without lavaan's phantom latent variables for items regressed on
+#'   covariates, and with `gamma` (latent variables on covariates) and `kappa` (items on covariates).
 #' @seealso [spec_from_lavaan()], [create_lav_from_lavaanpl()]
 #' @keywords internal
 lavaan_matrices <- function(template, WHAT) {

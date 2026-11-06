@@ -4,24 +4,25 @@
 \alias{cpp_pairs_freq}
 \title{Pairwise frequencies}
 \usage{
-cpp_pairs_freq(Y, C_VEC, WEIGHTS = as.numeric(c()), STRATA = as.numeric(c()))
+cpp_pairs_freq(Y, CAT, WEIGHTS = as.numeric(c()), STRATA = as.numeric(c()))
 }
 \arguments{
-\item{Y}{Data matrix of dimension \eqn{n*p}, with categories coded from zero and \code{NA} for
-missing responses.}
+\item{Y}{\eqn{n*p} data matrix, with categories coded from zero and \code{NA} for missing responses.}
 
-\item{C_VEC}{Number of categories of each item.}
+\item{CAT}{Number of categories of each item.}
 
-\item{WEIGHTS}{Optional vector of unit weights; empty for unit weights.}
+\item{WEIGHTS}{Unit weights, or empty for unit weights.}
 
-\item{STRATA}{Optional vector with the stratum of each row, from zero; empty for a single stratum.}
+\item{STRATA}{Stratum of each row, from zero, or empty for a single stratum.}
 }
 \value{
-The (weighted) frequencies of the bivariate response patterns: pairs \eqn{(k, l)},
-\eqn{l < k}, ordered by \eqn{k}, and within each pair the categories of \eqn{k} then \eqn{l}.
-With \code{STRATA}, the tables of each stratum one after the other.
+The weighted frequencies of the bivariate response patterns: pairs \verb{(k, l)} with \code{l < k}, ordered by \code{k},
+and within each pair the categories of \code{k} then \code{l}, stratum after stratum.
 }
 \description{
 Pairwise frequencies
+}
+\seealso{
+\code{\link[=lavaanpl_data]{lavaanpl_data()}}
 }
 \keyword{internal}

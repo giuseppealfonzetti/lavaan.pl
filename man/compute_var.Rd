@@ -2,24 +2,25 @@
 % Please edit documentation in R/allMethods.R
 \name{compute_var}
 \alias{compute_var}
-\title{Compute variance of the estimates}
+\title{Variance of the estimates}
 \usage{
 compute_var(OBJ, NUMDERIV = FALSE)
 }
 \arguments{
-\item{OBJ}{Object of class lavaanpl_internal}
+\item{OBJ}{Object of class \code{lavaanpl_internal} from \code{\link[=fit_lavaanpl]{fit_lavaanpl()}}.}
 
-\item{NUMDERIV}{TRUE if the hessian must be computed using \link[numDeriv]{jacobian}}
+\item{NUMDERIV}{If \code{TRUE}, the Hessian by \code{\link[numDeriv:jacobian]{numDeriv::jacobian()}} of the gradient.}
 }
 \value{
-A list with the Jacobian \code{trJacob} of the transformation to
-interpretable parameters, \code{H}, \code{J}, the diagonal of the sandwich variance
-\code{asymptotic_variance} on the transformed scale, \code{optimisation_noise} (SA
-fits only), the optimisation noise matrix \code{noise} on the optimisation scale
-(SA fits only), the Newton step to the optimum \code{step}, its size in standard errors of
-each parameter \code{distance}, the estimates \code{parameter_vector} and the timing \code{RTime}.
+A list with the Jacobian \code{trJacob} of \code{\link[=transform_parameters]{transform_parameters()}}, \code{H}, \code{J}, the diagonal of the sandwich
+variance \code{asymptotic_variance} on the transformed scale, the Newton step to the optimum \code{step} and its size in
+standard errors \code{distance}, the estimates \code{parameter_vector} and the timing \code{RTime}; for SA fits, also the
+optimisation noise \code{optimisation_noise} on the transformed scale and \code{noise} on the optimisation scale.
 }
 \description{
-Compute variance of the estimates
+Variance of the estimates
+}
+\seealso{
+\code{\link[=check_sa]{check_sa()}}, \code{\link[=compute_plrt]{compute_plrt()}}
 }
 \keyword{internal}

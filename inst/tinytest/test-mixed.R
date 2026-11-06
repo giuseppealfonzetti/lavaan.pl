@@ -72,7 +72,7 @@ local({
   expect_equal(par_rescaled$lambda[1], 100 * par$lambda[1], tolerance = 1e-3)
   expect_equal(par_rescaled$lambda[-1], par$lambda[-1], tolerance = 1e-3)
   expect_equal(par_rescaled$nu[1], 100 * par$nu[1] + 7, tolerance = 1e-3)
-  pl <- function(x) lavaan.pl:::cpp_pl(x$parameter_vector, x$engine$model, x$engine$data)$pl
+  pl <- function(x) lavaan.pl:::cpp_pl(x$parameter_vector, x$cpp_inputs$model, x$cpp_inputs$data)$pl
   expect_equal(pl(fit_rescaled), pl(fit_mixed) - n * (p - 1) * log(100), tolerance = 1e-6)
 })
 
@@ -91,12 +91,12 @@ local({
     model_discrete,
     CONTROL = set_qn_control(maxeval = 1)
   ))$init + 0.02
-  with_tables <- lavaan.pl:::engine(data_discrete, lavaan.pl:::lavaanpl_groups(list(model_discrete)), TRUE)
-  with_units <- lavaan.pl:::engine(data_discrete, lavaan.pl:::lavaanpl_groups(list(model_discrete)), FALSE)
+  with_tables <- lavaan.pl:::cpp_inputs(data_discrete, lavaan.pl:::lavaanpl_groups(list(model_discrete)), TRUE)
+  with_units <- lavaan.pl:::cpp_inputs(data_discrete, lavaan.pl:::lavaanpl_groups(list(model_discrete)), FALSE)
   pl_tables <- lavaan.pl:::cpp_pl(theta, with_tables$model, with_tables$data, 1L)
   pl_units <- lavaan.pl:::cpp_pl(theta, with_units$model, with_units$data, 1L)
-  hj_tables <- lavaan.pl:::cpp_HJ(theta, with_tables$model, with_tables$data, TRUE)
-  hj_units <- lavaan.pl:::cpp_HJ(theta, with_units$model, with_units$data, TRUE)
+  hj_tables <- lavaan.pl:::cpp_sandwich(theta, with_tables$model, with_tables$data, TRUE)
+  hj_units <- lavaan.pl:::cpp_sandwich(theta, with_units$model, with_units$data, TRUE)
   expect_equal(pl_units$pl, pl_tables$pl, tolerance = 1e-10)
   expect_equal(pl_units$gradient, pl_tables$gradient, tolerance = 1e-8)
   expect_equal(hj_units$H, hj_tables$H, tolerance = 1e-8)
@@ -117,8 +117,8 @@ local({
   expect_equal(fit@optim$logl, lavaan_logl(fit), tolerance = 1e-7)
   gradient <- lavaan.pl:::cpp_pl(
     engine_fit$parameter_vector,
-    engine_fit$engine$model,
-    engine_fit$engine$data,
+    engine_fit$cpp_inputs$model,
+    engine_fit$cpp_inputs$data,
     1L
   )$gradient
   expect_true(max(abs(gradient)) / n < 1e-4)
@@ -170,14 +170,14 @@ local({
 
 #### Threads give the same numbers on every path ####
 local({
-  serial <- lavaan.pl:::cpp_HJ(fit_both$parameter_vector, fit_both$engine$model, fit_both$engine$data, TRUE)
-  serial_pl <- lavaan.pl:::cpp_pl(fit_both$parameter_vector, fit_both$engine$model, fit_both$engine$data, 1L)
+  serial <- lavaan.pl:::cpp_sandwich(fit_both$parameter_vector, fit_both$cpp_inputs$model, fit_both$cpp_inputs$data, TRUE)
+  serial_pl <- lavaan.pl:::cpp_pl(fit_both$parameter_vector, fit_both$cpp_inputs$model, fit_both$cpp_inputs$data, 1L)
   serial_test <- lavaan.pl:::compute_plrt(fit_both, lavaan.pl:::compute_var(fit_both))
   threaded <- fit_both
   threaded$cores <- 4
   RcppParallel::setThreadOptions(numThreads = 4)
-  parallel <- lavaan.pl:::cpp_HJ(fit_both$parameter_vector, fit_both$engine$model, fit_both$engine$data, TRUE)
-  parallel_pl <- lavaan.pl:::cpp_pl(fit_both$parameter_vector, fit_both$engine$model, fit_both$engine$data, 1L)
+  parallel <- lavaan.pl:::cpp_sandwich(fit_both$parameter_vector, fit_both$cpp_inputs$model, fit_both$cpp_inputs$data, TRUE)
+  parallel_pl <- lavaan.pl:::cpp_pl(fit_both$parameter_vector, fit_both$cpp_inputs$model, fit_both$cpp_inputs$data, 1L)
   RcppParallel::setThreadOptions(numThreads = 1)
   expect_equal(parallel_pl$pl, serial_pl$pl, tolerance = 1e-12)
   expect_equal(parallel_pl$gradient, serial_pl$gradient, tolerance = 1e-8)

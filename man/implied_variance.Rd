@@ -12,8 +12,8 @@ implied_variance(MODEL, PARAMETER_VECTOR)
 \item{PARAMETER_VECTOR}{Parameter vector.}
 }
 \value{
-The largest implied variance among the ordinal items under \code{PARAMETERIZATION = "delta"}, which must be below
-one, and zero if there are none.
+The largest implied variance of the ordinal items under \code{PARAMETERIZATION = "delta"}, zero if there are
+none. It must be below one.
 }
 \description{
 Largest variance of the latent responses implied by the factors

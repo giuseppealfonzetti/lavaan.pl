@@ -1,6 +1,7 @@
-#' Show method for the output of fit_lavaanpl()
-#' @param x Object of class lavaanpl_internal
-#' @param ... Additional arguments
+#' Print method for `lavaanpl_internal` objects
+#'
+#' @param x Object of class `lavaanpl_internal` from [fit_lavaanpl()].
+#' @param ... Ignored.
 #' @keywords internal
 #' @export
 print.lavaanpl_internal <- function(x, ...){
@@ -101,15 +102,15 @@ print.lavaanpl_model <- function(x, ...) {
   invisible(x)
 }
 
-#' Compute variance of the estimates
-#' @param OBJ Object of class lavaanpl_internal
-#' @param NUMDERIV TRUE if the hessian must be computed using \link[numDeriv]{jacobian}
-#' @return A list with the Jacobian `trJacob` of the transformation to
-#'   interpretable parameters, `H`, `J`, the diagonal of the sandwich variance
-#'   `asymptotic_variance` on the transformed scale, `optimisation_noise` (SA
-#'   fits only), the optimisation noise matrix `noise` on the optimisation scale
-#'   (SA fits only), the Newton step to the optimum `step`, its size in standard errors of
-#'   each parameter `distance`, the estimates `parameter_vector` and the timing `RTime`.
+#' Variance of the estimates
+#'
+#' @param OBJ Object of class `lavaanpl_internal` from [fit_lavaanpl()].
+#' @param NUMDERIV If `TRUE`, the Hessian by [numDeriv::jacobian()] of the gradient.
+#' @return A list with the Jacobian `trJacob` of [transform_parameters()], `H`, `J`, the diagonal of the sandwich
+#'   variance `asymptotic_variance` on the transformed scale, the Newton step to the optimum `step` and its size in
+#'   standard errors `distance`, the estimates `parameter_vector` and the timing `RTime`; for SA fits, also the
+#'   optimisation noise `optimisation_noise` on the transformed scale and `noise` on the optimisation scale.
+#' @seealso [check_sa()], [compute_plrt()]
 #' @keywords internal
 compute_var <- function(OBJ, NUMDERIV = FALSE) {
   if (!NUMDERIV && identical(OBJ$vars$parameter_vector, OBJ$parameter_vector) && !is.null(OBJ$parameter_vector)) return(OBJ$vars)
@@ -127,11 +128,11 @@ compute_var <- function(OBJ, NUMDERIV = FALSE) {
   trJacob <- trJacob %*% lc$K
   RcppParallel::setThreadOptions(numThreads = OBJ$cores)
   on.exit(RcppParallel::setThreadOptions(numThreads = 1))
-  HJ <- cpp_HJ(OBJ$parameter_vector, OBJ$engine$model, OBJ$engine$data, OBJ$method == "SA")
+  HJ <- cpp_sandwich(OBJ$parameter_vector, OBJ$cpp_inputs$model, OBJ$cpp_inputs$data, OBJ$method == "SA")
   H <- crossprod(lc$K, HJ$H %*% lc$K)
   J <- crossprod(lc$K, HJ$J %*% lc$K)
   if (NUMDERIV) {
-    H <- numDeriv::jacobian(function(x) -as.vector(crossprod(lc$K, cpp_pl(full(x), OBJ$engine$model, OBJ$engine$data, 1L)$gradient)) / OBJ$data$n, xf)
+    H <- numDeriv::jacobian(function(x) -as.vector(crossprod(lc$K, cpp_pl(full(x), OBJ$cpp_inputs$model, OBJ$cpp_inputs$data, 1L)$gradient)) / OBJ$data$n, xf)
   }
   R <- tryCatch(chol(H), error = function(e) NULL)
   if (is.null(R)) {

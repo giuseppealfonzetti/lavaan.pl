@@ -16,13 +16,12 @@ standardise_covariates(DATA, MODEL, LINCON, NTHR)
 \item{NTHR}{Number of thresholds in each group.}
 }
 \value{
-A list with the data \code{data} and model \code{model} for the optimisers, and the maps \code{to} and \code{from} the
-parameter vector of the optimisers. Without standardisation, \code{DATA}, no \code{model} and identities.
+A list with the data \code{data} and model \code{model} for the optimisers, and the maps \code{to} and \code{from} their
+parameter vector. Without covariates, or with constraints on the thresholds, intercepts or effects of covariates,
+\code{DATA}, no \code{model} and identities.
 }
 \description{
-Covariates far from zero make the thresholds and their effects almost collinear, and the optimisers unstable. The
-optimisers then work on standardised covariates, with the matching thresholds and intercepts, which is the same
-model. This needs thresholds, intercepts of numeric items and effects of covariates free of constraints.
+Standardised covariates for the optimisers
 }
 \seealso{
 \code{\link[=fit_lavaanpl]{fit_lavaanpl()}}

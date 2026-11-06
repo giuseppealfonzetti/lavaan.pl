@@ -22,7 +22,7 @@ create_lav_from_lavaanpl <- function(fit, vars = NULL, template) {
   # Change Model and implied slots ---------------------------------------------
   out <- new("lavaan.pl", template)
   x <- par_lav(fit$parameter_vector)
-  logl <- cpp_pl(fit$parameter_vector, fit$engine$model, fit$engine$data)$pl
+  logl <- cpp_pl(fit$parameter_vector, fit$cpp_inputs$model, fit$cpp_inputs$data)$pl
   out@Model <- lavaan::lav_model_set_parameters(template@Model, x)
   out@implied <- lavaan::lav_model_implied(out@Model)
   out@ParTable$est <- lavaan::lav_model_get_parameters(out@Model, type = "user", extra = TRUE)

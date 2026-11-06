@@ -11,15 +11,14 @@ signed_loadings(Y, MODEL, SPREAD)
 
 \item{MODEL}{Model object from \code{\link[=lavaanpl_model]{lavaanpl_model()}}.}
 
-\item{SPREAD}{Standard deviation of numeric items, one for the others.}
+\item{SPREAD}{Standard deviation of the numeric items, one for the others.}
 }
 \value{
-A list with the matrix \code{loadings} and the latent standard deviations \code{sd}.
+A list with the starting loadings \code{loadings}, from the first eigenvector of the item correlations of each
+factor, and the latent standard deviations \code{sd}.
 }
 \description{
-The first eigenvector of the correlations among the items of each factor, so that reversed items start with a
-negative loading. Factors scaled by a fixed loading take the variance that matches it, and factors without items keep
-a small variance.
+Signed starting loadings
 }
 \seealso{
 \code{\link[=start_values]{start_values()}}

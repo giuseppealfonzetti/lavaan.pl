@@ -1,28 +1,18 @@
-#'Fit factor models for ordinal and numeric data with pairwise likelihood methods
+#' Fit factor models for ordinal and numeric data by pairwise likelihood
 #'
-#'@description
+#' @param DATA Data object from [lavaanpl_data()].
+#' @param MODEL Model object from [lavaanpl_model()], or from [lavaanpl_groups()] for several groups.
+#' @param CONTROL Control object, which selects the method: [set_saqn_control()] for `SA-QN`, [set_sa_control()] for
+#'   `SA`, [set_qn_control()] for `QN`.
+#' @param START Starting parameter vector, in the order of [parameter_names()]. If `NULL`, default values.
+#' @param NCORES Number of threads.
+#' @param VERBOSE If `TRUE`, print progress.
 #'
-#'Fit latent variable models with one of three methods: the pairwise likelihood estimate by
-#'quasi-Newton BFGS started from the burn-in of stochastic approximation and its curvature
-#'(`SA-QN`, the default), pairwise stochastic approximation with Polyak-Ruppert averaging, whose
-#'standard errors account for the optimisation noise (`SA`), or quasi-Newton BFGS from the
-#'starting values alone (`QN`).
-#'
-#'@param DATA Data object from [lavaanpl_data()].
-#'@param MODEL Model object from [lavaanpl_model()], or from [lavaanpl_groups()] for several groups.
-#'@param CONTROL Control object, which selects the method: [set_saqn_control()] for
-#'  `SA-QN`, [set_sa_control()] for `SA`, [set_qn_control()] for `QN`.
-#'@param START Starting parameter vector, in the order of [parameter_names()]. If `NULL`, default values.
-#'@param NCORES Integer value setting the number of threads to carry out the
-#'  estimation.
-#'@param VERBOSE `TRUE` for verbose output
-#'
-#'@return Object of class `lavaanpl_internal`: a list with the inputs `data`, `model` and
-#'  `control`, the starting values `init`, the estimates `parameter_vector` (use
-#'  [vector_to_matrices()]), the dimensions `dims`, the `method`, the optimiser output `stoFit` (`SA`,
-#'  the burn-in of `SA-QN`, with the pairwise log-likelihood reached from each start in
-#'  `start_logl`) or `numFit` (`QN`, `SA-QN`), the variance `vars` at the estimate (`SA`), and
-#'  the timing `RTime`.
+#' @return An object of class `lavaanpl_internal`: a list with the inputs `data`, `model` and `control`, the
+#'   dimensions `dims`, the `method`, the constraints `lincon`, the parameter blocks `blocks`, the [cpp_inputs()]
+#'   `cpp_inputs`, the starting values `init`, the estimates `parameter_vector`, the optimiser output `stoFit` (`SA`,
+#'   and the burn-in of `SA-QN`) and `numFit` (`QN`, `SA-QN`), the variance `vars` (`SA`), and the timing `RTime`.
+#' @seealso [vector_to_matrices()], [compute_var()]
 #' @keywords internal
 fit_lavaanpl <- function(
   DATA,
@@ -69,7 +59,7 @@ fit_lavaanpl <- function(
   dims$npar <- length(lc$free_idx)
   RcppParallel::setThreadOptions(numThreads = NCORES)
   on.exit(RcppParallel::setThreadOptions(numThreads = 1))
-  eng <- engine(DATA, MODEL)
+  inputs <- cpp_inputs(DATA, MODEL)
   fit <- structure(
     list(
       data = DATA,
@@ -79,7 +69,7 @@ fit_lavaanpl <- function(
       method = METHOD,
       lincon = lc,
       blocks = block,
-      engine = eng,
+      cpp_inputs = inputs,
       version = as.character(utils::packageVersion("lavaan.pl")),
       cores = NCORES
     ),
@@ -100,8 +90,8 @@ fit_lavaanpl <- function(
     }
   }
   std <- standardise_covariates(DATA, MODEL, lc, nthr)
-  eng_std <- if (is.null(std$model)) eng else engine(std$data, std$model)
-  nll <- function(vector) -cpp_pl(vector, eng$model, eng$data)$pl / DATA$n
+  inputs_std <- if (is.null(std$model)) inputs else cpp_inputs(std$data, std$model)
+  nll <- function(vector) -cpp_pl(vector, inputs$model, inputs$data)$pl / DATA$n
 
   # With the direct parametrisation, points with a non positive definite latent
   # covariance matrix are outside the parameter space
@@ -184,7 +174,7 @@ fit_lavaanpl <- function(
     fn <- function(x) {
       vector <- full(x)
       val <- if (pd(vector)) {
-        -cpp_pl(vector, eng_std$model, eng_std$data)$pl / DATA$n
+        -cpp_pl(vector, inputs_std$model, inputs_std$data)$pl / DATA$n
       } else {
         Inf
       }
@@ -205,7 +195,7 @@ fit_lavaanpl <- function(
       g <- if (pd(vector)) {
         -as.vector(crossprod(
           lc$K,
-          cpp_pl(vector, eng_std$model, eng_std$data, 1L)$gradient
+          cpp_pl(vector, inputs_std$model, inputs_std$data, 1L)$gradient
         )) /
           DATA$n
       } else {
@@ -224,7 +214,7 @@ fit_lavaanpl <- function(
         }
         burn_control <- CONTROL
         burn_control$seed <- CONTROL$seed + s - 1L
-        burn <- run_sa(x0, std$data, eng_std, lc, burn_control, VERBOSE)
+        burn <- run_sa(x0, std$data, inputs_std, lc, burn_control, VERBOSE)
         start <- burn$parameter_vector
         if (length(burn$invh) > 0) {
           start_control$invhessian.lt <- burn$invh[lower.tri(
@@ -296,7 +286,7 @@ fit_lavaanpl <- function(
     if (VERBOSE) {
       message("- Optimising via pairwise stochastic approximation...")
     }
-    opt <- run_sa(std$to(fit$init), std$data, eng_std, lc, CONTROL, VERBOSE)
+    opt <- run_sa(std$to(fit$init), std$data, inputs_std, lc, CONTROL, VERBOSE)
     opt[c("parameter_vector", "last_iterate", "burn_in_iterate")] <- lapply(
       opt[c("parameter_vector", "last_iterate", "burn_in_iterate")],
       std$from
@@ -325,14 +315,8 @@ fit_lavaanpl <- function(
 
 #' End-of-run check of the stochastic approximation
 #'
-#' Stores the variance at the estimate, which the check needs and [compute_var()] reuses. The fit has failed if the
-#' observed information is not positive definite, or if the estimate is further from the optimum of the pairwise
-#' likelihood than one standard error and four times the predicted noise on the worst parameter, because the noise cannot
-#' explain it. A larger distance that the noise explains only warns: the standard errors account for it. Above 2000 free
-#' parameters there is no check, and the fit has failed if the Adam phase did not reach a plateau.
-#'
-#' @param FIT Object of class lavaanpl_internal.
-#' @return `FIT`, with `vars` and, in `stoFit`, the check `check` and the updated `converged`.
+#' @param FIT Object of class `lavaanpl_internal`.
+#' @return `FIT`, with the variance `vars` and, in `stoFit`, the `check` and the updated `converged`.
 #' @seealso [fit_lavaanpl()], [compute_var()]
 #' @keywords internal
 check_sa <- function(FIT) {
@@ -385,16 +369,13 @@ check_sa <- function(FIT) {
 
 #' Standardised covariates for the optimisers
 #'
-#' Covariates far from zero make the thresholds and their effects almost collinear, and the optimisers unstable. The
-#' optimisers then work on standardised covariates, with the matching thresholds and intercepts, which is the same
-#' model. This needs thresholds, intercepts of numeric items and effects of covariates free of constraints.
-#'
 #' @param DATA Data object from [lavaanpl_data()].
 #' @param MODEL Model object from [lavaanpl_groups()].
 #' @param LINCON Output of [lincon()].
 #' @param NTHR Number of thresholds in each group.
-#' @return A list with the data `data` and model `model` for the optimisers, and the maps `to` and `from` the
-#'   parameter vector of the optimisers. Without standardisation, `DATA`, no `model` and identities.
+#' @return A list with the data `data` and model `model` for the optimisers, and the maps `to` and `from` their
+#'   parameter vector. Without covariates, or with constraints on the thresholds, intercepts or effects of covariates,
+#'   `DATA`, no `model` and identities.
 #' @seealso [fit_lavaanpl()]
 #' @keywords internal
 standardise_covariates <- function(DATA, MODEL, LINCON, NTHR) {
@@ -486,12 +467,11 @@ standardise_covariates <- function(DATA, MODEL, LINCON, NTHR) {
 #' @param MODEL Model object from [lavaanpl_groups()].
 #' @param TABLES Use the frequency tables (`TRUE`) or the individual observations (`FALSE`). If `NA`, as set by
 #'   [lavaanpl_data()].
-#' @return A list with `model` and `data`, each a list with one element per group: the model specification, and
-#'   the frequencies, distinct covariate rows, distinct response patterns with their strata, unit weights and cluster
-#'   weights of the group.
+#' @return A list with `model` and `data`, each with one element per group: the model matrices, and the frequency
+#'   tables, covariate strata, distinct response patterns and weights.
 #' @seealso [fit_lavaanpl()], [run_sa()]
 #' @keywords internal
-engine <- function(DATA, MODEL, TABLES = NA) {
+cpp_inputs <- function(DATA, MODEL, TABLES = NA) {
   models <- MODEL$MODELS
   gw <- if (length(DATA$weights)) DATA$weights else rep(1, DATA$n)
   jw <- if (length(DATA$jweights)) DATA$jweights else rep(1, DATA$n)
@@ -504,19 +484,19 @@ engine <- function(DATA, MODEL, TABLES = NA) {
   list(
     model = lapply(models, function(x) {
       list(
-        CONSTRMAT = x$LAMBDA,
-        CONSTRLOGSD = log(sqrt(diag(x$PSI))),
-        CORRFLAG = match(x$LATCOV, c("none", "lkj", "direct")) - 1L,
-        REGMAT = if (all(x$BETA %in% 0)) matrix(0, 0, 0) else x$BETA,
-        RESCOV = if (all(x$THETA[upper.tri(x$THETA)] %in% 0)) {
+        LAMBDA = x$LAMBDA,
+        LOGSD = log(sqrt(diag(x$PSI))),
+        LATCOV = x$LATCOV,
+        BETA = if (all(x$BETA %in% 0)) matrix(0, 0, 0) else x$BETA,
+        THETA = if (all(x$THETA[upper.tri(x$THETA)] %in% 0)) {
           matrix(0, 0, 0)
         } else {
           x$THETA
         },
-        CONSTRINT = x$NU,
-        CONSTRMEAN = x$ALPHA,
-        CONSTRLOGSCALE = log(item_scales(x)),
-        THETAPAR = x$PARAMETERIZATION == "theta",
+        NU = x$NU,
+        ALPHA = x$ALPHA,
+        LOGSCALE = log(item_scales(x)),
+        PARAMETERIZATION = x$PARAMETERIZATION,
         GAMMA = if (ncol(x$GAMMA) == nx) x$GAMMA else matrix(0, x$q, nx),
         KAPPA = if (ncol(x$KAPPA) == nx) x$KAPPA else matrix(0, x$p, nx)
       )
@@ -533,7 +513,7 @@ engine <- function(DATA, MODEL, TABLES = NA) {
       }
       first <- !duplicated(key)
       id <- match(key, key[first])
-      WM <- matrix(0, 0, 0)
+      cluster_weights <- matrix(0, 0, 0)
       if (length(DATA$cluster)) {
         clusters <- factor(DATA$cluster[rows])
         C <- nlevels(clusters)
@@ -546,7 +526,7 @@ engine <- function(DATA, MODEL, TABLES = NA) {
           sum,
           default = 0
         )
-        WM <- (A - rowMeans(A)) * sqrt(C / (C - 1))
+        cluster_weights <- (A - rowMeans(A)) * sqrt(C / (C - 1))
       }
       tables <- if (is.na(TABLES)) DATA$tables[g + 1] else TABLES
       freq <- if (tables == DATA$tables[g + 1]) {
@@ -567,17 +547,17 @@ engine <- function(DATA, MODEL, TABLES = NA) {
       }
       list(
         N = length(rows),
-        C_VEC = DATA$cat,
+        CAT = DATA$cat,
         TABLES = tables,
         FREQ = freq,
         UFREQ = DATA$ufreq[ou[g + 1] + seq_len(ns[g + 1] * uc)],
-        X = t(DATA$strata[[g + 1]]),
-        S = DATA$stratum[rows[first]],
-        W = as.numeric(rowsum(gw[rows], id)),
+        STRATA = t(DATA$strata[[g + 1]]),
+        STRATUM = DATA$stratum[rows[first]],
+        WEIGHTS = as.numeric(rowsum(gw[rows], id)),
         Y = DATA$Y[rows[first], , drop = FALSE],
-        UW = DATA$uweights[rows[first]],
-        WV = sqrt(as.numeric(rowsum(jw[rows]^2, id))),
-        WM = WM
+        UWEIGHTS = DATA$uweights[rows[first]],
+        JWEIGHTS = sqrt(as.numeric(rowsum(jw[rows]^2, id))),
+        CLUSTER_WEIGHTS = cluster_weights
       )
     })
   )
@@ -589,8 +569,8 @@ engine <- function(DATA, MODEL, TABLES = NA) {
 #' @param DATA Data object from [lavaanpl_data()].
 #' @param MODEL Model object from [lavaanpl_groups()].
 #' @param VERBOSE If `TRUE`, report user-supplied starting values.
-#' @return The starting parameter vector: `START` when supplied, otherwise thresholds from the margins of each
-#'   group and fixed values for the other parameters.
+#' @return `START` when supplied, otherwise thresholds from the margins of each group, loadings from
+#'   [signed_loadings()], means and standard deviations of the numeric items, and fixed values for the rest.
 #' @seealso [fit_lavaanpl()], [spec_from_lavaan()]
 #' @keywords internal
 start_values <- function(START, DATA, MODEL, VERBOSE) {
@@ -663,14 +643,11 @@ start_values <- function(START, DATA, MODEL, VERBOSE) {
 
 #' Signed starting loadings
 #'
-#' The first eigenvector of the correlations among the items of each factor, so that reversed items start with a
-#' negative loading. Factors scaled by a fixed loading take the variance that matches it, and factors without items keep
-#' a small variance.
-#'
 #' @param Y Data matrix of the group.
 #' @param MODEL Model object from [lavaanpl_model()].
-#' @param SPREAD Standard deviation of numeric items, one for the others.
-#' @return A list with the matrix `loadings` and the latent standard deviations `sd`.
+#' @param SPREAD Standard deviation of the numeric items, one for the others.
+#' @return A list with the starting loadings `loadings`, from the first eigenvector of the item correlations of each
+#'   factor, and the latent standard deviations `sd`.
 #' @seealso [start_values()]
 #' @keywords internal
 signed_loadings <- function(Y, MODEL, SPREAD) {
@@ -715,8 +692,8 @@ signed_loadings <- function(Y, MODEL, SPREAD) {
 #'
 #' @param MODEL Model object from [lavaanpl_groups()].
 #' @param PARAMETER_VECTOR Parameter vector.
-#' @return The largest implied variance among the ordinal items under `PARAMETERIZATION = "delta"`, which must be below
-#'   one, and zero if there are none.
+#' @return The largest implied variance of the ordinal items under `PARAMETERIZATION = "delta"`, zero if there are
+#'   none. It must be below one.
 #' @seealso [fit_lavaanpl()], [start_values()]
 #' @keywords internal
 implied_variance <- function(MODEL, PARAMETER_VECTOR) {
@@ -740,16 +717,15 @@ implied_variance <- function(MODEL, PARAMETER_VECTOR) {
 #'
 #' @param START Starting parameter vector.
 #' @param DATA Data object from [lavaanpl_data()].
-#' @param ENGINE Output of [engine()].
+#' @param CPP_INPUTS Output of [cpp_inputs()].
 #' @param LINCON Output of [lincon()].
 #' @param CONTROL Control object from [set_sa_control()] or [set_saqn_control()].
 #' @param VERBOSE If `TRUE`, print progress.
-#' @return A list with the estimate `parameter_vector`, the last and end-of-burn-in iterates `last_iterate` and `burn_in_iterate`,
-#'   the epoch length and phase counts, the rejected and skipped steps, the trajectory `path` and the timings
-#'   `time`.
+#' @return A list with the estimate `parameter_vector`, the iterates `last_iterate` and `burn_in_iterate`, the epoch
+#'   length and phase counts, the rejected and skipped steps, the trajectory `path` and the timings `time`.
 #' @seealso [fit_lavaanpl()], [set_sa_control()]
 #' @keywords internal
-run_sa <- function(START, DATA, ENGINE, LINCON, CONTROL, VERBOSE) {
+run_sa <- function(START, DATA, CPP_INPUTS, LINCON, CONTROL, VERBOSE) {
   npar <- length(LINCON$free_idx)
   free <- npar < length(START)
   adam_epochs <- CONTROL$adam_epochs
@@ -761,18 +737,18 @@ run_sa <- function(START, DATA, ENGINE, LINCON, CONTROL, VERBOSE) {
       )
     )
   }
-  gain <- switch(
+  hessian_gain <- switch(
     CONTROL$gain,
-    auto = as.integer(npar <= 2000),
-    hessian = 1L,
-    diagonal = 0L
+    auto = npar <= 2000,
+    hessian = TRUE,
+    diagonal = FALSE
   )
   out <- cpp_sa(
     START = START[LINCON$free_idx],
     K = if (free) LINCON$K else matrix(0, 0, 0),
     C = LINCON$c,
-    MODEL = ENGINE$model,
-    DATA = ENGINE$data,
+    MODEL = CPP_INPUTS$model,
+    DATA = CPP_INPUTS$data,
     PAIRS_PER_ITERATION = CONTROL$pairs_per_iteration,
     ALPHA = CONTROL$alpha,
     ADAM_EPOCHS = as.integer(adam_epochs),
@@ -782,7 +758,7 @@ run_sa <- function(START, DATA, ENGINE, LINCON, CONTROL, VERBOSE) {
     TOL = CONTROL$tol,
     DECAY = CONTROL$decay,
     AVG_FROM = CONTROL$avg_from,
-    GAIN = gain,
+    HESSIAN_GAIN = hessian_gain,
     SEED = CONTROL$seed,
     VERBOSE = VERBOSE
   )

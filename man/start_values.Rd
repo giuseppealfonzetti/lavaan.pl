@@ -16,8 +16,8 @@ start_values(START, DATA, MODEL, VERBOSE)
 \item{VERBOSE}{If \code{TRUE}, report user-supplied starting values.}
 }
 \value{
-The starting parameter vector: \code{START} when supplied, otherwise thresholds from the margins of each
-group and fixed values for the other parameters.
+\code{START} when supplied, otherwise thresholds from the margins of each group, loadings from
+\code{\link[=signed_loadings]{signed_loadings()}}, means and standard deviations of the numeric items, and fixed values for the rest.
 }
 \description{
 Starting values

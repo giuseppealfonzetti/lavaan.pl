@@ -272,7 +272,7 @@ local({
   syntax <- "A =~ A1 + A2 + A3\nC =~ C1 + C2 + C3\nC ~ x1"
   fit <- pmlsem(syntax, frame, std.lv = TRUE, sampling.weights = "w")
   engine_fit <- fit@external$lavaanpl_internal
-  logl <- lavaan.pl:::cpp_pl(engine_fit$parameter_vector, engine_fit$engine$model, engine_fit$engine$data)$pl
+  logl <- lavaan.pl:::cpp_pl(engine_fit$parameter_vector, engine_fit$cpp_inputs$model, engine_fit$cpp_inputs$data)$pl
   expect_identical(fit@optim$logl, logl)
   expect_equal(fit@optim$fx, -logl / nobs(fit))
   expect_equal(unname(vcov(fit)[1, 1]), parameterEstimates(fit)$se[1]^2)

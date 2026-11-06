@@ -98,7 +98,7 @@ local({
   )
   free_to_full <- fit$lincon$K
   negative_gradient <- function(theta) {
-    -lavaan.pl:::cpp_pl(theta, fit$engine$model, fit$engine$data, 1L)$gradient /
+    -lavaan.pl:::cpp_pl(theta, fit$cpp_inputs$model, fit$cpp_inputs$data, 1L)$gradient /
       data$n
   }
   hessian_numeric <- numDeriv::jacobian(
@@ -239,7 +239,7 @@ local({
     CONTROL = set_qn_control()
   )
   pl <- function(fit) {
-    lavaan.pl:::cpp_pl(fit$parameter_vector, fit$engine$model, fit$engine$data)$pl
+    lavaan.pl:::cpp_pl(fit$parameter_vector, fit$cpp_inputs$model, fit$cpp_inputs$data)$pl
   }
   expect_identical(data_two_groups$group, rep(c(0, 1), each = 150))
   expect_equal(

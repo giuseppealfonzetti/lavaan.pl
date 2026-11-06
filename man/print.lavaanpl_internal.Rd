@@ -2,16 +2,16 @@
 % Please edit documentation in R/allMethods.R
 \name{print.lavaanpl_internal}
 \alias{print.lavaanpl_internal}
-\title{Show method for the output of fit_lavaanpl()}
+\title{Print method for \code{lavaanpl_internal} objects}
 \usage{
 \method{print}{lavaanpl_internal}(x, ...)
 }
 \arguments{
-\item{x}{Object of class lavaanpl_internal}
+\item{x}{Object of class \code{lavaanpl_internal} from \code{\link[=fit_lavaanpl]{fit_lavaanpl()}}.}
 
-\item{...}{Additional arguments}
+\item{...}{Ignored.}
 }
 \description{
-Show method for the output of fit_lavaanpl()
+Print method for \code{lavaanpl_internal} objects
 }
 \keyword{internal}

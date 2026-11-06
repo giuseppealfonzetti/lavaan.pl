@@ -4,14 +4,14 @@
 \alias{run_sa}
 \title{Stochastic approximation}
 \usage{
-run_sa(START, DATA, ENGINE, LINCON, CONTROL, VERBOSE)
+run_sa(START, DATA, CPP_INPUTS, LINCON, CONTROL, VERBOSE)
 }
 \arguments{
 \item{START}{Starting parameter vector.}
 
 \item{DATA}{Data object from \code{\link[=lavaanpl_data]{lavaanpl_data()}}.}
 
-\item{ENGINE}{Output of \code{\link[=engine]{engine()}}.}
+\item{CPP_INPUTS}{Output of \code{\link[=cpp_inputs]{cpp_inputs()}}.}
 
 \item{LINCON}{Output of \code{\link[=lincon]{lincon()}}.}
 
@@ -20,9 +20,8 @@ run_sa(START, DATA, ENGINE, LINCON, CONTROL, VERBOSE)
 \item{VERBOSE}{If \code{TRUE}, print progress.}
 }
 \value{
-A list with the estimate \code{parameter_vector}, the last and end-of-burn-in iterates \code{last_iterate} and \code{burn_in_iterate},
-the epoch length and phase counts, the rejected and skipped steps, the trajectory \code{path} and the timings
-\code{time}.
+A list with the estimate \code{parameter_vector}, the iterates \code{last_iterate} and \code{burn_in_iterate}, the epoch
+length and phase counts, the rejected and skipped steps, the trajectory \code{path} and the timings \code{time}.
 }
 \description{
 Stochastic approximation

@@ -34,18 +34,18 @@ tests <- Map(lavaan.pl:::compute_plrt, fits, vars)
 
 #### Helpers ####
 saturated <- function(fit, tau, rho, order, scores) {
-  engine_data <- list(
-    C_VEC = fit$data$cat,
+  cpp_data <- list(
+    CAT = fit$data$cat,
     TABLES = TRUE,
     FREQ = fit$data$freq,
     UFREQ = fit$data$ufreq,
-    X = matrix(0, 0, 1),
-    S = numeric(fit$data$n),
-    W = rep(1, fit$data$n),
+    STRATA = matrix(0, 0, 1),
+    STRATUM = numeric(fit$data$n),
+    WEIGHTS = rep(1, fit$data$n),
     Y = fit$data$Y,
-    UW = fit$data$uweights
+    UWEIGHTS = fit$data$uweights
   )
-  lavaan.pl:::cpp_saturated(tau, rho, engine_data, order, scores)
+  lavaan.pl:::cpp_saturated(tau, rho, cpp_data, order, scores)
 }
 
 implied_correlations <- function(fit, theta) {
@@ -176,10 +176,10 @@ local({
     CONTROL = set_qn_control()
   )
   nested <- lavaan.pl:::compute_plrt(fit_orthogonal, H1 = fit_correlated)$model
-  hj <- lavaan.pl:::cpp_HJ(
+  hj <- lavaan.pl:::cpp_sandwich(
     c(fit_orthogonal$parameter_vector, 0),
-    fit_correlated$engine$model,
-    fit_correlated$engine$data
+    fit_correlated$cpp_inputs$model,
+    fit_correlated$cpp_inputs$data
   )
   inverse_hessian <- solve(hj$H)
   correlation <- fit_correlated$dims$npar
@@ -230,15 +230,15 @@ local({
     fit$parameter_vector[1:nthr],
     correlations_free(theta_free),
     list(
-      C_VEC = fit$data$cat,
+      CAT = fit$data$cat,
       TABLES = TRUE,
       FREQ = fit$data$freq,
       UFREQ = numeric(0),
-      X = matrix(0, 0, 1),
-      S = numeric(fit$data$n),
-      W = rep(1, fit$data$n),
+      STRATA = matrix(0, 0, 1),
+      STRATUM = numeric(fit$data$n),
+      WEIGHTS = rep(1, fit$data$n),
       Y = fit$data$Y,
-      UW = numeric(0)
+      UWEIGHTS = numeric(0)
     ),
     2,
     TRUE
@@ -339,7 +339,7 @@ local({
   )
   nested <- lavaan.pl:::compute_plrt(fit_equal, H1 = fit_free)$model
   pl <- function(fit) {
-    lavaan.pl:::cpp_pl(fit$parameter_vector, fit$engine$model, fit$engine$data)$pl
+    lavaan.pl:::cpp_pl(fit$parameter_vector, fit$cpp_inputs$model, fit$cpp_inputs$data)$pl
   }
   expect_equal(nested$df, 1)
   expect_equal(nested$stat, 2 * (pl(fit_free) - pl(fit_equal)))

@@ -96,8 +96,8 @@ local({
     tolerance = 1e-4
   )
   expect_equal(
-    lavaan.pl:::cpp_pl(fit$parameter_vector, fit$engine$model, fit$engine$data)$pl,
-    lavaan.pl:::cpp_pl(fit_groups$parameter_vector, fit_groups$engine$model, fit_groups$engine$data)$pl,
+    lavaan.pl:::cpp_pl(fit$parameter_vector, fit$cpp_inputs$model, fit$cpp_inputs$data)$pl,
+    lavaan.pl:::cpp_pl(fit_groups$parameter_vector, fit_groups$cpp_inputs$model, fit_groups$cpp_inputs$data)$pl,
     tolerance = 1e-8
   )
 })
@@ -241,12 +241,12 @@ local({
       CONTROL = set_qn_control(maxeval = 1)
     ))
     theta <- start$init + 0.05
-    with_tables <- lavaan.pl:::engine(case$data, start$model, TRUE)
-    with_units <- lavaan.pl:::engine(case$data, start$model, FALSE)
+    with_tables <- lavaan.pl:::cpp_inputs(case$data, start$model, TRUE)
+    with_units <- lavaan.pl:::cpp_inputs(case$data, start$model, FALSE)
     pl_tables <- lavaan.pl:::cpp_pl(theta, with_tables$model, with_tables$data, 1L)
     pl_units <- lavaan.pl:::cpp_pl(theta, with_units$model, with_units$data, 1L)
-    hj_tables <- lavaan.pl:::cpp_HJ(theta, with_tables$model, with_tables$data, TRUE)
-    hj_units <- lavaan.pl:::cpp_HJ(theta, with_units$model, with_units$data, TRUE)
+    hj_tables <- lavaan.pl:::cpp_sandwich(theta, with_tables$model, with_tables$data, TRUE)
+    hj_units <- lavaan.pl:::cpp_sandwich(theta, with_units$model, with_units$data, TRUE)
     expect_equal(pl_units$pl, pl_tables$pl, tolerance = 1e-10)
     expect_equal(pl_units$gradient, pl_tables$gradient, tolerance = 1e-8)
     expect_equal(hj_units$H, hj_tables$H, tolerance = 1e-8)
@@ -335,8 +335,8 @@ local({
     CONTROL = set_qn_control(maxeval = 1)
   ))$init
   pl <- function(x) {
-    engine <- lavaan.pl:::engine(x, lavaan.pl:::lavaanpl_groups(list(model_gamma)))
-    lavaan.pl:::cpp_pl(theta, engine$model, engine$data)$pl
+    inputs <- lavaan.pl:::cpp_inputs(x, lavaan.pl:::lavaanpl_groups(list(model_gamma)))
+    lavaan.pl:::cpp_pl(theta, inputs$model, inputs$data)$pl
   }
   par <- lavaan.pl:::vector_to_matrices(model_gamma, theta)
   slopes <- par$lambda %*% par$gamma
@@ -352,7 +352,7 @@ local({
   expect_equal(pl(data_available) - pl(data_pairwise), univariate, tolerance = 1e-8)
   fit_available <- lavaan.pl:::fit_lavaanpl(data_available, model_gamma, CONTROL = set_qn_control())
   expect_true(max(abs(
-    lavaan.pl:::cpp_pl(fit_available$parameter_vector, fit_available$engine$model, fit_available$engine$data, 1L)$gradient
+    lavaan.pl:::cpp_pl(fit_available$parameter_vector, fit_available$cpp_inputs$model, fit_available$cpp_inputs$data, 1L)$gradient
   )) / n < 1e-4)
 })
 
@@ -362,7 +362,7 @@ local({
   test <- lavaan.pl:::compute_plrt(fit, vars)
   expect_equal(test$model$df, sum(data$cat - 1) + p * 2 + p * (p - 1) / 2 - fit$dims$npar)
   expect_equal(test$baseline$df, p * (p - 1) / 2)
-  expect_true(test$saturated$logl >= lavaan.pl:::cpp_pl(fit$parameter_vector, fit$engine$model, fit$engine$data)$pl)
+  expect_true(test$saturated$logl >= lavaan.pl:::cpp_pl(fit$parameter_vector, fit$cpp_inputs$model, fit$cpp_inputs$data)$pl)
   gamma_fixed <- matrix(c(NA, 0), 1, 2)
   fit_nested <- lavaan.pl:::fit_lavaanpl(
     data,
@@ -370,7 +370,7 @@ local({
     CONTROL = set_qn_control()
   )
   difference <- lavaan.pl:::compute_plrt(fit_nested, H1 = fit)$model
-  pl <- function(x) lavaan.pl:::cpp_pl(x$parameter_vector, x$engine$model, x$engine$data)$pl
+  pl <- function(x) lavaan.pl:::cpp_pl(x$parameter_vector, x$cpp_inputs$model, x$cpp_inputs$data)$pl
   expect_equal(difference$stat, 2 * (pl(fit) - pl(fit_nested)))
   expect_equal(difference$df, 1)
   expect_true(difference$pvalue.scaled < .05)
@@ -427,8 +427,8 @@ local({
     fit_available@optim$logl,
     lavaan.pl:::cpp_pl(
       fit_available@external$lavaanpl_internal$parameter_vector,
-      fit_available@external$lavaanpl_internal$engine$model,
-      fit_available@external$lavaanpl_internal$engine$data
+      fit_available@external$lavaanpl_internal$cpp_inputs$model,
+      fit_available@external$lavaanpl_internal$cpp_inputs$data
     )$pl
   )
 })
@@ -453,7 +453,7 @@ local({
     par_centred$tau,
     tolerance = 1e-4
   )
-  pl <- function(x) lavaan.pl:::cpp_pl(x$parameter_vector, x$engine$model, x$engine$data, 1L)
+  pl <- function(x) lavaan.pl:::cpp_pl(x$parameter_vector, x$cpp_inputs$model, x$cpp_inputs$data, 1L)
   expect_equal(pl(fit_raw)$pl, pl(fit_centred)$pl, tolerance = 1e-8)
   expect_true(max(abs(pl(fit_raw)$gradient)) / n < 1e-3)
   fit_started <- lavaan.pl:::fit_lavaanpl(

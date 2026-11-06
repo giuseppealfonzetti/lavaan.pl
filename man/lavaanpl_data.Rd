@@ -24,43 +24,36 @@ lavaanpl_data(
 
 \item{...}{Ignored.}
 
-\item{DATA}{Data matrix of dimension \eqn{n*p}. Categories of ordinal items must be
-integers coded starting from zero.}
+\item{DATA}{\eqn{n*p} data matrix. Ordinal items are coded as integers from zero.}
 
-\item{MISSING}{Treatment of missing values (\code{NA}): \code{"listwise"} drops incomplete observations,
-\code{"pairwise"} uses the complete pairs and \code{"available.cases"} the available cases of
-Katsikatsou et al. (2022).}
+\item{MISSING}{Treatment of missing values: \code{"listwise"} drops incomplete observations, \code{"pairwise"} uses the
+complete pairs and \code{"available.cases"} adds the univariate terms of the available cases.}
 
-\item{WEIGHTS}{Sampling weights, one per observation, normalised to sum to the number of
-observations. If \code{NULL}, unit weights.}
+\item{WEIGHTS}{Sampling weights, one per observation, normalised to sum to the number of observations. If \code{NULL},
+unit weights.}
 
 \item{WEIGHTS_TYPE}{Type of sampling weights, as in lavaan: \code{"design"} or \code{"frequency"}.}
 
-\item{CLUSTER}{Cluster membership, one per observation, for cluster-robust standard errors. If
-\code{NULL}, observations are independent.}
+\item{CLUSTER}{Cluster of each observation, for cluster-robust standard errors. If \code{NULL}, independent observations.}
 
-\item{GROUP}{Group membership, one per observation, for multigroup models (see
-\code{\link[=lavaanpl_groups]{lavaanpl_groups()}}). Groups are numbered in order of appearance. If \code{NULL}, a single group.}
+\item{GROUP}{Group of each observation, numbered in order of appearance. If \code{NULL}, a single group.}
 
-\item{WEIGHTS_NORMALIZATION}{Normalisation of the sampling weights, as in lavaan: to the total
-number of observations (\code{"total"}) or to the number of observations of each group (\code{"group"}).}
+\item{WEIGHTS_NORMALIZATION}{Normalisation of the sampling weights, as in lavaan: \code{"total"} or \code{"group"}.}
 
-\item{X}{Numeric matrix of covariates, one row per observation, on which the responses are
-conditioned. Observations with missing covariates are removed. If \code{NULL}, no covariates.}
+\item{X}{Matrix of covariates, one row per observation. Observations with missing covariates are removed. If
+\code{NULL}, no covariates.}
 
 \item{NUMERIC}{Logical vector marking the numeric items. If \code{NULL}, all items are ordinal.}
 }
 \value{
-An object of class \code{lavaanpl_data} with the data matrix \code{Y}, its dimensions \code{n} and \code{p}, the number of item pairs
-over all groups \code{pairs}, the number of categories of each item \code{cat} (one for numeric items), the indicator of numeric
-items \code{numeric}, the pairwise frequency tables \code{freq}, the treatment of missing values \code{missing}, the unit weights \code{uweights} and
-univariate frequencies \code{ufreq} of the available-cases term, the normalised sampling weights
-\code{weights} and their factors on the scores \code{jweights}, the cluster indices \code{cluster}, the group
-indices \code{group} (from zero) and their number \code{ngroups}, the covariates \code{X}, the stratum of each
-observation within its group \code{stratum} (from zero) and the distinct covariate rows of each group
-\code{strata}, whether each group uses frequency tables \code{tables} or its individual observations, and
-the time spent computing the frequencies \code{freqTime}. With several groups or strata, \code{freq} and
-\code{ufreq} stack the tables of each group and, within it, of each stratum.
+An object of class \code{lavaanpl_data} with the data matrix \code{Y}, its dimensions \code{n} and \code{p}, the number of item
+pairs \code{pairs}, the categories of each item \code{cat} (one for numeric items), the indicator \code{numeric}, the pairwise
+frequency tables \code{freq}, the treatment of missing values \code{missing}, the available-cases weights \code{uweights} and
+univariate frequencies \code{ufreq}, the normalised sampling weights \code{weights} and their score factors \code{jweights}, the
+clusters \code{cluster}, the groups \code{group} (from zero) and their number \code{ngroups}, the covariates \code{X}, the stratum of
+each observation \code{stratum} (from zero), the distinct covariate rows of each group \code{strata}, whether each group uses
+frequency tables \code{tables}, and the time spent on the frequencies \code{freqTime}. The tables are stacked by group and,
+within each group, by stratum.
 }
 \description{
 Print method for \code{lavaanpl_data} objects

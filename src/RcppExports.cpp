@@ -12,96 +12,96 @@ Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
 #endif
 
 // cpp_pl
-Rcpp::List cpp_pl(const Eigen::Map<Eigen::VectorXd> THETA, const Rcpp::List MODEL, const Rcpp::List DATA, const int ORDER);
-RcppExport SEXP _lavaan_pl_cpp_pl(SEXP THETASEXP, SEXP MODELSEXP, SEXP DATASEXP, SEXP ORDERSEXP) {
+Rcpp::List cpp_pl(const Eigen::Map<Eigen::VectorXd> PARAMETER_VECTOR, const Rcpp::List MODEL, const Rcpp::List DATA, const int ORDER);
+RcppExport SEXP _lavaan_pl_cpp_pl(SEXP PARAMETER_VECTORSEXP, SEXP MODELSEXP, SEXP DATASEXP, SEXP ORDERSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< const Eigen::Map<Eigen::VectorXd> >::type THETA(THETASEXP);
+    Rcpp::traits::input_parameter< const Eigen::Map<Eigen::VectorXd> >::type PARAMETER_VECTOR(PARAMETER_VECTORSEXP);
     Rcpp::traits::input_parameter< const Rcpp::List >::type MODEL(MODELSEXP);
     Rcpp::traits::input_parameter< const Rcpp::List >::type DATA(DATASEXP);
     Rcpp::traits::input_parameter< const int >::type ORDER(ORDERSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_pl(THETA, MODEL, DATA, ORDER));
+    rcpp_result_gen = Rcpp::wrap(cpp_pl(PARAMETER_VECTOR, MODEL, DATA, ORDER));
     return rcpp_result_gen;
 END_RCPP
 }
-// cpp_HJ
-Rcpp::List cpp_HJ(const Eigen::Map<Eigen::VectorXd> THETA, const Rcpp::List MODEL, const Rcpp::List DATA, const bool PAIRVAR);
-RcppExport SEXP _lavaan_pl_cpp_HJ(SEXP THETASEXP, SEXP MODELSEXP, SEXP DATASEXP, SEXP PAIRVARSEXP) {
+// cpp_sandwich
+Rcpp::List cpp_sandwich(const Eigen::Map<Eigen::VectorXd> PARAMETER_VECTOR, const Rcpp::List MODEL, const Rcpp::List DATA, const bool PAIRVAR);
+RcppExport SEXP _lavaan_pl_cpp_sandwich(SEXP PARAMETER_VECTORSEXP, SEXP MODELSEXP, SEXP DATASEXP, SEXP PAIRVARSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< const Eigen::Map<Eigen::VectorXd> >::type THETA(THETASEXP);
+    Rcpp::traits::input_parameter< const Eigen::Map<Eigen::VectorXd> >::type PARAMETER_VECTOR(PARAMETER_VECTORSEXP);
     Rcpp::traits::input_parameter< const Rcpp::List >::type MODEL(MODELSEXP);
     Rcpp::traits::input_parameter< const Rcpp::List >::type DATA(DATASEXP);
     Rcpp::traits::input_parameter< const bool >::type PAIRVAR(PAIRVARSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_HJ(THETA, MODEL, DATA, PAIRVAR));
+    rcpp_result_gen = Rcpp::wrap(cpp_sandwich(PARAMETER_VECTOR, MODEL, DATA, PAIRVAR));
     return rcpp_result_gen;
 END_RCPP
 }
-// cpp_rho
-Rcpp::List cpp_rho(const Eigen::Map<Eigen::VectorXd> THETA, const Rcpp::List MODEL, const Rcpp::List DATA);
-RcppExport SEXP _lavaan_pl_cpp_rho(SEXP THETASEXP, SEXP MODELSEXP, SEXP DATASEXP) {
+// cpp_reduced_form
+Rcpp::List cpp_reduced_form(const Eigen::Map<Eigen::VectorXd> PARAMETER_VECTOR, const Rcpp::List MODEL, const Rcpp::List DATA);
+RcppExport SEXP _lavaan_pl_cpp_reduced_form(SEXP PARAMETER_VECTORSEXP, SEXP MODELSEXP, SEXP DATASEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< const Eigen::Map<Eigen::VectorXd> >::type THETA(THETASEXP);
+    Rcpp::traits::input_parameter< const Eigen::Map<Eigen::VectorXd> >::type PARAMETER_VECTOR(PARAMETER_VECTORSEXP);
     Rcpp::traits::input_parameter< const Rcpp::List >::type MODEL(MODELSEXP);
     Rcpp::traits::input_parameter< const Rcpp::List >::type DATA(DATASEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_rho(THETA, MODEL, DATA));
+    rcpp_result_gen = Rcpp::wrap(cpp_reduced_form(PARAMETER_VECTOR, MODEL, DATA));
     return rcpp_result_gen;
 END_RCPP
 }
 // cpp_saturated
-Rcpp::List cpp_saturated(const Eigen::Map<Eigen::VectorXd> ITEMS, const Eigen::Map<Eigen::VectorXd> RHO, const Rcpp::List DATA, const int ORDER, const bool SCORES);
-RcppExport SEXP _lavaan_pl_cpp_saturated(SEXP ITEMSSEXP, SEXP RHOSEXP, SEXP DATASEXP, SEXP ORDERSEXP, SEXP SCORESSEXP) {
+Rcpp::List cpp_saturated(const Eigen::Map<Eigen::VectorXd> ITEM_PARAMETERS, const Eigen::Map<Eigen::VectorXd> RHO, const Rcpp::List DATA, const int ORDER, const bool SCORES);
+RcppExport SEXP _lavaan_pl_cpp_saturated(SEXP ITEM_PARAMETERSSEXP, SEXP RHOSEXP, SEXP DATASEXP, SEXP ORDERSEXP, SEXP SCORESSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< const Eigen::Map<Eigen::VectorXd> >::type ITEMS(ITEMSSEXP);
+    Rcpp::traits::input_parameter< const Eigen::Map<Eigen::VectorXd> >::type ITEM_PARAMETERS(ITEM_PARAMETERSSEXP);
     Rcpp::traits::input_parameter< const Eigen::Map<Eigen::VectorXd> >::type RHO(RHOSEXP);
     Rcpp::traits::input_parameter< const Rcpp::List >::type DATA(DATASEXP);
     Rcpp::traits::input_parameter< const int >::type ORDER(ORDERSEXP);
     Rcpp::traits::input_parameter< const bool >::type SCORES(SCORESSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_saturated(ITEMS, RHO, DATA, ORDER, SCORES));
+    rcpp_result_gen = Rcpp::wrap(cpp_saturated(ITEM_PARAMETERS, RHO, DATA, ORDER, SCORES));
     return rcpp_result_gen;
 END_RCPP
 }
 // cpp_saturated_traces
-Eigen::VectorXd cpp_saturated_traces(const Eigen::Map<Eigen::MatrixXd> HTT, const Eigen::Map<Eigen::MatrixXd> HTR, const Eigen::Map<Eigen::VectorXd> D, const Eigen::Map<Eigen::MatrixXd> B, const Eigen::Map<Eigen::MatrixXd> ST, const Eigen::Map<Eigen::MatrixXd> SR, const double N, const bool FULL);
-RcppExport SEXP _lavaan_pl_cpp_saturated_traces(SEXP HTTSEXP, SEXP HTRSEXP, SEXP DSEXP, SEXP BSEXP, SEXP STSEXP, SEXP SRSEXP, SEXP NSEXP, SEXP FULLSEXP) {
+Eigen::VectorXd cpp_saturated_traces(const Eigen::Map<Eigen::MatrixXd> HTT, const Eigen::Map<Eigen::MatrixXd> HTR, const Eigen::Map<Eigen::VectorXd> HRR, const Eigen::Map<Eigen::MatrixXd> HSCHUR, const Eigen::Map<Eigen::MatrixXd> SCORE_TAU, const Eigen::Map<Eigen::MatrixXd> SCORE_RHO, const double N, const bool FULL);
+RcppExport SEXP _lavaan_pl_cpp_saturated_traces(SEXP HTTSEXP, SEXP HTRSEXP, SEXP HRRSEXP, SEXP HSCHURSEXP, SEXP SCORE_TAUSEXP, SEXP SCORE_RHOSEXP, SEXP NSEXP, SEXP FULLSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< const Eigen::Map<Eigen::MatrixXd> >::type HTT(HTTSEXP);
     Rcpp::traits::input_parameter< const Eigen::Map<Eigen::MatrixXd> >::type HTR(HTRSEXP);
-    Rcpp::traits::input_parameter< const Eigen::Map<Eigen::VectorXd> >::type D(DSEXP);
-    Rcpp::traits::input_parameter< const Eigen::Map<Eigen::MatrixXd> >::type B(BSEXP);
-    Rcpp::traits::input_parameter< const Eigen::Map<Eigen::MatrixXd> >::type ST(STSEXP);
-    Rcpp::traits::input_parameter< const Eigen::Map<Eigen::MatrixXd> >::type SR(SRSEXP);
+    Rcpp::traits::input_parameter< const Eigen::Map<Eigen::VectorXd> >::type HRR(HRRSEXP);
+    Rcpp::traits::input_parameter< const Eigen::Map<Eigen::MatrixXd> >::type HSCHUR(HSCHURSEXP);
+    Rcpp::traits::input_parameter< const Eigen::Map<Eigen::MatrixXd> >::type SCORE_TAU(SCORE_TAUSEXP);
+    Rcpp::traits::input_parameter< const Eigen::Map<Eigen::MatrixXd> >::type SCORE_RHO(SCORE_RHOSEXP);
     Rcpp::traits::input_parameter< const double >::type N(NSEXP);
     Rcpp::traits::input_parameter< const bool >::type FULL(FULLSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_saturated_traces(HTT, HTR, D, B, ST, SR, N, FULL));
+    rcpp_result_gen = Rcpp::wrap(cpp_saturated_traces(HTT, HTR, HRR, HSCHUR, SCORE_TAU, SCORE_RHO, N, FULL));
     return rcpp_result_gen;
 END_RCPP
 }
 // cpp_pairs_freq
-Eigen::VectorXd cpp_pairs_freq(const Eigen::Map<Eigen::MatrixXd> Y, const Eigen::Map<Eigen::VectorXd> C_VEC, const Rcpp::NumericVector WEIGHTS, const Rcpp::NumericVector STRATA);
-RcppExport SEXP _lavaan_pl_cpp_pairs_freq(SEXP YSEXP, SEXP C_VECSEXP, SEXP WEIGHTSSEXP, SEXP STRATASEXP) {
+Eigen::VectorXd cpp_pairs_freq(const Eigen::Map<Eigen::MatrixXd> Y, const Eigen::Map<Eigen::VectorXd> CAT, const Rcpp::NumericVector WEIGHTS, const Rcpp::NumericVector STRATA);
+RcppExport SEXP _lavaan_pl_cpp_pairs_freq(SEXP YSEXP, SEXP CATSEXP, SEXP WEIGHTSSEXP, SEXP STRATASEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< const Eigen::Map<Eigen::MatrixXd> >::type Y(YSEXP);
-    Rcpp::traits::input_parameter< const Eigen::Map<Eigen::VectorXd> >::type C_VEC(C_VECSEXP);
+    Rcpp::traits::input_parameter< const Eigen::Map<Eigen::VectorXd> >::type CAT(CATSEXP);
     Rcpp::traits::input_parameter< const Rcpp::NumericVector >::type WEIGHTS(WEIGHTSSEXP);
     Rcpp::traits::input_parameter< const Rcpp::NumericVector >::type STRATA(STRATASEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_pairs_freq(Y, C_VEC, WEIGHTS, STRATA));
+    rcpp_result_gen = Rcpp::wrap(cpp_pairs_freq(Y, CAT, WEIGHTS, STRATA));
     return rcpp_result_gen;
 END_RCPP
 }
 // cpp_sa
-Rcpp::List cpp_sa(const Eigen::Map<Eigen::VectorXd> START, const Eigen::Map<Eigen::MatrixXd> K, const Eigen::Map<Eigen::VectorXd> C, const Rcpp::List MODEL, const Rcpp::List DATA, const int PAIRS_PER_ITERATION, const double ALPHA, const int ADAM_EPOCHS, const int PRECONDITION_EPOCHS, const int MAX_PRECONDITION_EPOCHS, const int AVERAGE_EPOCHS, const double TOL, const double DECAY, const double AVG_FROM, const int GAIN, const int SEED, const bool VERBOSE);
-RcppExport SEXP _lavaan_pl_cpp_sa(SEXP STARTSEXP, SEXP KSEXP, SEXP CSEXP, SEXP MODELSEXP, SEXP DATASEXP, SEXP PAIRS_PER_ITERATIONSEXP, SEXP ALPHASEXP, SEXP ADAM_EPOCHSSEXP, SEXP PRECONDITION_EPOCHSSEXP, SEXP MAX_PRECONDITION_EPOCHSSEXP, SEXP AVERAGE_EPOCHSSEXP, SEXP TOLSEXP, SEXP DECAYSEXP, SEXP AVG_FROMSEXP, SEXP GAINSEXP, SEXP SEEDSEXP, SEXP VERBOSESEXP) {
+Rcpp::List cpp_sa(const Eigen::Map<Eigen::VectorXd> START, const Eigen::Map<Eigen::MatrixXd> K, const Eigen::Map<Eigen::VectorXd> C, const Rcpp::List MODEL, const Rcpp::List DATA, const int PAIRS_PER_ITERATION, const double ALPHA, const int ADAM_EPOCHS, const int PRECONDITION_EPOCHS, const int MAX_PRECONDITION_EPOCHS, const int AVERAGE_EPOCHS, const double TOL, const double DECAY, const double AVG_FROM, const bool HESSIAN_GAIN, const int SEED, const bool VERBOSE);
+RcppExport SEXP _lavaan_pl_cpp_sa(SEXP STARTSEXP, SEXP KSEXP, SEXP CSEXP, SEXP MODELSEXP, SEXP DATASEXP, SEXP PAIRS_PER_ITERATIONSEXP, SEXP ALPHASEXP, SEXP ADAM_EPOCHSSEXP, SEXP PRECONDITION_EPOCHSSEXP, SEXP MAX_PRECONDITION_EPOCHSSEXP, SEXP AVERAGE_EPOCHSSEXP, SEXP TOLSEXP, SEXP DECAYSEXP, SEXP AVG_FROMSEXP, SEXP HESSIAN_GAINSEXP, SEXP SEEDSEXP, SEXP VERBOSESEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -119,18 +119,18 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< const double >::type TOL(TOLSEXP);
     Rcpp::traits::input_parameter< const double >::type DECAY(DECAYSEXP);
     Rcpp::traits::input_parameter< const double >::type AVG_FROM(AVG_FROMSEXP);
-    Rcpp::traits::input_parameter< const int >::type GAIN(GAINSEXP);
+    Rcpp::traits::input_parameter< const bool >::type HESSIAN_GAIN(HESSIAN_GAINSEXP);
     Rcpp::traits::input_parameter< const int >::type SEED(SEEDSEXP);
     Rcpp::traits::input_parameter< const bool >::type VERBOSE(VERBOSESEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_sa(START, K, C, MODEL, DATA, PAIRS_PER_ITERATION, ALPHA, ADAM_EPOCHS, PRECONDITION_EPOCHS, MAX_PRECONDITION_EPOCHS, AVERAGE_EPOCHS, TOL, DECAY, AVG_FROM, GAIN, SEED, VERBOSE));
+    rcpp_result_gen = Rcpp::wrap(cpp_sa(START, K, C, MODEL, DATA, PAIRS_PER_ITERATION, ALPHA, ADAM_EPOCHS, PRECONDITION_EPOCHS, MAX_PRECONDITION_EPOCHS, AVERAGE_EPOCHS, TOL, DECAY, AVG_FROM, HESSIAN_GAIN, SEED, VERBOSE));
     return rcpp_result_gen;
 END_RCPP
 }
 
 static const R_CallMethodDef CallEntries[] = {
     {"_lavaan_pl_cpp_pl", (DL_FUNC) &_lavaan_pl_cpp_pl, 4},
-    {"_lavaan_pl_cpp_HJ", (DL_FUNC) &_lavaan_pl_cpp_HJ, 4},
-    {"_lavaan_pl_cpp_rho", (DL_FUNC) &_lavaan_pl_cpp_rho, 3},
+    {"_lavaan_pl_cpp_sandwich", (DL_FUNC) &_lavaan_pl_cpp_sandwich, 4},
+    {"_lavaan_pl_cpp_reduced_form", (DL_FUNC) &_lavaan_pl_cpp_reduced_form, 3},
     {"_lavaan_pl_cpp_saturated", (DL_FUNC) &_lavaan_pl_cpp_saturated, 5},
     {"_lavaan_pl_cpp_saturated_traces", (DL_FUNC) &_lavaan_pl_cpp_saturated_traces, 8},
     {"_lavaan_pl_cpp_pairs_freq", (DL_FUNC) &_lavaan_pl_cpp_pairs_freq, 4},

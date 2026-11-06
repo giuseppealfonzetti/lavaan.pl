@@ -100,10 +100,10 @@ local({
   vars <- lavaan.pl:::compute_var(fit_sa)
   pairs <- fit_sa$data$pairs
   pairs_per_iteration <- fit_sa$control$pairs_per_iteration
-  hj <- lavaan.pl:::cpp_HJ(
+  hj <- lavaan.pl:::cpp_sandwich(
     fit_sa$parameter_vector,
-    fit_sa$engine$model,
-    fit_sa$engine$data,
+    fit_sa$cpp_inputs$model,
+    fit_sa$cpp_inputs$data,
     TRUE
   )
   pair_selection <- (pairs - pairs_per_iteration) /
@@ -345,7 +345,7 @@ local({
   expect_identical(vars, fit_sa$vars)
   expect_equal(max(vars$distance), fit_sa$stoFit$check$distance)
   moved_vars <- lavaan.pl:::compute_var(replace(fit_sa, "parameter_vector", list(fit_sa$parameter_vector + 0.02)))
-  gradient <- lavaan.pl:::cpp_pl(fit_sa$parameter_vector + 0.02, fit_sa$engine$model, fit_sa$engine$data, 1L)$gradient
+  gradient <- lavaan.pl:::cpp_pl(fit_sa$parameter_vector + 0.02, fit_sa$cpp_inputs$model, fit_sa$cpp_inputs$data, 1L)$gradient
   expect_equal(moved_vars$step, as.vector(solve(moved_vars$H, gradient)) / n, tolerance = 1e-8)
   se_pml <- sqrt(lavaan.pl:::compute_var(fit_pml)$asymptotic_variance / n)
   true_distance <- abs(lavaan.pl:::transform_parameters(fit_sa$model, fit_sa$parameter_vector) - lavaan.pl:::transform_parameters(fit_pml$model, fit_pml$parameter_vector)) / se_pml
@@ -508,16 +508,16 @@ local({
   expect_equal(lavaan.pl:::fit_lavaanpl(data, model, CONTROL = set_saqn_control(seed = 7))$parameter_vector, fit_saqn$parameter_vector, tolerance = 1e-4)
   expect_null(lavaan.pl:::compute_var(fit_saqn)$noise)
   expect_null(fit_saqn$stoFit$invh)
-  burn <- lavaan.pl:::run_sa(fit_saqn$init, data, fit_saqn$engine, fit_saqn$lincon, set_saqn_control(), FALSE)
+  burn <- lavaan.pl:::run_sa(fit_saqn$init, data, fit_saqn$cpp_inputs, fit_saqn$lincon, set_saqn_control(), FALSE)
   expect_equal(dim(burn$invh), rep(length(fit_saqn$parameter_vector), 2))
   fit_flat <- lavaan.pl:::fit_lavaanpl(data, model, CONTROL = set_qn_control(), START = burn$parameter_vector)
   expect_true(fit_saqn$numFit$info[["neval"]] < fit_flat$numFit$info[["neval"]])
-  expect_equal(length(lavaan.pl:::run_sa(fit_saqn$init, data, fit_saqn$engine, fit_saqn$lincon, set_sa_control(average_epochs = 1), FALSE)$invh), 0)
+  expect_equal(length(lavaan.pl:::run_sa(fit_saqn$init, data, fit_saqn$cpp_inputs, fit_saqn$lincon, set_sa_control(average_epochs = 1), FALSE)$invh), 0)
 })
 
 #### Several SA-QN starts keep the highest pairwise log-likelihood of the runs with those seeds ####
 local({
-  logl <- function(fit) lavaan.pl:::cpp_pl(fit$parameter_vector, fit$engine$model, fit$engine$data)$pl
+  logl <- function(fit) lavaan.pl:::cpp_pl(fit$parameter_vector, fit$cpp_inputs$model, fit$cpp_inputs$data)$pl
   runs <- lapply(5:7, function(seed) lavaan.pl:::fit_lavaanpl(data, model, CONTROL = set_saqn_control(seed = seed)))
   fit_three <- lavaan.pl:::fit_lavaanpl(data, model, CONTROL = set_saqn_control(seed = 5, nstarts = 3))
   expect_equal(fit_three$stoFit$start_logl, vapply(runs, logl, numeric(1)))

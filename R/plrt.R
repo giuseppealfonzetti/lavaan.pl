@@ -1,13 +1,13 @@
 #' Pairwise likelihood ratio test
-#' @param OBJ Object of class lavaanpl_internal
-#' @param VARS Output of [compute_var()] for `OBJ`
-#' @param H1 Object of class lavaanpl_internal in which `OBJ` is nested, or `NULL` to test `OBJ` against the
-#'   saturated model
-#' @return A list with the test of the model against `H1` or the saturated model `model` and, without
-#'   `H1`, of the independence model against the saturated model `baseline`. Each holds the
-#'   statistic `stat`, its degrees of freedom `df`, and the mean and variance adjusted `stat.scaled`
-#'   (`stat` divided by `scaling.factor`), `df.scaled` and `pvalue.scaled`. Also, without `H1`, the
-#'   saturated and independence fits `saturated` and `independence`, and the timing `RTime`.
+#'
+#' @param OBJ Object of class `lavaanpl_internal` from [fit_lavaanpl()].
+#' @param VARS Output of [compute_var()] for `OBJ`.
+#' @param H1 Object of class `lavaanpl_internal` in which `OBJ` is nested, or `NULL` to test `OBJ` against the
+#'   saturated model.
+#' @return A list with the test `model` of `OBJ` against `H1` or the saturated model, as returned by [plrt_adjust()],
+#'   and the timing `RTime`. Without `H1`, also the test `baseline` of the independence model against the saturated
+#'   model and the fits `saturated` and `independence`.
+#' @seealso [plrt_nested()], [plrt_fit()]
 #' @keywords internal
 compute_plrt <- function(OBJ, VARS = compute_var(OBJ), H1 = NULL) {
   start_time <- Sys.time()
@@ -70,7 +70,7 @@ plrt_nested <- function(OBJ, H1) {
   ) {
     stop('OBJ is not nested in H1.')
   }
-  pl <- function(FIT, PARAMETER_VECTOR) cpp_pl(PARAMETER_VECTOR, FIT$engine$model, FIT$engine$data)$pl
+  pl <- function(FIT, PARAMETER_VECTOR) cpp_pl(PARAMETER_VECTOR, FIT$cpp_inputs$model, FIT$cpp_inputs$data)$pl
   lc0 <- OBJ$lincon
   lc1 <- H1$lincon
   emb <- function(x) {
@@ -148,7 +148,7 @@ plrt_nested <- function(OBJ, H1) {
     stop('OBJ is not nested in H1.')
   }
   N <- numDeriv::jacobian(emb, free0)
-  HJ <- cpp_HJ(vector1, H1$engine$model, H1$engine$data)
+  HJ <- cpp_sandwich(vector1, H1$cpp_inputs$model, H1$cpp_inputs$data)
   Hf <- crossprod(lc1$K, HJ$H %*% lc1$K)
   M <- crossprod(lc1$K, HJ$J %*% lc1$K) %*%
     (solve(Hf) - N %*% solve(crossprod(N, Hf %*% N), t(N)))
@@ -176,9 +176,9 @@ plrt_fit <- function(OBJ, VARS) {
   nnum <- sum(data$cat == 1)
   nthr <- sum(data$cat - 1) + data$p * nx + 2 * nnum
   P <- data$pairs / data$ngroups
-  eng <- OBJ$engine$data
+  inputs <- OBJ$cpp_inputs$data
   sat <- function(g, tau, rho, order, scores = FALSE) {
-    cpp_saturated(tau, rho, eng[[g]], order, scores)
+    cpp_saturated(tau, rho, inputs[[g]], order, scores)
   }
 
   Y <- OBJ$data$Y
@@ -261,10 +261,10 @@ plrt_fit <- function(OBJ, VARS) {
       htr <- s$htr / n
       d <- s$hrr / n
       w <- function(S) {
-        if (length(eng[[g]]$WM)) {
-          S %*% eng[[g]]$WM
+        if (length(inputs[[g]]$CLUSTER_WEIGHTS)) {
+          S %*% inputs[[g]]$CLUSTER_WEIGHTS
         } else {
-          S * rep(eng[[g]]$WV, each = nrow(S))
+          S * rep(inputs[[g]]$JWEIGHTS, each = nrow(S))
         }
       }
       tr <- cpp_saturated_traces(
@@ -301,7 +301,7 @@ plrt_fit <- function(OBJ, VARS) {
   }
 
   lc <- OBJ$lincon
-  r <- cpp_rho(OBJ$parameter_vector, OBJ$engine$model, eng)
+  r <- cpp_reduced_form(OBJ$parameter_vector, OBJ$cpp_inputs$model, inputs)
   jac <- if (ncol(lc$K) < nrow(lc$K)) r$jacobian %*% lc$K else r$jacobian
   invH <- solve(VARS$H)
   tpos <- which(OBJ$blocks == "tau")

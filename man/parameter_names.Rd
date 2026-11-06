@@ -12,16 +12,17 @@ parameter_names(DATA, MODEL)
 \item{MODEL}{Model object from \code{\link[=lavaanpl_model]{lavaanpl_model()}}.}
 }
 \value{
-The names of the parameters in the order used by \code{\link[=fit_lavaanpl]{fit_lavaanpl()}}: thresholds \code{tau[i,k]},
-free loadings \code{lambda[j,h]}, latent correlation parameters \code{eta[r,c]} (or covariances \code{psi[r,c]}),
-free latent log standard deviations \code{logsd[h]}, free regression coefficients \code{beta[i,j]}, free
-residual covariances \code{theta[k,l]}, free intercepts \code{nu[j]}, free latent means \code{alpha[h]}, and free
-log scale factors \code{logdelta[j]} or, with \code{PARAMETERIZATION = "theta"}, free log residual standard
-deviations \code{logrsd[j]}, free regressions on the covariates \code{gamma[h,c]} and free direct effects of
-the covariates \code{kappa[j,c]}. With \code{\link[=lavaanpl_groups]{lavaanpl_groups()}}, the names of group 2 onwards end in \code{.g2},
-\code{.g3}, and so on.
+The names of the parameters in the order used by \code{\link[=fit_lavaanpl]{fit_lavaanpl()}}: thresholds \code{tau[i,k]}, then the free
+loadings \code{lambda[j,h]}, latent correlation parameters \code{eta[r,c]} (covariances \code{psi[r,c]} with
+\code{LATCOV = "direct"}), latent log standard deviations \code{logsd[h]}, regressions \code{beta[i,j]}, residual covariances
+\code{theta[k,l]}, intercepts \code{nu[j]}, latent means \code{alpha[h]}, log scale factors \code{logdelta[j]} or log residual
+standard deviations \code{logrsd[j]}, effects of the covariates \code{gamma[h,c]} and \code{kappa[j,c]}. With
+\code{\link[=lavaanpl_groups]{lavaanpl_groups()}}, the names of group 2 onwards end in \code{.g2}, \code{.g3}, and so on.
 }
 \description{
 Names of the model parameters
+}
+\seealso{
+\code{\link[=parameter_blocks]{parameter_blocks()}}
 }
 \keyword{internal}

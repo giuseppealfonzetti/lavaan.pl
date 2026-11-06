@@ -22,27 +22,24 @@ set_saqn_control(
 \arguments{
 \item{pairs_per_iteration}{Number of item pairs drawn at each iteration.}
 
-\item{alpha}{Step length of the Adam phase, divided by the square root of the number of
-iterations per epoch.}
+\item{alpha}{Step length of the Adam phase.}
 
-\item{adam_epochs}{Maximum number of epochs of the Adam phase. If \code{NULL}, 5, or as many as make 150 iterations on small
-models, whose epochs are short.}
+\item{adam_epochs}{Maximum number of epochs (passes over the item pairs) of the Adam phase. If \code{NULL}, enough for 5 epochs
+and 150 iterations.}
 
-\item{precondition_epochs}{Number of epochs of the preconditioning phase, which draws each pair once per epoch,
-recomputes the observed information as the gain after each epoch, and takes stochastic Newton steps with it. The
-gain is then frozen, unless the observed information is not positive definite. With \code{0}, the gain is computed at
-the end of the Adam phase.}
+\item{precondition_epochs}{Number of epochs of the preconditioning phase. With \code{0}, the gain is computed at the end of
+the Adam phase.}
 
-\item{max_precondition_epochs}{Maximum number of epochs of the preconditioning phase while the observed information
-is not positive definite.}
+\item{max_precondition_epochs}{Maximum number of preconditioning epochs while the observed information is not
+positive definite.}
 
-\item{tol}{Absolute change of the pairwise log-likelihood at the epoch average, per free parameter, below which, at
-two consecutive epochs, the Adam or the preconditioning phase ends before its maximum.}
+\item{tol}{Change of the pairwise log-likelihood between epochs, per free parameter, below which the Adam and
+preconditioning phases stop early.}
 
 \item{seed}{Seed of the pair sampling.}
 
-\item{nstarts}{Number of full runs from the same starting values, with seeds \code{seed}, \code{seed + 1} and so on. The highest
-pairwise log-likelihood is kept, with a warning if the runs disagree. Each run adds its full cost.}
+\item{nstarts}{Number of runs, with seeds \code{seed}, \code{seed + 1} and so on. The highest pairwise log-likelihood is kept,
+with a warning if the runs disagree.}
 
 \item{grtol}{Tolerance on the largest absolute gradient element.}
 
@@ -56,7 +53,11 @@ pairwise log-likelihood is kept, with a warning if the runs disagree. Each run a
 An object of class \code{lavaanpl_saqn_control} to be passed to \code{\link[=lavaan.pl]{lavaan.pl()}} via \code{control}.
 }
 \description{
-The \code{SA-QN} method: the Adam and preconditioning phases of \code{\link[=set_sa_control]{set_sa_control()}}, without the averaged phase, followed by
-\code{\link[=set_qn_control]{set_qn_control()}} from their end point, with the inverse of the observed information as the initial inverse Hessian.
-Above 2000 free parameters, it starts from the end of the Adam phase, without curvature.
+Control options of quasi-Newton from the burn-in of stochastic approximation
+}
+\examples{
+fit <- pmlcfa("eta =~ y1 + y2 + y3 + y4 + y5", LSAT, std.lv = TRUE, control = set_saqn_control(nstarts = 2))
+}
+\seealso{
+\code{\link[=lavaan.pl]{lavaan.pl()}}, \code{\link[=set_sa_control]{set_sa_control()}}, \code{\link[=set_qn_control]{set_qn_control()}}
 }

@@ -16,15 +16,13 @@ use_tables(STRATA, Y, CAT, STRATUM)
 \item{STRATUM}{Stratum of each row of \code{Y}.}
 }
 \value{
-\code{TRUE} if the tables should be used. They must also fit in memory.
+\code{TRUE} if the frequency tables fit in memory and need fewer bivariate normal evaluations than the individual
+observations.
 }
 \description{
-Compares the bivariate normal probabilities evaluated by each route over all pairs of ordinal items. A table
-evaluates \eqn{(c_k - 1)(c_l - 1)} of them for each pair and stratum. An observation evaluates only the corners of its
-cell: \eqn{a_k a_l}, where \eqn{a} is 1 for an extreme category, 2 for a middle one and 0 for a missing response,
-and identical observations count once.
+Whether frequency tables are cheaper than individual observations
 }
 \seealso{
-\code{\link[=lavaanpl_data]{lavaanpl_data()}}, \code{\link[=engine]{engine()}}
+\code{\link[=lavaanpl_data]{lavaanpl_data()}}, \code{\link[=cpp_inputs]{cpp_inputs()}}
 }
 \keyword{internal}

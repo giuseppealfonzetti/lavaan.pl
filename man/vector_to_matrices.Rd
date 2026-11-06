@@ -14,17 +14,17 @@ matrices_to_vector(MODEL, MATRICES)
 
 \item{PARAMETER_VECTOR}{Parameter vector, in the order of \code{\link[=parameter_names]{parameter_names()}}.}
 
-\item{MATRICES}{List with the model matrices, named as in lavaan: the thresholds \code{tau}, the loadings \code{lambda}, the
-latent (disturbance) covariance matrix \code{psi}, the regressions \code{beta}, the residual covariance matrix \code{theta} (with
-the residual variances on the diagonal when \code{PARAMETERIZATION = "theta"}), the intercepts \code{nu}, the latent means
-\code{alpha}, with \code{PARAMETERIZATION = "delta"}, the scale factors \code{delta} and, with covariates, their effects \code{gamma}
-and \code{kappa}.}
+\item{MATRICES}{List of model matrices named as in lavaan: \code{tau}, \code{lambda}, \code{psi}, \code{beta}, \code{theta}, \code{nu}, \code{alpha},
+\code{delta} and, with covariates, \code{gamma} and \code{kappa}.}
 }
 \value{
-\code{vector_to_matrices()} returns the list \code{MATRICES}, or with \code{\link[=lavaanpl_groups]{lavaanpl_groups()}} a list of them, one
-per group; \code{matrices_to_vector()} returns the parameter vector.
+\code{vector_to_matrices()} returns the list \code{MATRICES}, or with \code{\link[=lavaanpl_groups]{lavaanpl_groups()}} one per group;
+\code{matrices_to_vector()} returns the parameter vector.
 }
 \description{
 Convert between the parameter vector and the model matrices
+}
+\seealso{
+\code{\link[=parameter_names]{parameter_names()}}
 }
 \keyword{internal}

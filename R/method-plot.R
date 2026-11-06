@@ -55,7 +55,7 @@ plot.lavaan.pl <- function(
       nll[miss] <- vapply(
         c(sa$parameter_vector, qn$parameter_vector)[miss],
         function(v) {
-          -cpp_pl(v, fit$engine$model, fit$engine$data)$pl / fit$data$n
+          -cpp_pl(v, fit$cpp_inputs$model, fit$cpp_inputs$data)$pl / fit$data$n
         },
         numeric(1)
       )

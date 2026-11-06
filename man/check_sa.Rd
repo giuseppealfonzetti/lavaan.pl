@@ -7,17 +7,13 @@
 check_sa(FIT)
 }
 \arguments{
-\item{FIT}{Object of class lavaanpl_internal.}
+\item{FIT}{Object of class \code{lavaanpl_internal}.}
 }
 \value{
-\code{FIT}, with \code{vars} and, in \code{stoFit}, the check \code{check} and the updated \code{converged}.
+\code{FIT}, with the variance \code{vars} and, in \code{stoFit}, the \code{check} and the updated \code{converged}.
 }
 \description{
-Stores the variance at the estimate, which the check needs and \code{\link[=compute_var]{compute_var()}} reuses. The fit has failed if the
-observed information is not positive definite, or if the estimate is further from the optimum of the pairwise
-likelihood than one standard error and four times the predicted noise on the worst parameter, because the noise cannot
-explain it. A larger distance that the noise explains only warns: the standard errors account for it. Above 2000 free
-parameters there is no check, and the fit has failed if the Adam phase did not reach a plateau.
+End-of-run check of the stochastic approximation
 }
 \seealso{
 \code{\link[=fit_lavaanpl]{fit_lavaanpl()}}, \code{\link[=compute_var]{compute_var()}}

@@ -29,56 +29,52 @@ lavaanpl_model(
 
 \item{...}{Ignored.}
 
-\item{LAMBDA}{\eqn{p*q}-dimensional matrix of loadings. Latent variables with a free variance need a fixed nonzero
-loading.}
+\item{LAMBDA}{\eqn{p*q} matrix of loadings, \code{NA} where free. A latent variable with a free variance needs a fixed
+nonzero loading.}
 
-\item{PSI}{\eqn{q*q}-dimensional symmetric matrix of latent (disturbance) covariances. If \code{NULL}, unit variances and
-free covariances. Covariances all fixed to zero make the latent variables independent.}
+\item{PSI}{\eqn{q*q} symmetric matrix of latent (disturbance) covariances, \code{NA} where free. If \code{NULL}, unit
+variances and free covariances.}
 
-\item{BETA}{\eqn{q*q}-dimensional matrix of structural regressions among the latent variables, with \code{BETA[i, j]} the
-effect of latent variable \code{j} on latent variable \code{i}. If \code{NULL}, none.}
+\item{BETA}{\eqn{q*q} matrix of regressions among the latent variables, \code{NA} where free, with \code{BETA[i, j]} the
+effect of \code{j} on \code{i}. If \code{NULL}, none.}
 
-\item{THETA}{\eqn{p*p}-dimensional symmetric matrix of residual covariances of the items. The diagonal holds the
-residual variances of the numeric items and, with \code{PARAMETERIZATION = "theta"}, of all items; it is ignored for the
-other items. If \code{NULL}, no residual covariances, free residual variances of the numeric items and unit residual
-variances of the others.}
+\item{THETA}{\eqn{p*p} symmetric matrix of residual covariances, \code{NA} where free. The diagonal is used for the
+numeric items and, with \code{PARAMETERIZATION = "theta"}, for all items. If \code{NULL}, no residual covariances, free
+residual variances of the numeric items and unit ones otherwise.}
 
-\item{NU}{\eqn{p}-dimensional vector of item intercepts. If \code{NULL}, free for the numeric items and zero otherwise.}
+\item{NU}{\eqn{p} vector of intercepts, \code{NA} where free. If \code{NULL}, free for the numeric items and zero otherwise.}
 
-\item{ALPHA}{\eqn{q}-dimensional vector of latent means (intercepts, with \code{BETA}). If \code{NULL}, all zero.}
+\item{ALPHA}{\eqn{q} vector of latent means, \code{NA} where free. If \code{NULL}, all zero.}
 
-\item{DELTA}{\eqn{p}-dimensional vector of positive scale factors of the latent responses, with
-\code{PARAMETERIZATION = "delta"}; ignored for the numeric items. If \code{NULL}, all one.}
+\item{DELTA}{\eqn{p} vector of scale factors, \code{NA} where free, used with \code{PARAMETERIZATION = "delta"} for the
+ordinal items. If \code{NULL}, all one.}
 
-\item{TAU}{Vector of thresholds, item after item, with the length set by the data. If \code{NULL}, all free.}
+\item{TAU}{Vector of thresholds, item after item, \code{NA} where free. If \code{NULL}, all free.}
 
-\item{GAMMA}{\eqn{q*x}-dimensional matrix of regressions of the latent variables on the \code{x} covariates of
-\code{\link[=lavaanpl_data]{lavaanpl_data()}}. If \code{NULL}, none.}
-
-\item{KAPPA}{\eqn{p*x}-dimensional matrix of direct effects of the covariates on the latent responses. If \code{NULL},
+\item{GAMMA}{\eqn{q*x} matrix of regressions of the latent variables on the covariates, \code{NA} where free. If \code{NULL},
 none.}
 
-\item{CONSTRAINTS}{Linear equality constraints \code{A \%*\% parameter_vector = b} among free parameters, as
-\code{list(A = , b = )}, with one column of \code{A} per parameter in the order of \code{\link[=parameter_names]{parameter_names()}}. Each constraint
-involves a single block of \code{\link[=parameter_blocks]{parameter_blocks()}}.}
+\item{KAPPA}{\eqn{p*x} matrix of direct effects of the covariates on the items, \code{NA} where free. If \code{NULL}, none.}
 
-\item{LATCOV}{Parametrisation of the latent correlations: \code{"lkj"} (Cholesky factor with Fisher-z angles, always
-positive definite, all covariances free) or \code{"direct"} (the latent covariances themselves, which can be fixed or
-constrained).}
+\item{CONSTRAINTS}{Linear equality constraints \code{A \%*\% parameter_vector = b}, as \code{list(A = , b = )}, with one column
+of \code{A} per parameter of \code{\link[=parameter_names]{parameter_names()}}. Each constraint involves a single block of \code{\link[=parameter_blocks]{parameter_blocks()}}.}
 
-\item{PARAMETERIZATION}{\code{"delta"} (latent responses with unit variances in the reference metric, scaled by \code{DELTA})
-or \code{"theta"} (residual variances in the diagonal of \code{THETA}), as in lavaan.}
+\item{LATCOV}{Parametrisation of the latent correlations: \code{"lkj"} (always positive definite, all covariances free)
+or \code{"direct"} (the covariances themselves, which can be fixed or constrained).}
+
+\item{PARAMETERIZATION}{\code{"delta"} or \code{"theta"}, as in lavaan.}
 
 \item{NUMERIC}{Logical vector marking the numeric items, as in \code{\link[=lavaanpl_data]{lavaanpl_data()}}.}
 }
 \value{
-An object of class \code{lavaanpl_model} with the matrices \code{LAMBDA}, \code{PSI}, \code{BETA}, \code{THETA} (with zero diagonal
-entries where they are ignored), \code{NU}, \code{ALPHA}, \code{DELTA} (one where it is ignored), \code{TAU}, \code{GAMMA} and \code{KAPPA},
-\code{CONSTRAINTS}, \code{LATCOV} (\code{"none"} for independent latent variables), \code{PARAMETERIZATION}, \code{NUMERIC}, and the
-numbers of items \code{p} and latent variables \code{q}.
+An object of class \code{lavaanpl_model} with the matrices \code{LAMBDA}, \code{PSI}, \code{BETA}, \code{THETA}, \code{NU}, \code{ALPHA},
+\code{DELTA}, \code{TAU}, \code{GAMMA} and \code{KAPPA} (unused entries set to zero or one), \code{CONSTRAINTS}, \code{LATCOV} (\code{"none"} for
+independent latent variables), \code{PARAMETERIZATION}, \code{NUMERIC}, and the numbers of items \code{p} and latent variables
+\code{q}.
 }
 \description{
-Each matrix argument is the model matrix of lavaan with the same name: elements set to \code{NA} are free, numerical
-values are fixed.
+Print method for \code{lavaanpl_model} objects
+
+Factor model for pairwise likelihood estimation
 }
 \keyword{internal}

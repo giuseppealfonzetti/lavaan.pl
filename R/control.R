@@ -1,33 +1,26 @@
 #' Ordinal and numeric data for pairwise likelihood estimation
 #'
-#'@param DATA Data matrix of dimension \eqn{n*p}. Categories of ordinal items must be
-#'  integers coded starting from zero.
-#'@param MISSING Treatment of missing values (`NA`): `"listwise"` drops incomplete observations,
-#'  `"pairwise"` uses the complete pairs and `"available.cases"` the available cases of
-#'  Katsikatsou et al. (2022).
-#'@param WEIGHTS Sampling weights, one per observation, normalised to sum to the number of
-#'  observations. If `NULL`, unit weights.
-#'@param WEIGHTS_TYPE Type of sampling weights, as in lavaan: `"design"` or `"frequency"`.
-#'@param CLUSTER Cluster membership, one per observation, for cluster-robust standard errors. If
-#'  `NULL`, observations are independent.
-#'@param GROUP Group membership, one per observation, for multigroup models (see
-#'  [lavaanpl_groups()]). Groups are numbered in order of appearance. If `NULL`, a single group.
-#'@param WEIGHTS_NORMALIZATION Normalisation of the sampling weights, as in lavaan: to the total
-#'  number of observations (`"total"`) or to the number of observations of each group (`"group"`).
-#'@param X Numeric matrix of covariates, one row per observation, on which the responses are
-#'  conditioned. Observations with missing covariates are removed. If `NULL`, no covariates.
-#'@param NUMERIC Logical vector marking the numeric items. If `NULL`, all items are ordinal.
+#' @param DATA \eqn{n*p} data matrix. Ordinal items are coded as integers from zero.
+#' @param MISSING Treatment of missing values: `"listwise"` drops incomplete observations, `"pairwise"` uses the
+#'   complete pairs and `"available.cases"` adds the univariate terms of the available cases.
+#' @param WEIGHTS Sampling weights, one per observation, normalised to sum to the number of observations. If `NULL`,
+#'   unit weights.
+#' @param WEIGHTS_TYPE Type of sampling weights, as in lavaan: `"design"` or `"frequency"`.
+#' @param CLUSTER Cluster of each observation, for cluster-robust standard errors. If `NULL`, independent observations.
+#' @param GROUP Group of each observation, numbered in order of appearance. If `NULL`, a single group.
+#' @param WEIGHTS_NORMALIZATION Normalisation of the sampling weights, as in lavaan: `"total"` or `"group"`.
+#' @param X Matrix of covariates, one row per observation. Observations with missing covariates are removed. If
+#'   `NULL`, no covariates.
+#' @param NUMERIC Logical vector marking the numeric items. If `NULL`, all items are ordinal.
 #'
-#' @return An object of class `lavaanpl_data` with the data matrix `Y`, its dimensions `n` and `p`, the number of item pairs
-#'   over all groups `pairs`, the number of categories of each item `cat` (one for numeric items), the indicator of numeric
-#'   items `numeric`, the pairwise frequency tables `freq`, the treatment of missing values `missing`, the unit weights `uweights` and
-#'   univariate frequencies `ufreq` of the available-cases term, the normalised sampling weights
-#'   `weights` and their factors on the scores `jweights`, the cluster indices `cluster`, the group
-#'   indices `group` (from zero) and their number `ngroups`, the covariates `X`, the stratum of each
-#'   observation within its group `stratum` (from zero) and the distinct covariate rows of each group
-#'   `strata`, whether each group uses frequency tables `tables` or its individual observations, and
-#'   the time spent computing the frequencies `freqTime`. With several groups or strata, `freq` and
-#'   `ufreq` stack the tables of each group and, within it, of each stratum.
+#' @return An object of class `lavaanpl_data` with the data matrix `Y`, its dimensions `n` and `p`, the number of item
+#'   pairs `pairs`, the categories of each item `cat` (one for numeric items), the indicator `numeric`, the pairwise
+#'   frequency tables `freq`, the treatment of missing values `missing`, the available-cases weights `uweights` and
+#'   univariate frequencies `ufreq`, the normalised sampling weights `weights` and their score factors `jweights`, the
+#'   clusters `cluster`, the groups `group` (from zero) and their number `ngroups`, the covariates `X`, the stratum of
+#'   each observation `stratum` (from zero), the distinct covariate rows of each group `strata`, whether each group uses
+#'   frequency tables `tables`, and the time spent on the frequencies `freqTime`. The tables are stacked by group and,
+#'   within each group, by stratum.
 #'
 #' @keywords internal
 lavaanpl_data <- function(DATA, MISSING = c("listwise", "pairwise", "available.cases"),
@@ -156,17 +149,13 @@ strata_index <- function(X, GROUP, Y, CAT, WEIGHTS) {
 
 #' Whether frequency tables are cheaper than individual observations
 #'
-#' Compares the bivariate normal probabilities evaluated by each route over all pairs of ordinal items. A table
-#' evaluates \eqn{(c_k - 1)(c_l - 1)} of them for each pair and stratum. An observation evaluates only the corners of its
-#' cell: \eqn{a_k a_l}, where \eqn{a} is 1 for an extreme category, 2 for a middle one and 0 for a missing response,
-#' and identical observations count once.
-#'
 #' @param STRATA Number of distinct covariate rows.
 #' @param Y Data matrix.
 #' @param CAT Number of categories of each item.
 #' @param STRATUM Stratum of each row of `Y`.
-#' @return `TRUE` if the tables should be used. They must also fit in memory.
-#' @seealso [lavaanpl_data()], [engine()]
+#' @return `TRUE` if the frequency tables fit in memory and need fewer bivariate normal evaluations than the individual
+#'   observations.
+#' @seealso [lavaanpl_data()], [cpp_inputs()]
 #' @keywords internal
 use_tables <- function(STRATA, Y, CAT, STRATUM) {
   ordinal <- CAT > 1
@@ -183,42 +172,34 @@ use_tables <- function(STRATA, Y, CAT, STRATUM) {
 
 #' Factor model for pairwise likelihood estimation
 #'
-#' Each matrix argument is the model matrix of lavaan with the same name: elements set to `NA` are free, numerical
-#' values are fixed.
-#'
-#' @param LAMBDA \eqn{p*q}-dimensional matrix of loadings. Latent variables with a free variance need a fixed nonzero
-#'  loading.
-#' @param PSI \eqn{q*q}-dimensional symmetric matrix of latent (disturbance) covariances. If `NULL`, unit variances and
-#'  free covariances. Covariances all fixed to zero make the latent variables independent.
-#' @param BETA \eqn{q*q}-dimensional matrix of structural regressions among the latent variables, with `BETA[i, j]` the
-#'  effect of latent variable `j` on latent variable `i`. If `NULL`, none.
-#' @param THETA \eqn{p*p}-dimensional symmetric matrix of residual covariances of the items. The diagonal holds the
-#'  residual variances of the numeric items and, with `PARAMETERIZATION = "theta"`, of all items; it is ignored for the
-#'  other items. If `NULL`, no residual covariances, free residual variances of the numeric items and unit residual
-#'  variances of the others.
-#' @param NU \eqn{p}-dimensional vector of item intercepts. If `NULL`, free for the numeric items and zero otherwise.
-#' @param ALPHA \eqn{q}-dimensional vector of latent means (intercepts, with `BETA`). If `NULL`, all zero.
-#' @param DELTA \eqn{p}-dimensional vector of positive scale factors of the latent responses, with
-#'  `PARAMETERIZATION = "delta"`; ignored for the numeric items. If `NULL`, all one.
-#' @param TAU Vector of thresholds, item after item, with the length set by the data. If `NULL`, all free.
-#' @param GAMMA \eqn{q*x}-dimensional matrix of regressions of the latent variables on the `x` covariates of
-#'  [lavaanpl_data()]. If `NULL`, none.
-#' @param KAPPA \eqn{p*x}-dimensional matrix of direct effects of the covariates on the latent responses. If `NULL`,
-#'  none.
-#' @param CONSTRAINTS Linear equality constraints `A %*% parameter_vector = b` among free parameters, as
-#'  `list(A = , b = )`, with one column of `A` per parameter in the order of [parameter_names()]. Each constraint
-#'  involves a single block of [parameter_blocks()].
-#' @param LATCOV Parametrisation of the latent correlations: `"lkj"` (Cholesky factor with Fisher-z angles, always
-#'  positive definite, all covariances free) or `"direct"` (the latent covariances themselves, which can be fixed or
-#'  constrained).
-#' @param PARAMETERIZATION `"delta"` (latent responses with unit variances in the reference metric, scaled by `DELTA`)
-#'  or `"theta"` (residual variances in the diagonal of `THETA`), as in lavaan.
+#' @param LAMBDA \eqn{p*q} matrix of loadings, `NA` where free. A latent variable with a free variance needs a fixed
+#'   nonzero loading.
+#' @param PSI \eqn{q*q} symmetric matrix of latent (disturbance) covariances, `NA` where free. If `NULL`, unit
+#'   variances and free covariances.
+#' @param BETA \eqn{q*q} matrix of regressions among the latent variables, `NA` where free, with `BETA[i, j]` the
+#'   effect of `j` on `i`. If `NULL`, none.
+#' @param THETA \eqn{p*p} symmetric matrix of residual covariances, `NA` where free. The diagonal is used for the
+#'   numeric items and, with `PARAMETERIZATION = "theta"`, for all items. If `NULL`, no residual covariances, free
+#'   residual variances of the numeric items and unit ones otherwise.
+#' @param NU \eqn{p} vector of intercepts, `NA` where free. If `NULL`, free for the numeric items and zero otherwise.
+#' @param ALPHA \eqn{q} vector of latent means, `NA` where free. If `NULL`, all zero.
+#' @param DELTA \eqn{p} vector of scale factors, `NA` where free, used with `PARAMETERIZATION = "delta"` for the
+#'   ordinal items. If `NULL`, all one.
+#' @param TAU Vector of thresholds, item after item, `NA` where free. If `NULL`, all free.
+#' @param GAMMA \eqn{q*x} matrix of regressions of the latent variables on the covariates, `NA` where free. If `NULL`,
+#'   none.
+#' @param KAPPA \eqn{p*x} matrix of direct effects of the covariates on the items, `NA` where free. If `NULL`, none.
+#' @param CONSTRAINTS Linear equality constraints `A %*% parameter_vector = b`, as `list(A = , b = )`, with one column
+#'   of `A` per parameter of [parameter_names()]. Each constraint involves a single block of [parameter_blocks()].
+#' @param LATCOV Parametrisation of the latent correlations: `"lkj"` (always positive definite, all covariances free)
+#'   or `"direct"` (the covariances themselves, which can be fixed or constrained).
+#' @param PARAMETERIZATION `"delta"` or `"theta"`, as in lavaan.
 #' @param NUMERIC Logical vector marking the numeric items, as in [lavaanpl_data()].
 #'
-#' @return An object of class `lavaanpl_model` with the matrices `LAMBDA`, `PSI`, `BETA`, `THETA` (with zero diagonal
-#'   entries where they are ignored), `NU`, `ALPHA`, `DELTA` (one where it is ignored), `TAU`, `GAMMA` and `KAPPA`,
-#'   `CONSTRAINTS`, `LATCOV` (`"none"` for independent latent variables), `PARAMETERIZATION`, `NUMERIC`, and the
-#'   numbers of items `p` and latent variables `q`.
+#' @return An object of class `lavaanpl_model` with the matrices `LAMBDA`, `PSI`, `BETA`, `THETA`, `NU`, `ALPHA`,
+#'   `DELTA`, `TAU`, `GAMMA` and `KAPPA` (unused entries set to zero or one), `CONSTRAINTS`, `LATCOV` (`"none"` for
+#'   independent latent variables), `PARAMETERIZATION`, `NUMERIC`, and the numbers of items `p` and latent variables
+#'   `q`.
 #'
 #' @keywords internal
 lavaanpl_model <- function(LAMBDA, PSI = NULL, BETA = NULL, THETA = NULL, NU = NULL, ALPHA = NULL, DELTA = NULL,
@@ -289,13 +270,12 @@ lavaanpl_model <- function(LAMBDA, PSI = NULL, BETA = NULL, THETA = NULL, NU = N
 #'
 #' @param MODELS List of model objects from [lavaanpl_model()], one per group in the order of the
 #'   groups of [lavaanpl_data()], with the same number of items.
-#' @param CONSTRAINTS Linear equality constraints `A %*% parameter_vector = b` across groups, as
-#'  `list(A = , b = )`, with one column of `A` per parameter in the order of [parameter_names()]: the
-#'  parameters of the first group, then those of the second, and so on. Each model's own
-#'  `CONSTRAINTS` apply within its group.
+#' @param CONSTRAINTS Linear equality constraints `A %*% parameter_vector = b` across groups, as `list(A = , b = )`,
+#'   with one column of `A` per parameter of [parameter_names()], group after group. Each model's own `CONSTRAINTS`
+#'   apply within its group.
 #'
-#' @return An object of class `lavaanpl_groups` with `MODELS`, `CONSTRAINTS`, the number of items `p`
-#'   and the number of groups `ngroups`, to be passed to [fit_lavaanpl()] via `MODEL`.
+#' @return An object of class `lavaanpl_groups` with `MODELS`, `CONSTRAINTS`, the number of items `p` and the number
+#'   of groups `ngroups`, to be passed to [fit_lavaanpl()] via `MODEL`.
 #'
 #' @keywords internal
 lavaanpl_groups <- function(MODELS, CONSTRAINTS = NULL) {
@@ -316,15 +296,15 @@ lavaanpl_groups <- function(MODELS, CONSTRAINTS = NULL) {
 
 #' Control options of the quasi-Newton method
 #'
-#' The `QN` method: the exact pairwise likelihood estimate, by the BFGS optimiser of the \code{ucminf} package.
-#'
 #' @param grtol Tolerance on the largest absolute gradient element.
 #' @param xtol Tolerance on the relative step length.
 #' @param stepmax Initial maximal step length of the trust region.
 #' @param maxeval Maximum number of function evaluations.
 #'
 #' @return An object of class `lavaanpl_qn_control` to be passed to [lavaan.pl()] via `control`.
-#'
+#' @seealso [lavaan.pl()], [ucminf::ucminf()]
+#' @examples
+#' fit <- pmlcfa("eta =~ y1 + y2 + y3 + y4 + y5", LSAT, std.lv = TRUE, control = set_qn_control(maxeval = 200))
 #' @export
 set_qn_control <- function(
   grtol = 1e-6,
@@ -345,25 +325,18 @@ set_qn_control <- function(
 
 #' Control options of the pairwise stochastic approximation
 #'
-#' The `SA` method. It draws item pairs at each iteration, uniformly and independently across iterations, and runs in
-#' three phases: Adam, preconditioning, and stochastic gradient updates with a frozen gain and Polyak-Ruppert averaging. An
-#' epoch is the number of iterations needed to draw as many pairs as there are in the model, one pass over the pairs.
-#'
 #' @param pairs_per_iteration Number of item pairs drawn at each iteration.
-#' @param alpha Step length of the Adam phase, divided by the square root of the number of
-#'   iterations per epoch.
-#' @param adam_epochs Maximum number of epochs of the Adam phase. If `NULL`, 5, or as many as make 150 iterations on small
-#'   models, whose epochs are short.
-#' @param precondition_epochs Number of epochs of the preconditioning phase, which draws each pair once per epoch,
-#'   recomputes the observed information as the gain after each epoch, and takes stochastic Newton steps with it. The
-#'   gain is then frozen, unless the observed information is not positive definite. With `0`, the gain is computed at
-#'   the end of the Adam phase.
-#' @param max_precondition_epochs Maximum number of epochs of the preconditioning phase while the observed information
-#'   is not positive definite.
+#' @param alpha Step length of the Adam phase.
+#' @param adam_epochs Maximum number of epochs (passes over the item pairs) of the Adam phase. If `NULL`, enough for 5 epochs
+#'   and 150 iterations.
+#' @param precondition_epochs Number of epochs of the preconditioning phase. With `0`, the gain is computed at the end of
+#'   the Adam phase.
+#' @param max_precondition_epochs Maximum number of preconditioning epochs while the observed information is not
+#'   positive definite.
 #' @param average_epochs Number of epochs of the averaged phase, at least 1.
-#' @param tol Absolute change of the pairwise log-likelihood at the epoch average, per free parameter, below which, at
-#'   two consecutive epochs, the Adam or the preconditioning phase ends before its maximum.
-#' @param decay Exponent of the step length decay in the averaged phase, in \eqn{(1/2, 1)}.
+#' @param tol Change of the pairwise log-likelihood between epochs, per free parameter, below which the Adam and
+#'   preconditioning phases stop early.
+#' @param decay Exponent of the step length decay in the averaged phase, between 0.5 and 1.
 #' @param avg_from Fraction of the averaged phase discarded before averaging.
 #' @param gain Gain of the preconditioning and averaged phases: `"hessian"` (inverse observed information),
 #'   `"diagonal"` (Adam's diagonal preconditioner, no preconditioning phase), or `"auto"` (`"hessian"` up to 2000 free
@@ -371,7 +344,9 @@ set_qn_control <- function(
 #' @param seed Seed of the pair sampling.
 #'
 #' @return An object of class `lavaanpl_sa_control` to be passed to [lavaan.pl()] via `control`.
-#'
+#' @seealso [lavaan.pl()], [diagnostics()]
+#' @examples
+#' fit <- pmlcfa("eta =~ y1 + y2 + y3 + y4 + y5", LSAT, std.lv = TRUE, control = set_sa_control(average_epochs = 20))
 #' @export
 set_sa_control <- function(
   pairs_per_iteration = 16,
@@ -411,17 +386,15 @@ set_sa_control <- function(
 
 #' Control options of quasi-Newton from the burn-in of stochastic approximation
 #'
-#' The `SA-QN` method: the Adam and preconditioning phases of [set_sa_control()], without the averaged phase, followed by
-#' [set_qn_control()] from their end point, with the inverse of the observed information as the initial inverse Hessian.
-#' Above 2000 free parameters, it starts from the end of the Adam phase, without curvature.
-#'
 #' @inheritParams set_sa_control
 #' @inheritParams set_qn_control
-#' @param nstarts Number of full runs from the same starting values, with seeds `seed`, `seed + 1` and so on. The highest
-#'   pairwise log-likelihood is kept, with a warning if the runs disagree. Each run adds its full cost.
+#' @param nstarts Number of runs, with seeds `seed`, `seed + 1` and so on. The highest pairwise log-likelihood is kept,
+#'   with a warning if the runs disagree.
 #'
 #' @return An object of class `lavaanpl_saqn_control` to be passed to [lavaan.pl()] via `control`.
-#'
+#' @seealso [lavaan.pl()], [set_sa_control()], [set_qn_control()]
+#' @examples
+#' fit <- pmlcfa("eta =~ y1 + y2 + y3 + y4 + y5", LSAT, std.lv = TRUE, control = set_saqn_control(nstarts = 2))
 #' @export
 set_saqn_control <- function(
   pairs_per_iteration = 16,

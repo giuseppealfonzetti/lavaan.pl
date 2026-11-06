@@ -3,85 +3,105 @@
 #include <RcppEigen.h>
 
 #include "model.h"
-#include "bivariateNormal.h"
+#include "bivariate_normal.h"
 
 namespace pairs{
 
-  struct Data{
-    const Eigen::Map<Eigen::VectorXd> freq, ufreq, stratum, w;
-    const Eigen::Map<Eigen::MatrixXd> x, y;
+  enum class Order {value, gradient, hessian};
+
+  struct GroupData{
+    const Eigen::Map<Eigen::VectorXd> freq, ufreq, stratum, weights;
+    const Eigen::Map<Eigen::MatrixXd> strata, responses;
     const bool tables;
-    Data(const Rcpp::List D);
+    GroupData(const Rcpp::List DATA);
   };
 
   struct Reduced{
     const Eigen::Ref<const Eigen::VectorXd> tau;
-    const Eigen::Ref<const Eigen::MatrixXd> pis;
-    const Eigen::Ref<const Eigen::VectorXd> loc, scale;
-    Reduced(const model::Setup &ST): tau(ST.taus), pis(ST.pis), loc(ST.loc), scale(ST.s){}
-    Reduced(const Eigen::Ref<const Eigen::VectorXd> TAU, const Eigen::Ref<const Eigen::MatrixXd> PIS,
-            const Eigen::Ref<const Eigen::VectorXd> LOC, const Eigen::Ref<const Eigen::VectorXd> SCALE):
-      tau(TAU), pis(PIS), loc(LOC), scale(SCALE){}
+    const Eigen::Ref<const Eigen::MatrixXd> slope;
+    const Eigen::Ref<const Eigen::VectorXd> location, scale;
+    Reduced(const model::Matrices &PAR): tau(PAR.tau_std), slope(PAR.pi_std), location(PAR.location), scale(PAR.scale){}
+    Reduced(const Eigen::Ref<const Eigen::VectorXd> TAU, const Eigen::Ref<const Eigen::MatrixXd> SLOPE,
+            const Eigen::Ref<const Eigen::VectorXd> LOCATION, const Eigen::Ref<const Eigen::VectorXd> SCALE):
+      tau(TAU), slope(SLOPE), location(LOCATION), scale(SCALE){}
   };
 
-  struct Work{
-    Eigen::VectorXd g, gc, wk, wl;
-    Eigen::MatrixXd M, G2;
+  struct ReducedIndex{
+    const model::Items &items;
+    const int nx, size;
+    ReducedIndex(const model::Items &ITEMS, const int NX):
+      items(ITEMS), nx(NX), size(ITEMS.nthr + NX * ITEMS.p + 2 * ITEMS.nnum){}
+    int slope(const int C, const int K) const { return items.nthr + C * items.p + K; }
+    int location(const int K) const { return items.nthr + nx * items.p + items.numeric_index(K); }
+    int scale(const int K) const { return location(K) + items.nnum; }
+    int rho(const int R) const { return size + R; }
+  };
+
+  struct UnitWork{
+    Eigen::VectorXd score, cell_score, weights_k, weights_l;
+    Eigen::MatrixXd info, cell_hessian;
   };
 
   struct Grid{
-    int ck, cl, order;
-    double rho, r2, sr;
-    Eigen::VectorXd a, b;
-    Eigen::MatrixXd F, Fa, Fb, Fr, Faa, Fbb, Fab, Far, Fbr, Frr;
-    Grid(const int CK, const int CL, const double RHO, const int ORDER);
-    Grid(const Eigen::Ref<const Eigen::VectorXd> TAU, const int TK, const int TL, const int CK, const int CL,
-         const double RHO, const int ORDER, const double SHK = 0, const double SHL = 0);
-    void fill(const Eigen::Ref<const Eigen::VectorXd> TAU, const int TK, const int TL, const double SHK, const double SHL,
-              const int S0, const int S1, const int T0, const int T1);
-    double cell(const int SK, const int SL, Eigen::VectorXd &G1, Eigen::MatrixXd &G2) const;
+    int cat_k, cat_l;
+    Order order;
+    double rho, var_cond, sd_cond;
+    Eigen::VectorXd bound_k, bound_l, density_k, density_l;
+    Eigen::MatrixXd cdf, cdf_a, cdf_b, cdf_rho, cdf_aa, cdf_bb, cdf_ab, cdf_arho, cdf_brho, cdf_rhorho;
+    Grid(const int CAT_K, const int CAT_L, const double RHO, const Order ORDER);
+    Grid(const Eigen::Ref<const Eigen::VectorXd> TAU, const int TAU_K, const int TAU_L, const int CAT_K, const int CAT_L,
+         const double RHO, const Order ORDER, const double SHIFT_K = 0, const double SHIFT_L = 0);
+    void fill(const Eigen::Ref<const Eigen::VectorXd> TAU, const int TAU_K, const int TAU_L, const double SHIFT_K,
+              const double SHIFT_L, const int S0, const int S1, const int T0, const int T1);
+    double cell_probability(const int SK, const int SL, Eigen::VectorXd &GRADIENT, Eigen::MatrixXd &HESSIAN) const;
   };
 
   struct Pair{
-    int r, k, l, ck, cl, tk, tl, mt, ml, lk, ll, nsk, nsl, m, off, nk, lo, mb, s, s0, pa, psk, psl, pg, pkk, pkl, nx;
-    bool plain, numk, numl;
-    double rho, c;
-    std::vector<int> idx;
-    Eigen::MatrixXd Dk, Dl, Ju, Gk, Gl;
-    Eigen::VectorXd x, y, X, Y, grho, gc, gmk, gml, gvk, gvl, gsk, gsl;
-    Pair(const model::Setup &ST, const int R, const bool GRAD, const int K = -1);
-    Pair(const model::Layout &L, const int R, const double RHO, const int NX);
-    std::vector<int> local() const;
-    Eigen::VectorXd lift(const Eigen::Ref<const Eigen::VectorXd> V) const;
-    void size_reduced(const int NX);
-    void slots(const Eigen::Ref<const Eigen::VectorXd> X, const double YK, const double YL, Eigen::VectorXd &WK, Eigen::VectorXd &WL) const;
+    int index, k, l, cat_k, cat_l, tau_offset_k, tau_offset_l, nthr, nloc_k, nloc_l, nloc, nslope_k, nslope_l, nreduced,
+      cell_offset, nload_k, first_corr, first_beta, nlocal, ncov_local, first_alpha, scale_pos_k, scale_pos_l, first_gamma,
+      first_kappa_k, first_kappa_l, nx;
+    bool standardised, numeric_k, numeric_l;
+    double rho, cov;
+    std::vector<int> theta_index;
+    Eigen::MatrixXd d_lambda_row_k, d_lambda_row_l, jacobian, d_pi_k, d_pi_l;
+    Eigen::VectorXd row_k, row_l, chol_row_k, chol_row_l, d_cov, d_cov_full, d_mu_k, d_mu_l, d_var_k, d_var_l, d_scale_k,
+      d_scale_l;
+    Pair(const model::Matrices &PAR, const int INDEX, const bool DERIVATIVES, const int ITEM = -1);
+    Pair(const model::Items &ITEMS, const int INDEX, const double RHO, const int NX);
+    std::vector<int> parameter_indices() const;
+    Eigen::VectorXd to_local(const Eigen::Ref<const Eigen::VectorXd> V) const;
+    void set_reduced_dims(const int NX);
+    void covariate_weights(const Eigen::Ref<const Eigen::VectorXd> X, const double YK, const double YL, Eigen::VectorXd &WK,
+                           Eigen::VectorXd &WL) const;
     void add_score(const double N, const Eigen::Ref<const Eigen::VectorXd> G, const Eigen::Ref<const Eigen::VectorXd> WK,
                    const Eigen::Ref<const Eigen::VectorXd> WL, Eigen::VectorXd &OUT) const;
     void add_info(const double N, const Eigen::Ref<const Eigen::MatrixXd> M, const Eigen::Ref<const Eigen::VectorXd> WK,
                   const Eigen::Ref<const Eigen::VectorXd> WL, Eigen::MatrixXd &OUT) const;
-    void add_scale(const double N, const Eigen::Ref<const Eigen::VectorXd> SCALE, Eigen::VectorXd &GU, Eigen::MatrixXd *M) const;
+    void add_log_scale(const double N, const Eigen::Ref<const Eigen::VectorXd> SCALE, Eigen::VectorXd &SCORE,
+                       Eigen::MatrixXd *INFO) const;
   };
 
-  Eigen::MatrixXd rho_hessian(const model::Setup &ST, const Pair &PR);
+  Eigen::MatrixXd cov_hessian(const model::Matrices &PAR, const Pair &PAIR);
 
-  Eigen::MatrixXd curvature(const model::Setup &ST, const Pair &PR, const Eigen::Ref<const Eigen::VectorXd> GU);
+  Eigen::MatrixXd reduced_curvature(const model::Matrices &PAR, const Pair &PAIR, const Eigen::Ref<const Eigen::VectorXd> SCORE);
 
-  double unit(const Reduced &R, const Data &D, const Pair &PR, Grid &G, const int U, const int ORDER, Work &W);
+  double unit_loglik(const Reduced &REDUCED, const GroupData &DATA, const Pair &PAIR, Grid &GRID, const int UNIT, const Order ORDER,
+                     UnitWork &WORK);
 
-  void moments(const model::Layout &L, const Reduced &R, const Data &D, const Pair &PR, const int ORDER, double &LL,
-               Eigen::VectorXd &GU, Eigen::MatrixXd &M, Eigen::MatrixXd *SC = nullptr);
+  void pair_loglik(const model::Items &ITEMS, const Reduced &REDUCED, const GroupData &DATA, const Pair &PAIR, const Order ORDER,
+                   double &LL, Eigen::VectorXd &SCORE, Eigen::MatrixXd &INFO, Eigen::MatrixXd *CELL_SCORES = nullptr);
 
-  void pair_contribution(const model::Setup &ST, const Data &D, const int R, const int ORDER, double &LL,
+  void add_pair_gradient(const model::Matrices &PAR, const GroupData &DATA, const int INDEX, const Order ORDER, double &LL,
                          Eigen::VectorXd &GRADIENT);
 
-  void univariate_contribution(const Eigen::Ref<const Eigen::VectorXd> TAU, const model::Layout &L,
-                               const Eigen::Ref<const Eigen::VectorXd> UFREQ, const int ORDER, double &LL,
-                               Eigen::VectorXd &GRADIENT, Eigen::MatrixXd &HESSIAN, Eigen::MatrixXd &USCORE,
-                               const Eigen::Ref<const Eigen::VectorXd> ITEMW = Eigen::VectorXd());
+  void univariate_margins(const Eigen::Ref<const Eigen::VectorXd> TAU, const model::Items &ITEMS,
+                          const Eigen::Ref<const Eigen::VectorXd> UFREQ, const Order ORDER, double &LL,
+                          Eigen::VectorXd &GRADIENT, Eigen::MatrixXd &HESSIAN, Eigen::MatrixXd &SCORES,
+                          const Eigen::Ref<const Eigen::VectorXd> ITEM_WEIGHTS = Eigen::VectorXd());
 
-  void univariate(const model::Setup &ST, const Data &D, const int ORDER, double &LL, Eigen::VectorXd &GRADIENT,
-                  Eigen::MatrixXd &HESSIAN, Eigen::MatrixXd &USCORE,
-                  const Eigen::Ref<const Eigen::VectorXd> ITEMW = Eigen::VectorXd());
+  void add_univariate(const model::Matrices &PAR, const GroupData &DATA, const Order ORDER, double &LL, Eigen::VectorXd &GRADIENT,
+                      Eigen::MatrixXd &HESSIAN, Eigen::MatrixXd &SCORES,
+                      const Eigen::Ref<const Eigen::VectorXd> ITEM_WEIGHTS = Eigen::VectorXd());
 
 }
 

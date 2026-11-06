@@ -36,17 +36,16 @@ fit_parameters <- function(object) {
 
 #' Diagnostics of the optimisation
 #'
-#' Reports how the optimiser behaved and whether its estimate is at the optimum of the pairwise likelihood, for every
-#' method. The distance is how far the estimate is from that optimum, in standard errors, predicted from the gradient. With
-#' stochastic approximation, the optimisation noise is the variability due to the pairs sampled, on top of the
-#' statistical variability.
-#'
 #' @param object A `lavaan.pl` object from [lavaan.pl()].
 #' @return An object of class `lavaanpl_diagnostics`: a list with the `method`, `converged` as in
-#'   `lavInspect(object, "converged")`, the run time `seconds`, the table of the phases `phases` (epochs and seconds; for
-#'   quasi-Newton, each evaluation of the pairwise likelihood counts as one epoch), the table of the checks `checks`
-#'   (`check`, `value`, and `ok`, `NA` when there is no rule), and the table of the free parameters `parameters`.
-#' @seealso [plot.lavaan.pl()]
+#'   `lavInspect(object, "converged")`, the run time `seconds`, the table of the phases `phases` (epochs and seconds;
+#'   for quasi-Newton, one epoch per evaluation of the pairwise likelihood), the table of the checks `checks` (`check`,
+#'   `value` and `ok`, `NA` without a rule), and the table of the free parameters `parameters`, with their distance from
+#'   the optimum and, for stochastic approximation, their optimisation noise, in standard errors.
+#' @seealso [plot.lavaan.pl()], [set_sa_control()]
+#' @examples
+#' fit <- pmlcfa("eta =~ y1 + y2 + y3 + y4 + y5", LSAT, std.lv = TRUE, control = set_sa_control(average_epochs = 20))
+#' diagnostics(fit)
 #' @export
 diagnostics <- function(object) {
   fit <- get_lavaanpl_internal(object)

@@ -19,5 +19,11 @@ set_qn_control(grtol = 1e-06, xtol = 1e-12, stepmax = 1, maxeval = 500)
 An object of class \code{lavaanpl_qn_control} to be passed to \code{\link[=lavaan.pl]{lavaan.pl()}} via \code{control}.
 }
 \description{
-The \code{QN} method: the exact pairwise likelihood estimate, by the BFGS optimiser of the \code{ucminf} package.
+Control options of the quasi-Newton method
+}
+\examples{
+fit <- pmlcfa("eta =~ y1 + y2 + y3 + y4 + y5", LSAT, std.lv = TRUE, control = set_qn_control(maxeval = 200))
+}
+\seealso{
+\code{\link[=lavaan.pl]{lavaan.pl()}}, \code{\link[ucminf:ucminf]{ucminf::ucminf()}}
 }

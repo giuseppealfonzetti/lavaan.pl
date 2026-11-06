@@ -4,42 +4,51 @@
 
 namespace model{
 
-  struct Layout{
-    int p, P, nthr, ncell, nnum;
-    Eigen::VectorXi cat, tk, inum;
-    std::vector<int> pk, pl, off;
-    Layout(const Eigen::Ref<const Eigen::VectorXd> C_VEC);
+  enum class LatCov {none, lkj, direct};
+
+  struct Items{
+    int p, npairs, nthr, ncell, nnum;
+    Eigen::VectorXi cat, tau_offset, numeric_index;
+    std::vector<int> pair_k, pair_l, cell_offset;
+    Items(const Eigen::Ref<const Eigen::VectorXd> CAT);
   };
 
-  struct Spec{
-    Layout L;
-    int p, q, corrflag, nload, ncorr, nvar, nreg, nres, nint, nmean, nscale, nx, ngam, nkap, d, ol, oc, ov, ob, orc, on, oa, os, og, ok;
-    bool direct, thetapar, plain;
-    std::vector<bool> thitem;
-    Eigen::MatrixXd constrmat, regmat, rescov, gamma, kappa;
-    Eigen::VectorXd constrlogsd, constrint, constrmean, constrlogscale;
-    std::vector<std::vector<int>> lidx, lfac, kidx, kcov;
-    std::vector<int> ra, ca, sfree, bi, bj, nidx, mfree, scidx, gfac, gcov;
-    Eigen::MatrixXi resid;
-    Spec(const Rcpp::List MODEL, const Eigen::Ref<const Eigen::VectorXd> C_VEC);
+  struct Blocks{
+    int lambda, corr, logsd, beta, rescov, nu, alpha, scale, gamma, kappa;
   };
 
-  struct Setup{
-    const Spec &S;
-    Eigen::VectorXd tau, sd, kappa, mu, v, th, s, taus, loc;
-    Eigen::MatrixXd Lam, Z, C, P, U, alpha, Sig, A, Lt, res, Gam, Pi, pis;
-    std::vector<Eigen::MatrixXd> J;
-    Setup(const Eigen::Ref<const Eigen::VectorXd> THETA, const Spec &SPEC);
-    double rc(const int K, const int L) const { return res.size() > 0 ? res(K, L) : 0; }
+  struct Structure{
+    Items items;
+    int p, q, nx, d, nload, ncorr, nvar, nreg, nres, nint, nmean, nscale, ngam, nkap;
+    Blocks first;
+    LatCov latcov;
+    bool theta_parameterization, standardised;
+    std::vector<bool> scale_from_rsd;
+    Eigen::MatrixXd lambda, beta, theta, gamma, kappa;
+    Eigen::VectorXd logsd, nu, alpha, logscale;
+    std::vector<std::vector<int>> lambda_index, lambda_factor, kappa_index, kappa_covariate;
+    std::vector<int> corr_row, corr_col, logsd_factor, beta_row, beta_col, nu_index, alpha_factor, scale_index,
+      gamma_factor, gamma_covariate;
+    Eigen::MatrixXi rescov_index;
+    Structure(const Rcpp::List MODEL, const Eigen::Ref<const Eigen::VectorXd> CAT);
+  };
+
+  struct Matrices{
+    const Structure &structure;
+    Eigen::VectorXd tau, sd, alpha, mu, common_var, residual_var, scale, tau_std, location;
+    Eigen::MatrixXd lambda, lkj_z, lkj_w, lkj_cumw, chol, dchol, psi, ib_inv, lambda_ib_inv, theta, gamma, pi, pi_std;
+    std::vector<Eigen::MatrixXd> lambda_jacobian;
+    Matrices(const Eigen::Ref<const Eigen::VectorXd> PARAMETER_VECTOR, const Structure &STRUCTURE);
+    double rescov(const int K, const int L) const { return theta.size() > 0 ? theta(K, L) : 0; }
   };
 
   struct Groups{
-    std::vector<Spec> S;
-    std::vector<int> off, poff;
-    int G, d, P;
+    std::vector<Structure> structure;
+    std::vector<int> parameter_offset, pair_offset;
+    int ngroups, d, npairs;
     double n;
     Groups(const Rcpp::List MODEL, const Rcpp::List DATA);
-    std::vector<Setup> setup(const Eigen::Ref<const Eigen::VectorXd> THETA) const;
+    std::vector<Matrices> matrices(const Eigen::Ref<const Eigen::VectorXd> PARAMETER_VECTOR) const;
   };
 
 }

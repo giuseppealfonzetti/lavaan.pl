@@ -10,14 +10,13 @@ lavaanpl_groups(MODELS, CONSTRAINTS = NULL)
 \item{MODELS}{List of model objects from \code{\link[=lavaanpl_model]{lavaanpl_model()}}, one per group in the order of the
 groups of \code{\link[=lavaanpl_data]{lavaanpl_data()}}, with the same number of items.}
 
-\item{CONSTRAINTS}{Linear equality constraints \code{A \%*\% parameter_vector = b} across groups, as
-\code{list(A = , b = )}, with one column of \code{A} per parameter in the order of \code{\link[=parameter_names]{parameter_names()}}: the
-parameters of the first group, then those of the second, and so on. Each model's own
-\code{CONSTRAINTS} apply within its group.}
+\item{CONSTRAINTS}{Linear equality constraints \code{A \%*\% parameter_vector = b} across groups, as \code{list(A = , b = )},
+with one column of \code{A} per parameter of \code{\link[=parameter_names]{parameter_names()}}, group after group. Each model's own \code{CONSTRAINTS}
+apply within its group.}
 }
 \value{
-An object of class \code{lavaanpl_groups} with \code{MODELS}, \code{CONSTRAINTS}, the number of items \code{p}
-and the number of groups \code{ngroups}, to be passed to \code{\link[=fit_lavaanpl]{fit_lavaanpl()}} via \code{MODEL}.
+An object of class \code{lavaanpl_groups} with \code{MODELS}, \code{CONSTRAINTS}, the number of items \code{p} and the number
+of groups \code{ngroups}, to be passed to \code{\link[=fit_lavaanpl]{fit_lavaanpl()}} via \code{MODEL}.
 }
 \description{
 Multigroup factor model for pairwise likelihood estimation

@@ -30,15 +30,15 @@ unit_scores <- function(fit, theta) {
     seq_len(data$n),
     function(i) {
       response <- data$Y[i, , drop = FALSE]
-      unit_data <- lapply(fit$engine$data, function(x) {
+      unit_data <- lapply(fit$cpp_inputs$data, function(x) {
         x$FREQ[] <- 0
         x$UFREQ[] <- 0
-        x$W[] <- 0
+        x$WEIGHTS[] <- 0
         x
       })
       group <- data$group[i] + 1
       if (any(data$numeric)) {
-        unit_data[[group]]$W[sum(data$group[seq_len(i)] == data$group[i])] <- 1
+        unit_data[[group]]$WEIGHTS[sum(data$group[seq_len(i)] == data$group[i])] <- 1
       }
       stratum <- data$stratum[i]
       freq <- lavaan.pl:::cpp_pairs_freq(response, data$cat)
@@ -50,7 +50,7 @@ unit_scores <- function(fit, theta) {
       if (length(unit_data[[group]]$UFREQ)) {
         unit_data[[group]]$UFREQ[stratum * length(ufreq) + seq_along(ufreq)] <- ufreq
       }
-      lavaan.pl:::cpp_pl(theta, fit$engine$model, unit_data, 1L)$gradient
+      lavaan.pl:::cpp_pl(theta, fit$cpp_inputs$model, unit_data, 1L)$gradient
     },
     numeric(length(theta))
   ))
@@ -67,18 +67,18 @@ pair_gradients <- function(fit, theta) {
   }
   Reduce(
     cbind,
-    lapply(seq_along(fit$engine$data), function(group) {
-      group_data <- fit$engine$data[[group]]
-      strata <- ncol(group_data$X)
+    lapply(seq_along(fit$cpp_inputs$data), function(group) {
+      group_data <- fit$cpp_inputs$data[[group]]
+      strata <- ncol(group_data$STRATA)
       gradient <- function(freq, ufreq) {
-        engine_data <- lapply(fit$engine$data, function(x) {
+        cpp_data <- lapply(fit$cpp_inputs$data, function(x) {
           x$FREQ[] <- 0
           x$UFREQ[] <- 0
           x
         })
-        engine_data[[group]]$FREQ <- freq
-        engine_data[[group]]$UFREQ <- ufreq
-        lavaan.pl:::cpp_pl(theta, fit$engine$model, engine_data, 1L)$gradient
+        cpp_data[[group]]$FREQ <- freq
+        cpp_data[[group]]$UFREQ <- ufreq
+        lavaan.pl:::cpp_pl(theta, fit$cpp_inputs$model, cpp_data, 1L)$gradient
       }
       univariate <- sapply(seq_len(data$p), function(j) {
         cells <- stacked(item_offsets[j] + seq_len(data$cat[j]), sum(data$cat), strata)
@@ -120,11 +120,11 @@ expect_derivatives <- function(fit) {
   theta[block == "kappa"] <- seq(-.2, .3, length.out = size("kappa"))
 
   pl <- function(x, order) {
-    lavaan.pl:::cpp_pl(x, fit$engine$model, fit$engine$data, order)
+    lavaan.pl:::cpp_pl(x, fit$cpp_inputs$model, fit$cpp_inputs$data, order)
   }
-  rho <- function(x) lavaan.pl:::cpp_rho(x, fit$engine$model, fit$engine$data)
+  rho <- function(x) lavaan.pl:::cpp_reduced_form(x, fit$cpp_inputs$model, fit$cpp_inputs$data)
   gradient <- pl(theta, 1L)$gradient
-  hj <- lavaan.pl:::cpp_HJ(theta, fit$engine$model, fit$engine$data)
+  hj <- lavaan.pl:::cpp_sandwich(theta, fit$cpp_inputs$model, fit$cpp_inputs$data)
   hessian_numeric <- -numDeriv::jacobian(
     function(x) pl(x, 1L)$gradient,
     theta
@@ -148,7 +148,7 @@ expect_derivatives <- function(fit) {
     per_pair <- pair_gradients(fit, theta)
     expect_equal(rowSums(per_pair), gradient)
     expect_equal(
-      lavaan.pl:::cpp_HJ(theta, fit$engine$model, fit$engine$data, TRUE)$pairvar,
+      lavaan.pl:::cpp_sandwich(theta, fit$cpp_inputs$model, fit$cpp_inputs$data, TRUE)$pairvar,
       tcrossprod(per_pair)
     )
   }
@@ -423,7 +423,7 @@ local({
   for (data in cases) {
     numeric_item <- data$numeric
     nx <- ncol(data$X)
-    engine_data <- lavaan.pl:::engine(
+    cpp_data <- lavaan.pl:::cpp_inputs(
       data,
       lavaan.pl:::lavaanpl_groups(list(lavaan.pl:::lavaanpl_model(
         build_constr_mat(6, 2, "simple"),
@@ -440,7 +440,7 @@ local({
     ni <- length(items_block)
     point <- c(items_block, seq(.1, .3, length.out = 15))
     saturated <- function(x, order, scores = FALSE) {
-      lavaan.pl:::cpp_saturated(x[1:ni], x[-(1:ni)], engine_data, order, scores)
+      lavaan.pl:::cpp_saturated(x[1:ni], x[-(1:ni)], cpp_data, order, scores)
     }
     at_point <- saturated(point, 2L)
     expect_equal(
@@ -454,7 +454,7 @@ local({
     expect_equal(at_point$htr, hessian_numeric[1:ni, -(1:ni)], tolerance = 1e-5)
     expect_equal(at_point$hrr, diag(hessian_numeric[-(1:ni), -(1:ni)]), tolerance = 1e-5)
     with_scores <- saturated(point, 1L, TRUE)
-    weights_rows <- engine_data$W
+    weights_rows <- cpp_data$WEIGHTS
     expect_equal(
       as.vector(with_scores$st %*% weights_rows),
       at_point$gradient[1:ni],
@@ -491,15 +491,15 @@ local({
     CONTROL = set_qn_control()
   )
   theta <- fit_weighted$parameter_vector + 0.05
-  hj_weighted <- lavaan.pl:::cpp_HJ(
+  hj_weighted <- lavaan.pl:::cpp_sandwich(
     theta,
-    fit_weighted$engine$model,
-    fit_weighted$engine$data
+    fit_weighted$cpp_inputs$model,
+    fit_weighted$cpp_inputs$data
   )
-  hj_replicated <- lavaan.pl:::cpp_HJ(
+  hj_replicated <- lavaan.pl:::cpp_sandwich(
     theta,
-    fit_replicated$engine$model,
-    fit_replicated$engine$data
+    fit_replicated$cpp_inputs$model,
+    fit_replicated$cpp_inputs$data
   )
   expect_equal(hj_weighted$H, hj_replicated$H)
   expect_equal(hj_weighted$J, hj_replicated$J)
@@ -519,10 +519,10 @@ local({
     CONTROL = set_qn_control()
   )
   theta <- fit_unweighted$parameter_vector + 0.05
-  hj <- lavaan.pl:::cpp_HJ(
+  hj <- lavaan.pl:::cpp_sandwich(
     theta,
-    fit_clustered$engine$model,
-    fit_clustered$engine$data
+    fit_clustered$cpp_inputs$model,
+    fit_clustered$cpp_inputs$data
   )
   weighted_scores <- unit_scores(fit_unweighted, theta) *
     fit_clustered$data$weights
@@ -550,10 +550,10 @@ local({
     CONTROL = set_qn_control()
   )
   theta <- fit_unclustered$parameter_vector + 0.05
-  hj <- lavaan.pl:::cpp_HJ(
+  hj <- lavaan.pl:::cpp_sandwich(
     theta,
-    fit_clustered$engine$model,
-    fit_clustered$engine$data
+    fit_clustered$cpp_inputs$model,
+    fit_clustered$cpp_inputs$data
   )
   scores <- unit_scores(fit_unclustered, theta)
   within_group <- lapply(1:2, function(g) {
@@ -567,17 +567,17 @@ local({
 #### Gradient and blocks of the Hessian of the saturated model ####
 local({
   data <- lavaan.pl:::lavaanpl_data(items_missing[, 4:9], MISSING = "available.cases")
-  engine_data <- list(
+  cpp_data <- list(
     N = data$n,
-    C_VEC = data$cat,
+    CAT = data$cat,
     TABLES = TRUE,
     FREQ = data$freq,
     UFREQ = data$ufreq,
-    X = matrix(0, 0, 1),
-    S = numeric(data$n),
-    W = rep(1, data$n),
+    STRATA = matrix(0, 0, 1),
+    STRATUM = numeric(data$n),
+    WEIGHTS = rep(1, data$n),
     Y = data$Y,
-    UW = data$uweights
+    UWEIGHTS = data$uweights
   )
   nthr <- sum(data$cat - 1)
   thresholds_and_correlations <- c(
@@ -588,7 +588,7 @@ local({
     lavaan.pl:::cpp_saturated(
       x[1:nthr],
       x[-(1:nthr)],
-      engine_data,
+      cpp_data,
       order,
       FALSE
     )

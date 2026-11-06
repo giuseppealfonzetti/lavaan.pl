@@ -51,14 +51,13 @@ model_dims <- function(DATA, MODEL) {
 #'
 #' @param DATA Data object from [lavaanpl_data()].
 #' @param MODEL Model object from [lavaanpl_model()].
-#' @return The names of the parameters in the order used by [fit_lavaanpl()]: thresholds `tau[i,k]`,
-#'   free loadings `lambda[j,h]`, latent correlation parameters `eta[r,c]` (or covariances `psi[r,c]`),
-#'   free latent log standard deviations `logsd[h]`, free regression coefficients `beta[i,j]`, free
-#'   residual covariances `theta[k,l]`, free intercepts `nu[j]`, free latent means `alpha[h]`, and free
-#'   log scale factors `logdelta[j]` or, with `PARAMETERIZATION = "theta"`, free log residual standard
-#'   deviations `logrsd[j]`, free regressions on the covariates `gamma[h,c]` and free direct effects of
-#'   the covariates `kappa[j,c]`. With [lavaanpl_groups()], the names of group 2 onwards end in `.g2`,
-#'   `.g3`, and so on.
+#' @return The names of the parameters in the order used by [fit_lavaanpl()]: thresholds `tau[i,k]`, then the free
+#'   loadings `lambda[j,h]`, latent correlation parameters `eta[r,c]` (covariances `psi[r,c]` with
+#'   `LATCOV = "direct"`), latent log standard deviations `logsd[h]`, regressions `beta[i,j]`, residual covariances
+#'   `theta[k,l]`, intercepts `nu[j]`, latent means `alpha[h]`, log scale factors `logdelta[j]` or log residual
+#'   standard deviations `logrsd[j]`, effects of the covariates `gamma[h,c]` and `kappa[j,c]`. With
+#'   [lavaanpl_groups()], the names of group 2 onwards end in `.g2`, `.g3`, and so on.
+#' @seealso [parameter_blocks()]
 #' @keywords internal
 parameter_names <- function(DATA, MODEL) {
   stopifnot(inherits(DATA, "lavaanpl_data"), inherits(MODEL, c("lavaanpl_model", "lavaanpl_groups")))
@@ -125,13 +124,11 @@ lkj_inv <- function(R) {
 #'
 #' @param MODEL Model object from [lavaanpl_model()] or [lavaanpl_groups()].
 #' @param PARAMETER_VECTOR Parameter vector, in the order of [parameter_names()].
-#' @param MATRICES List with the model matrices, named as in lavaan: the thresholds `tau`, the loadings `lambda`, the
-#'   latent (disturbance) covariance matrix `psi`, the regressions `beta`, the residual covariance matrix `theta` (with
-#'   the residual variances on the diagonal when `PARAMETERIZATION = "theta"`), the intercepts `nu`, the latent means
-#'   `alpha`, with `PARAMETERIZATION = "delta"`, the scale factors `delta` and, with covariates, their effects `gamma`
-#'   and `kappa`.
-#' @return `vector_to_matrices()` returns the list `MATRICES`, or with [lavaanpl_groups()] a list of them, one
-#'   per group; `matrices_to_vector()` returns the parameter vector.
+#' @param MATRICES List of model matrices named as in lavaan: `tau`, `lambda`, `psi`, `beta`, `theta`, `nu`, `alpha`,
+#'   `delta` and, with covariates, `gamma` and `kappa`.
+#' @return `vector_to_matrices()` returns the list `MATRICES`, or with [lavaanpl_groups()] one per group;
+#'   `matrices_to_vector()` returns the parameter vector.
+#' @seealso [parameter_names()]
 #' @keywords internal
 vector_to_matrices <- function(MODEL, PARAMETER_VECTOR) {
   stopifnot(inherits(MODEL, c("lavaanpl_model", "lavaanpl_groups")), is.numeric(PARAMETER_VECTOR))

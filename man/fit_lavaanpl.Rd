@@ -2,7 +2,7 @@
 % Please edit documentation in R/fit_lavaanpl.R
 \name{fit_lavaanpl}
 \alias{fit_lavaanpl}
-\title{Fit factor models for ordinal and numeric data with pairwise likelihood methods}
+\title{Fit factor models for ordinal and numeric data by pairwise likelihood}
 \usage{
 fit_lavaanpl(
   DATA,
@@ -18,29 +18,25 @@ fit_lavaanpl(
 
 \item{MODEL}{Model object from \code{\link[=lavaanpl_model]{lavaanpl_model()}}, or from \code{\link[=lavaanpl_groups]{lavaanpl_groups()}} for several groups.}
 
-\item{CONTROL}{Control object, which selects the method: \code{\link[=set_saqn_control]{set_saqn_control()}} for
-\code{SA-QN}, \code{\link[=set_sa_control]{set_sa_control()}} for \code{SA}, \code{\link[=set_qn_control]{set_qn_control()}} for \code{QN}.}
+\item{CONTROL}{Control object, which selects the method: \code{\link[=set_saqn_control]{set_saqn_control()}} for \code{SA-QN}, \code{\link[=set_sa_control]{set_sa_control()}} for
+\code{SA}, \code{\link[=set_qn_control]{set_qn_control()}} for \code{QN}.}
 
 \item{START}{Starting parameter vector, in the order of \code{\link[=parameter_names]{parameter_names()}}. If \code{NULL}, default values.}
 
-\item{NCORES}{Integer value setting the number of threads to carry out the
-estimation.}
+\item{NCORES}{Number of threads.}
 
-\item{VERBOSE}{\code{TRUE} for verbose output}
+\item{VERBOSE}{If \code{TRUE}, print progress.}
 }
 \value{
-Object of class \code{lavaanpl_internal}: a list with the inputs \code{data}, \code{model} and
-\code{control}, the starting values \code{init}, the estimates \code{parameter_vector} (use
-\code{\link[=vector_to_matrices]{vector_to_matrices()}}), the dimensions \code{dims}, the \code{method}, the optimiser output \code{stoFit} (\code{SA},
-the burn-in of \code{SA-QN}, with the pairwise log-likelihood reached from each start in
-\code{start_logl}) or \code{numFit} (\code{QN}, \code{SA-QN}), the variance \code{vars} at the estimate (\code{SA}), and
-the timing \code{RTime}.
+An object of class \code{lavaanpl_internal}: a list with the inputs \code{data}, \code{model} and \code{control}, the
+dimensions \code{dims}, the \code{method}, the constraints \code{lincon}, the parameter blocks \code{blocks}, the \code{\link[=cpp_inputs]{cpp_inputs()}}
+\code{cpp_inputs}, the starting values \code{init}, the estimates \code{parameter_vector}, the optimiser output \code{stoFit} (\code{SA},
+and the burn-in of \code{SA-QN}) and \code{numFit} (\code{QN}, \code{SA-QN}), the variance \code{vars} (\code{SA}), and the timing \code{RTime}.
 }
 \description{
-Fit latent variable models with one of three methods: the pairwise likelihood estimate by
-quasi-Newton BFGS started from the burn-in of stochastic approximation and its curvature
-(\code{SA-QN}, the default), pairwise stochastic approximation with Polyak-Ruppert averaging, whose
-standard errors account for the optimisation noise (\code{SA}), or quasi-Newton BFGS from the
-starting values alone (\code{QN}).
+Fit factor models for ordinal and numeric data by pairwise likelihood
+}
+\seealso{
+\code{\link[=vector_to_matrices]{vector_to_matrices()}}, \code{\link[=compute_var]{compute_var()}}
 }
 \keyword{internal}

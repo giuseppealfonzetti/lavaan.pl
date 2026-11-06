@@ -12,13 +12,11 @@ lavaan_matrices(template, WHAT)
 \item{WHAT}{\code{"free"}, \code{"est"} or \code{"start"} for \code{\link[lavaan:lavInspect]{lavaan::lavInspect()}}, or a list of the model matrices of each group.}
 }
 \value{
-A list with the matrices of each group, including \code{gamma} (latent variables on covariates) and \code{kappa}
-(items on covariates).
+A list with the matrices of each group, without lavaan's phantom latent variables for items regressed on
+covariates, and with \code{gamma} (latent variables on covariates) and \code{kappa} (items on covariates).
 }
 \description{
-lavaan represents the regression of an item on a covariate with a phantom latent variable named after the item.
-Here the phantom is removed: its row of \code{gamma} is the row of the item in \code{kappa}, its row of \code{beta} that of the
-item in \code{lambda}, its variance the residual variance of the item and its mean the intercept of the item.
+Model matrices of a lavaan model, for lavaan.pl
 }
 \seealso{
 \code{\link[=spec_from_lavaan]{spec_from_lavaan()}}, \code{\link[=create_lav_from_lavaanpl]{create_lav_from_lavaanpl()}}
