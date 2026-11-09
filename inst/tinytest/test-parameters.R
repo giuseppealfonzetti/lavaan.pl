@@ -95,7 +95,7 @@ local({
   fit <- lavaan.pl:::fit_lavaanpl(
     lavaan.pl:::lavaanpl_data(bfi_items),
     lavaan.pl:::lavaanpl_model(replace(build_constr_mat(6, 2, "simple"), cbind(c(1, 4), 1:2), 1), PSI = matrix(NA, 2, 2)),
-    CONTROL = set_qn_control()
+    CONTROL = set_control("QN")
   )
   par <- lavaan.pl:::vector_to_matrices(fit$model, fit$parameter_vector)[[1]]
   expect_identical(
@@ -116,11 +116,11 @@ for (stdlv in c(TRUE, FALSE)) {
   local({
     loadings <- if (stdlv) three_factors else three_markers
     psi <- if (!stdlv) matrix(NA, 3, 3)
-    fit_lkj <- lavaan.pl:::fit_lavaanpl(data, lavaan.pl:::lavaanpl_model(loadings, psi), CONTROL = set_qn_control())
+    fit_lkj <- lavaan.pl:::fit_lavaanpl(data, lavaan.pl:::lavaanpl_model(loadings, psi), CONTROL = set_control("QN"))
     fit_direct <- lavaan.pl:::fit_lavaanpl(
       data,
       lavaan.pl:::lavaanpl_model(loadings, psi, LATCOV = "direct"),
-      CONTROL = set_qn_control()
+      CONTROL = set_control("QN")
     )
     vars_lkj <- lavaan.pl:::compute_var(fit_lkj)
     vars_direct <- lavaan.pl:::compute_var(fit_direct)
@@ -169,7 +169,7 @@ local({
         b = 0
       )
     ),
-    CONTROL = set_qn_control()
+    CONTROL = set_control("QN")
   )
   expect_equal(lavaan.pl:::vector_to_matrices(fit$model, fit$parameter_vector)[[1]]$psi[1, 3], 0)
 })
@@ -179,7 +179,7 @@ local({
   fit_correlated <- lavaan.pl:::fit_lavaanpl(
     data,
     lavaan.pl:::lavaanpl_model(three_markers, PSI = matrix(NA, 3, 3)),
-    CONTROL = set_qn_control()
+    CONTROL = set_control("QN")
   )
   fit_saturated <- lavaan.pl:::fit_lavaanpl(
     data,
@@ -188,7 +188,7 @@ local({
       PSI = diag(NA, 3),
       BETA = regressions
     ),
-    CONTROL = set_qn_control()
+    CONTROL = set_control("QN")
   )
   fit_restricted <- lavaan.pl:::fit_lavaanpl(
     data,
@@ -197,7 +197,7 @@ local({
       PSI = diag(NA, 3),
       BETA = replace(regressions, 3, 0)
     ),
-    CONTROL = set_qn_control()
+    CONTROL = set_control("QN")
   )
   par_saturated <- lavaan.pl:::vector_to_matrices(fit_saturated$model, fit_saturated$parameter_vector)[[1]]
   total_effects <- solve(diag(3) - par_saturated$beta)
@@ -235,7 +235,7 @@ local({
       BETA = regressions,
       THETA = fixed_and_free
     ),
-    CONTROL = set_qn_control()
+    CONTROL = set_control("QN")
   )
   expect_equal(lavaan.pl:::vector_to_matrices(fit$model, fit$parameter_vector)[[1]]$theta[2, 1], 0.1)
 })

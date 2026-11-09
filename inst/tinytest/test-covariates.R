@@ -25,7 +25,7 @@ model <- lavaan.pl:::lavaanpl_model(
   PSI = matrix(NA),
   GAMMA = matrix(NA, 1, 2)
 )
-fit <- lavaan.pl:::fit_lavaanpl(data, model, CONTROL = set_qn_control())
+fit <- lavaan.pl:::fit_lavaanpl(data, model, CONTROL = set_control("QN"))
 
 #### Covariates define the strata of the frequency tables ####
 local({
@@ -80,7 +80,7 @@ local({
     A = unname(rbind(equalities, additive)),
     b = numeric(nrow(equalities) + 1)
   )
-  fit_groups <- lavaan.pl:::fit_lavaanpl(data_groups, groups, CONTROL = set_qn_control())
+  fit_groups <- lavaan.pl:::fit_lavaanpl(data_groups, groups, CONTROL = set_control("QN"))
   par_groups <- lavaan.pl:::vector_to_matrices(groups, fit_groups$parameter_vector)
   par <- lavaan.pl:::vector_to_matrices(fit$model, fit$parameter_vector)[[1]]
   expect_equal(par$tau, par_groups[[1]]$tau, tolerance = 1e-4)
@@ -104,8 +104,8 @@ local({
 
 #### Covariates in the data with no effect in the model leave the fit unchanged ####
 local({
-  plain <- lavaan.pl:::fit_lavaanpl(lavaan.pl:::lavaanpl_data(items), lavaan.pl:::lavaanpl_model(loadings_structure), CONTROL = set_qn_control())
-  ignored <- lavaan.pl:::fit_lavaanpl(data, lavaan.pl:::lavaanpl_model(loadings_structure), CONTROL = set_qn_control())
+  plain <- lavaan.pl:::fit_lavaanpl(lavaan.pl:::lavaanpl_data(items), lavaan.pl:::lavaanpl_model(loadings_structure), CONTROL = set_control("QN"))
+  ignored <- lavaan.pl:::fit_lavaanpl(data, lavaan.pl:::lavaanpl_model(loadings_structure), CONTROL = set_control("QN"))
   expect_equal(ignored$parameter_vector, plain$parameter_vector, tolerance = 1e-5)
 })
 
@@ -131,7 +131,7 @@ local({
       GAMMA = matrix(NA, 1, 2),
       KAPPA = kappa
     ),
-    CONTROL = set_qn_control()
+    CONTROL = set_control("QN")
   )
   par <- lavaan.pl:::vector_to_matrices(fit_direct$model, fit_direct$parameter_vector)[[1]]
   expect_true(par$kappa[1, 2] > .5)
@@ -160,7 +160,7 @@ local({
   fit_replicated <- lavaan.pl:::fit_lavaanpl(
     lavaan.pl:::lavaanpl_data(items[rows, ], X = binary[rows, ]),
     model,
-    CONTROL = set_qn_control()
+    CONTROL = set_control("QN")
   )
   fit_weighted <- lavaan.pl:::fit_lavaanpl(
     lavaan.pl:::lavaanpl_data(
@@ -170,7 +170,7 @@ local({
       WEIGHTS_TYPE = "frequency"
     ),
     model,
-    CONTROL = set_qn_control()
+    CONTROL = set_control("QN")
   )
   expect_equal(fit_weighted$parameter_vector, fit_replicated$parameter_vector, tolerance = 1e-5)
 })
@@ -182,7 +182,7 @@ local({
     lavaan.pl:::fit_lavaanpl(
       lavaan.pl:::lavaanpl_data(items),
       lavaan.pl:::lavaanpl_model(loadings_structure, GAMMA = matrix(NA, 1, 2)),
-      CONTROL = set_qn_control()
+      CONTROL = set_control("QN")
     ),
     "one column per covariate"
   )
@@ -195,7 +195,7 @@ local({
   distance <- function(x) {
     max(abs(lavaan.pl:::transform_parameters(x$model, x$parameter_vector) - lavaan.pl:::transform_parameters(fit$model, fit$parameter_vector)) / se)
   }
-  fit_sa <- lavaan.pl:::fit_lavaanpl(data, model, CONTROL = set_sa_control(pairs_per_iteration = 4))
+  fit_sa <- lavaan.pl:::fit_lavaanpl(data, model, CONTROL = set_control("SA", pairs_per_iteration = 4))
   expect_true(fit_sa$stoFit$converged)
   expect_true(distance(fit_sa) < 1)
   vars_sa <- lavaan.pl:::compute_var(fit_sa)
@@ -238,7 +238,7 @@ local({
     start <- suppressWarnings(lavaan.pl:::fit_lavaanpl(
       case$data,
       case$model,
-      CONTROL = set_qn_control(maxeval = 1)
+      CONTROL = set_control("QN", maxeval = 1)
     ))
     theta <- start$init + 0.05
     with_tables <- lavaan.pl:::cpp_inputs(case$data, start$model, TRUE)
@@ -305,7 +305,7 @@ local({
     PSI = matrix(NA),
     GAMMA = matrix(NA, 1, 2)
   )
-  fit_continuous <- lavaan.pl:::fit_lavaanpl(data_continuous, model_continuous, CONTROL = set_qn_control())
+  fit_continuous <- lavaan.pl:::fit_lavaanpl(data_continuous, model_continuous, CONTROL = set_control("QN"))
   vars <- lavaan.pl:::compute_var(fit_continuous)
   se <- sqrt(vars$asymptotic_variance / n)
   gamma <- as.vector(lavaan.pl:::vector_to_matrices(fit_continuous$model, fit_continuous$parameter_vector)[[1]]$gamma)
@@ -313,7 +313,7 @@ local({
   fit_sa <- lavaan.pl:::fit_lavaanpl(
     data_continuous,
     model_continuous,
-    CONTROL = set_sa_control(pairs_per_iteration = 4)
+    CONTROL = set_control("SA", pairs_per_iteration = 4)
   )
   expect_true(fit_sa$stoFit$converged)
   expect_true(max(abs(
@@ -332,7 +332,7 @@ local({
   theta <- suppressWarnings(lavaan.pl:::fit_lavaanpl(
     data_available,
     model_gamma,
-    CONTROL = set_qn_control(maxeval = 1)
+    CONTROL = set_control("QN", maxeval = 1)
   ))$init
   pl <- function(x) {
     inputs <- lavaan.pl:::cpp_inputs(x, lavaan.pl:::lavaanpl_groups(list(model_gamma)))
@@ -350,7 +350,7 @@ local({
     sum(data_available$uweights[observed] * log(probability))
   }))
   expect_equal(pl(data_available) - pl(data_pairwise), univariate, tolerance = 1e-8)
-  fit_available <- lavaan.pl:::fit_lavaanpl(data_available, model_gamma, CONTROL = set_qn_control())
+  fit_available <- lavaan.pl:::fit_lavaanpl(data_available, model_gamma, CONTROL = set_control("QN"))
   expect_true(max(abs(
     lavaan.pl:::cpp_pl(fit_available$parameter_vector, fit_available$cpp_inputs$model, fit_available$cpp_inputs$data, 1L)$gradient
   )) / n < 1e-4)
@@ -367,14 +367,14 @@ local({
   fit_nested <- lavaan.pl:::fit_lavaanpl(
     data,
     lavaan.pl:::lavaanpl_model(loadings_markers, PSI = matrix(NA), GAMMA = gamma_fixed),
-    CONTROL = set_qn_control()
+    CONTROL = set_control("QN")
   )
   difference <- lavaan.pl:::compute_plrt(fit_nested, H1 = fit)$model
   pl <- function(x) lavaan.pl:::cpp_pl(x$parameter_vector, x$cpp_inputs$model, x$cpp_inputs$data)$pl
   expect_equal(difference$stat, 2 * (pl(fit) - pl(fit_nested)))
   expect_equal(difference$df, 1)
   expect_true(difference$pvalue.scaled < .05)
-  fit_without <- lavaan.pl:::fit_lavaanpl(data, lavaan.pl:::lavaanpl_model(loadings_markers, PSI = matrix(NA)), CONTROL = set_qn_control())
+  fit_without <- lavaan.pl:::fit_lavaanpl(data, lavaan.pl:::lavaanpl_model(loadings_markers, PSI = matrix(NA)), CONTROL = set_control("QN"))
   expect_equal(
     lavaan.pl:::compute_plrt(fit_without, H1 = fit_nested)$model$df,
     1
@@ -383,7 +383,7 @@ local({
   fit_units <- lavaan.pl:::fit_lavaanpl(
     data_units,
     lavaan.pl:::lavaanpl_model(loadings_structure, GAMMA = matrix(NA, 1, 3)),
-    CONTROL = set_qn_control()
+    CONTROL = set_control("QN")
   )
   expect_false(data_units$tables)
   test_units <- lavaan.pl:::compute_plrt(fit_units, lavaan.pl:::compute_var(fit_units))
@@ -400,7 +400,7 @@ local({
   mimic$x1 <- binary[, 1]
   mimic$x2 <- binary[, 2]
   syntax <- "f =~ y1 + y2 + y3 + y4 + y5 + y6\nf ~ x1 + x2"
-  fit_sem <- pmlsem(syntax, mimic, optim.method = "QN")
+  fit_sem <- pmlsem(syntax, mimic, control = set_control("QN"))
   expect_equal(fit_sem@external$lavaanpl_internal$dims$ngam, 2)
   expect_equal(
     unname(coef(fit_sem)[c("f~x1", "f~x2")]),
@@ -417,7 +417,7 @@ local({
     pmlsem("f =~ y1 + y2 + y3 + y4 + y5 + y6\ny5 ~ y6", mimic),
     "exogenous covariates"
   )
-  fit_sa <- pmlsem(syntax, mimic, control = set_sa_control(pairs_per_iteration = 4))
+  fit_sa <- pmlsem(syntax, mimic, control = set_control("SA", pairs_per_iteration = 4))
   expect_true(lavaan::lavInspect(fit_sa, "converged"))
   with_missing <- mimic
   with_missing$y2[1:100] <- NA
@@ -439,9 +439,9 @@ local({
   age <- round(rnorm(n, 40, 10))
   items_age <- simulate_mimic(n, p, cbind(age - 40), -.05, 22)
   model_age <- lavaan.pl:::lavaanpl_model(loadings_structure, GAMMA = matrix(NA, 1, 1))
-  fit_raw <- lavaan.pl:::fit_lavaanpl(lavaan.pl:::lavaanpl_data(items_age, X = cbind(age)), model_age, CONTROL = set_qn_control())
-  fit_centred <- lavaan.pl:::fit_lavaanpl(lavaan.pl:::lavaanpl_data(items_age, X = cbind(age - 40)), model_age, CONTROL = set_qn_control())
-  fit_scaled <- lavaan.pl:::fit_lavaanpl(lavaan.pl:::lavaanpl_data(items_age, X = cbind(1000 * age)), model_age, CONTROL = set_qn_control())
+  fit_raw <- lavaan.pl:::fit_lavaanpl(lavaan.pl:::lavaanpl_data(items_age, X = cbind(age)), model_age, CONTROL = set_control("QN"))
+  fit_centred <- lavaan.pl:::fit_lavaanpl(lavaan.pl:::lavaanpl_data(items_age, X = cbind(age - 40)), model_age, CONTROL = set_control("QN"))
+  fit_scaled <- lavaan.pl:::fit_lavaanpl(lavaan.pl:::lavaanpl_data(items_age, X = cbind(1000 * age)), model_age, CONTROL = set_control("QN"))
   par_raw <- lavaan.pl:::vector_to_matrices(fit_raw$model, fit_raw$parameter_vector)[[1]]
   par_centred <- lavaan.pl:::vector_to_matrices(fit_centred$model, fit_centred$parameter_vector)[[1]]
   expect_equal(abs(par_raw$lambda), abs(par_centred$lambda), tolerance = 1e-4)
@@ -459,18 +459,18 @@ local({
   fit_started <- lavaan.pl:::fit_lavaanpl(
     lavaan.pl:::lavaanpl_data(items_age, X = cbind(age)),
     model_age,
-    CONTROL = set_saqn_control()
+    CONTROL = set_control()
   )
   expect_equal(pl(fit_started)$pl, pl(fit_centred)$pl, tolerance = 1e-8)
   fit_sa <- lavaan.pl:::fit_lavaanpl(
     lavaan.pl:::lavaanpl_data(items_age, X = cbind(age)),
     model_age,
-    CONTROL = set_sa_control(pairs_per_iteration = 4)
+    CONTROL = set_control("SA", pairs_per_iteration = 4)
   )
   expect_true(fit_sa$stoFit$converged)
   expect_equal(pl(fit_sa)$pl, pl(fit_centred)$pl, tolerance = 1e-4)
   fixed <- lavaan.pl:::lavaanpl_model(loadings_structure, GAMMA = matrix(0.01, 1, 1))
-  fit_fixed <- lavaan.pl:::fit_lavaanpl(lavaan.pl:::lavaanpl_data(items_age, X = cbind(age)), fixed, CONTROL = set_qn_control())
+  fit_fixed <- lavaan.pl:::fit_lavaanpl(lavaan.pl:::lavaanpl_data(items_age, X = cbind(age)), fixed, CONTROL = set_control("QN"))
   expect_equal(as.vector(lavaan.pl:::vector_to_matrices(fit_fixed$model, fit_fixed$parameter_vector)[[1]]$gamma), 0.01)
   expect_true(max(abs(pl(fit_fixed)$gradient)) / n < 1e-3)
   expect_message(
@@ -481,7 +481,7 @@ local({
         GAMMA = matrix(NA, 1, 1),
         CONSTRAINTS = list(A = matrix(replace(numeric(25), 1, 1), 1), b = -1)
       ),
-      CONTROL = set_qn_control()
+      CONTROL = set_control("QN")
     )),
     "consider centring"
   )
@@ -490,7 +490,7 @@ local({
 #### ucminf warns when it stops with a large gradient ####
 local({
   expect_warning(
-    lavaan.pl:::fit_lavaanpl(data, model, CONTROL = set_qn_control(maxeval = 1)),
+    lavaan.pl:::fit_lavaanpl(data, model, CONTROL = set_control("QN", maxeval = 1)),
     "may not be at an optimum"
   )
 })

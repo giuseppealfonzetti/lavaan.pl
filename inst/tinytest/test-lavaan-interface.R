@@ -44,8 +44,8 @@ local({
 
 #### std.lv gives the same fit ####
 local({
-  fit_marker <- pmlcfa(three_factors, bfi, std.lv = FALSE, control = set_qn_control())
-  fit_stdlv <- pmlcfa(three_factors, bfi, std.lv = TRUE, control = set_qn_control())
+  fit_marker <- pmlcfa(three_factors, bfi, std.lv = FALSE, control = set_control("QN"))
+  fit_stdlv <- pmlcfa(three_factors, bfi, std.lv = TRUE, control = set_control("QN"))
   expect_equal(
     fit_marker@external$lavaanpl_internal$numFit$value,
     fit_stdlv@external$lavaanpl_internal$numFit$value
@@ -59,7 +59,7 @@ local({
     three_factors,
     bfi,
     std.lv = TRUE,
-    control = set_sa_control(),
+    control = set_control("SA"),
     se = "none"
   ))
   expect_inherits(fit, "lavaan.pl")
@@ -115,11 +115,11 @@ local({
       std.lv = TRUE,
       control = list(ctrl = list(maxeval = 5))
     ),
-    "set_qn_control"
+    "set_control"
   )
   expect_error(
     pmlcfa(lsat_model, LSAT, std.lv = TRUE, estimator.args = list(method = "SA")),
-    "optim.method"
+    "set_control"
   )
   expect_error(
     pmlcfa(
@@ -135,7 +135,7 @@ local({
     LSAT,
     std.lv = TRUE,
     se = "none",
-    control = set_qn_control(maxeval = 5)
+    control = set_control("QN", maxeval = 5)
   )
   expect_true(fit@external$lavaanpl_internal$numFit$info[["neval"]] <= 5)
 })
@@ -203,13 +203,13 @@ local({
     three_factors_four_items,
     bfi_sample,
     std.lv = TRUE,
-    control = set_qn_control()
+    control = set_control("QN")
   )
   fit_higher_order <- pmlsem(
     paste(three_factors_four_items, "\nG =~ A + C + E"),
     bfi_sample,
     std.lv = TRUE,
-    control = set_qn_control()
+    control = set_control("QN")
   )
   expect_equal(
     fit_higher_order@optim$logl,
@@ -237,12 +237,12 @@ local({
   expect_true(difference[2, "Chisq diff"] > 0)
 })
 
-#### optim.method selects the algorithm, and is shown by lavaan ####
+#### control selects the algorithm, which is shown by lavaan ####
 local({
   fits <- list(
     `SA-QN` = pmlcfa(lsat_model, LSAT, std.lv = TRUE),
-    SA = pmlcfa(lsat_model, LSAT, std.lv = TRUE, optim.method = "SA"),
-    QN = pmlcfa(lsat_model, LSAT, std.lv = TRUE, optim.method = "QN")
+    SA = pmlcfa(lsat_model, LSAT, std.lv = TRUE, control = set_control("SA")),
+    QN = pmlcfa(lsat_model, LSAT, std.lv = TRUE, control = set_control("QN"))
   )
   for (method in names(fits)) {
     expect_identical(fits[[method]]@external$lavaanpl_internal$method, method)
@@ -251,15 +251,16 @@ local({
   }
   expect_equal(unname(coef(fits$`SA-QN`)), unname(coef(fits$QN)), tolerance = 1e-4)
   expect_identical(
-    pmlcfa(lsat_model, LSAT, std.lv = TRUE, optim.method = "SA", control = set_sa_control(average_epochs = 5))@external$lavaanpl_internal$control$average_epochs,
+    pmlcfa(lsat_model, LSAT, std.lv = TRUE, control = set_control("SA", average_epochs = 5))@external$lavaanpl_internal$control$average_epochs,
     5L
   )
   expect_identical(
-    pmlcfa(lsat_model, LSAT, std.lv = TRUE, control = set_sa_control())@external$lavaanpl_internal$method,
+    pmlcfa(lsat_model, LSAT, std.lv = TRUE, control = set_control("SA"))@external$lavaanpl_internal$method,
     "SA"
   )
-  expect_error(pmlcfa(lsat_model, LSAT, std.lv = TRUE, optim.method = "nlminb"), "must be")
-  expect_error(pmlcfa(lsat_model, LSAT, std.lv = TRUE, optim.method = "QN", control = set_sa_control()), "is for SA")
+  expect_error(pmlcfa(lsat_model, LSAT, std.lv = TRUE, optim.method = "QN"), "set_control")
+  expect_error(pmlcfa(lsat_model, LSAT, std.lv = TRUE, optim_method = "QN"), "set_control")
+  expect_error(pmlcfa(lsat_model, LSAT, std.lv = TRUE, control = NULL), "must be created")
   expect_error(pmlcfa(lsat_model, LSAT, std.lv = TRUE, control = list()), "must be created")
 })
 
@@ -292,7 +293,7 @@ local({
 
 #### lavaan's snake_case options are understood ####
 local({
-  fit <- pmlcfa(lsat_model, LSAT, std_lv = TRUE, optim_method = "QN")
+  fit <- pmlcfa(lsat_model, LSAT, std_lv = TRUE, control = set_control("QN"))
   expect_true(fit@Options$std.lv)
   expect_identical(fit@external$lavaanpl_internal$method, "QN")
   expect_identical(fit@Options$optim.method, "QN")

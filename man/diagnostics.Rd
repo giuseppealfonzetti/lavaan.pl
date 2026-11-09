@@ -20,9 +20,9 @@ the optimum and, for stochastic approximation, their optimisation noise, in stan
 Diagnostics of the optimisation
 }
 \examples{
-fit <- pmlcfa("eta =~ y1 + y2 + y3 + y4 + y5", LSAT, std.lv = TRUE, control = set_sa_control(average_epochs = 20))
+fit <- pmlcfa("eta =~ y1 + y2 + y3 + y4 + y5", LSAT, std.lv = TRUE, control = set_control("SA", average_epochs = 20))
 diagnostics(fit)
 }
 \seealso{
-\code{\link[=plot.lavaan.pl]{plot.lavaan.pl()}}, \code{\link[=set_sa_control]{set_sa_control()}}
+\code{\link[=plot.lavaan.pl]{plot.lavaan.pl()}}, \code{\link[=set_control]{set_control()}}
 }

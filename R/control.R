@@ -294,18 +294,59 @@ lavaanpl_groups <- function(MODELS, CONSTRAINTS = NULL) {
   out
 }
 
-#' Control options of the quasi-Newton method
+#' Control options of the estimation
 #'
-#' @param grtol Tolerance on the largest absolute gradient element.
-#' @param xtol Tolerance on the relative step length.
-#' @param stepmax Initial maximal step length of the trust region.
-#' @param maxeval Maximum number of function evaluations.
+#' @param method Estimation method: `"SA-QN"` (quasi-Newton from the burn-in of stochastic approximation), `"SA"`
+#'   (pairwise stochastic approximation) or `"QN"` (quasi-Newton).
+#' @param ... Options of `method`, each with a default. `"QN"` takes the quasi-Newton options, `"SA"` the stochastic
+#'   approximation options, and `"SA-QN"` both, except `average_epochs`, `decay`, `avg_from` and `gain`, plus `nstarts`.
 #'
-#' @return An object of class `lavaanpl_qn_control` to be passed to [lavaan.pl()] via `control`.
-#' @seealso [lavaan.pl()], [ucminf::ucminf()]
+#'   Quasi-Newton options:
+#'   \describe{
+#'     \item{`grtol`}{Tolerance on the largest absolute gradient element. Default `1e-6`.}
+#'     \item{`xtol`}{Tolerance on the relative step length. Default `1e-12`.}
+#'     \item{`stepmax`}{Initial maximal step length of the trust region. Default `1`.}
+#'     \item{`maxeval`}{Maximum number of function evaluations. Default `500`.}
+#'   }
+#'
+#'   Stochastic approximation options:
+#'   \describe{
+#'     \item{`pairs_per_iteration`}{Number of item pairs drawn at each iteration. Default `16`.}
+#'     \item{`alpha`}{Step length of the Adam phase. Default `0.2`.}
+#'     \item{`adam_epochs`}{Maximum number of epochs (passes over the item pairs) of the Adam phase. If `NULL`, the
+#'       default, enough for 5 epochs and 150 iterations.}
+#'     \item{`precondition_epochs`}{Number of epochs of the preconditioning phase. With `0`, the gain is computed at the
+#'       end of the Adam phase. Default `3`.}
+#'     \item{`max_precondition_epochs`}{Maximum number of preconditioning epochs while the observed information is not
+#'       positive definite. Default `20`.}
+#'     \item{`average_epochs`}{Number of epochs of the averaged phase, at least 1. Default `50`.}
+#'     \item{`tol`}{Change of the pairwise log-likelihood between epochs, per free parameter, below which the Adam and
+#'       preconditioning phases stop early. Default `0.05`.}
+#'     \item{`decay`}{Exponent of the step length decay in the averaged phase, between 0.5 and 1. Default `0.75`.}
+#'     \item{`avg_from`}{Fraction of the averaged phase discarded before averaging. Default `0.25`.}
+#'     \item{`gain`}{Gain of the preconditioning and averaged phases: `"hessian"` (inverse observed information),
+#'       `"diagonal"` (Adam's diagonal preconditioner, no preconditioning phase), or `"auto"`, the default (`"hessian"`
+#'       up to 2000 free parameters).}
+#'     \item{`seed`}{Seed of the pair sampling. Default `123`.}
+#'   }
+#'
+#'   `"SA-QN"` also takes:
+#'   \describe{
+#'     \item{`nstarts`}{Number of runs, with seeds `seed`, `seed + 1` and so on. The highest pairwise log-likelihood is
+#'       kept, with a warning if the runs disagree. Default `1`.}
+#'   }
+#'
+#' @return A control object to be passed to [lavaan.pl()] via `control`.
+#' @seealso [lavaan.pl()], [diagnostics()], [ucminf::ucminf()]
 #' @examples
-#' fit <- pmlcfa("eta =~ y1 + y2 + y3 + y4 + y5", LSAT, std.lv = TRUE, control = set_qn_control(maxeval = 200))
+#' fit <- pmlcfa("eta =~ y1 + y2 + y3 + y4 + y5", LSAT, std.lv = TRUE, control = set_control("QN", maxeval = 200))
 #' @export
+set_control <- function(method = c("SA-QN", "SA", "QN"), ...) {
+  method <- match.arg(method)
+  switch(method, `SA-QN` = set_saqn_control(...), SA = set_sa_control(...), QN = set_qn_control(...))
+}
+
+#' @noRd
 set_qn_control <- function(
   grtol = 1e-6,
   xtol = 1e-12,
@@ -323,31 +364,7 @@ set_qn_control <- function(
   out
 }
 
-#' Control options of the pairwise stochastic approximation
-#'
-#' @param pairs_per_iteration Number of item pairs drawn at each iteration.
-#' @param alpha Step length of the Adam phase.
-#' @param adam_epochs Maximum number of epochs (passes over the item pairs) of the Adam phase. If `NULL`, enough for 5 epochs
-#'   and 150 iterations.
-#' @param precondition_epochs Number of epochs of the preconditioning phase. With `0`, the gain is computed at the end of
-#'   the Adam phase.
-#' @param max_precondition_epochs Maximum number of preconditioning epochs while the observed information is not
-#'   positive definite.
-#' @param average_epochs Number of epochs of the averaged phase, at least 1.
-#' @param tol Change of the pairwise log-likelihood between epochs, per free parameter, below which the Adam and
-#'   preconditioning phases stop early.
-#' @param decay Exponent of the step length decay in the averaged phase, between 0.5 and 1.
-#' @param avg_from Fraction of the averaged phase discarded before averaging.
-#' @param gain Gain of the preconditioning and averaged phases: `"hessian"` (inverse observed information),
-#'   `"diagonal"` (Adam's diagonal preconditioner, no preconditioning phase), or `"auto"` (`"hessian"` up to 2000 free
-#'   parameters).
-#' @param seed Seed of the pair sampling.
-#'
-#' @return An object of class `lavaanpl_sa_control` to be passed to [lavaan.pl()] via `control`.
-#' @seealso [lavaan.pl()], [diagnostics()]
-#' @examples
-#' fit <- pmlcfa("eta =~ y1 + y2 + y3 + y4 + y5", LSAT, std.lv = TRUE, control = set_sa_control(average_epochs = 20))
-#' @export
+#' @noRd
 set_sa_control <- function(
   pairs_per_iteration = 16,
   alpha = 0.2,
@@ -384,18 +401,7 @@ set_sa_control <- function(
   out
 }
 
-#' Control options of quasi-Newton from the burn-in of stochastic approximation
-#'
-#' @inheritParams set_sa_control
-#' @inheritParams set_qn_control
-#' @param nstarts Number of runs, with seeds `seed`, `seed + 1` and so on. The highest pairwise log-likelihood is kept,
-#'   with a warning if the runs disagree.
-#'
-#' @return An object of class `lavaanpl_saqn_control` to be passed to [lavaan.pl()] via `control`.
-#' @seealso [lavaan.pl()], [set_sa_control()], [set_qn_control()]
-#' @examples
-#' fit <- pmlcfa("eta =~ y1 + y2 + y3 + y4 + y5", LSAT, std.lv = TRUE, control = set_saqn_control(nstarts = 2))
-#' @export
+#' @noRd
 set_saqn_control <- function(
   pairs_per_iteration = 16,
   alpha = 0.2,
@@ -424,7 +430,7 @@ set_saqn_control <- function(
 
 #' Method of a control object
 #'
-#' @param CONTROL Control object from [set_saqn_control()], [set_sa_control()] or [set_qn_control()].
+#' @param CONTROL Control object from [set_control()].
 #' @return `"SA-QN"`, `"SA"` or `"QN"`.
 #' @seealso [fit_lavaanpl()], [pmlcfa()]
 #' @keywords internal

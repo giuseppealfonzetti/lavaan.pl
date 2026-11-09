@@ -2,8 +2,7 @@
 #'
 #' @param DATA Data object from [lavaanpl_data()].
 #' @param MODEL Model object from [lavaanpl_model()], or from [lavaanpl_groups()] for several groups.
-#' @param CONTROL Control object, which selects the method: [set_saqn_control()] for `SA-QN`, [set_sa_control()] for
-#'   `SA`, [set_qn_control()] for `QN`.
+#' @param CONTROL Control object from [set_control()], which selects the method.
 #' @param START Starting parameter vector, in the order of [parameter_names()]. If `NULL`, default values.
 #' @param NCORES Number of threads.
 #' @param VERBOSE If `TRUE`, print progress.
@@ -17,7 +16,7 @@
 fit_lavaanpl <- function(
   DATA,
   MODEL,
-  CONTROL = set_saqn_control(),
+  CONTROL = set_control(),
   START = NULL,
   NCORES = 1,
   VERBOSE = FALSE
@@ -51,7 +50,7 @@ fit_lavaanpl <- function(
   METHOD <- control_method(CONTROL)
   if (METHOD == "SA" && CONTROL$average_epochs == 0) {
     stop(
-      "The SA method needs average_epochs of at least 1: use set_saqn_control() to skip the averaged phase."
+      "The SA method needs average_epochs of at least 1: use set_control(\"SA-QN\") to skip the averaged phase."
     )
   }
   dims <- model_dims(DATA, MODEL)
@@ -337,7 +336,7 @@ check_sa <- function(FIT) {
   if (is.null(vars)) {
     FIT$stoFit$converged <- FALSE
     warning(
-      "The observed information is not positive definite at the SA estimate, which is not an optimum of the pairwise likelihood: use set_saqn_control() or other starting values.",
+      "The observed information is not positive definite at the SA estimate, which is not an optimum of the pairwise likelihood: use set_control(\"SA-QN\") or other starting values.",
       call. = FALSE
     )
     return(FIT)
@@ -352,14 +351,14 @@ check_sa <- function(FIT) {
     warning(
       "The SA estimate is ",
       signif(distance, 3),
-      " standard errors from the optimum of the pairwise likelihood on its worst parameter, more than the optimisation noise explains: use other starting values or set_saqn_control().",
+      " standard errors from the optimum of the pairwise likelihood on its worst parameter, more than the optimisation noise explains: use other starting values or set_control(\"SA-QN\").",
       call. = FALSE
     )
   } else if (distance > 1) {
     warning(
       "The SA estimate is ",
       signif(distance, 3),
-      " standard errors from the optimum of the pairwise likelihood on its worst parameter, because of the optimisation noise, which the standard errors account for. For more precision, increase average_epochs or use set_saqn_control(); see diagnostics().",
+      " standard errors from the optimum of the pairwise likelihood on its worst parameter, because of the optimisation noise, which the standard errors account for. For more precision, increase average_epochs or use set_control(\"SA-QN\"); see diagnostics().",
       call. = FALSE
     )
   }
@@ -719,11 +718,11 @@ implied_variance <- function(MODEL, PARAMETER_VECTOR) {
 #' @param DATA Data object from [lavaanpl_data()].
 #' @param CPP_INPUTS Output of [cpp_inputs()].
 #' @param LINCON Output of [lincon()].
-#' @param CONTROL Control object from [set_sa_control()] or [set_saqn_control()].
+#' @param CONTROL Control object from [set_control()].
 #' @param VERBOSE If `TRUE`, print progress.
 #' @return A list with the estimate `parameter_vector`, the iterates `last_iterate` and `burn_in_iterate`, the epoch
 #'   length and phase counts, the rejected and skipped steps, the trajectory `path` and the timings `time`.
-#' @seealso [fit_lavaanpl()], [set_sa_control()]
+#' @seealso [fit_lavaanpl()], [set_control()]
 #' @keywords internal
 run_sa <- function(START, DATA, CPP_INPUTS, LINCON, CONTROL, VERBOSE) {
   npar <- length(LINCON$free_idx)

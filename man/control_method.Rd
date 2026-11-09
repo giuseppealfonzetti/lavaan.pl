@@ -7,7 +7,7 @@
 control_method(CONTROL)
 }
 \arguments{
-\item{CONTROL}{Control object from \code{\link[=set_saqn_control]{set_saqn_control()}}, \code{\link[=set_sa_control]{set_sa_control()}} or \code{\link[=set_qn_control]{set_qn_control()}}.}
+\item{CONTROL}{Control object from \code{\link[=set_control]{set_control()}}.}
 }
 \value{
 \code{"SA-QN"}, \code{"SA"} or \code{"QN"}.

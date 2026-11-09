@@ -27,11 +27,11 @@
 #' @param estimator The estimator, which must be `"PML"`.
 #' @param estimator.args A list with `ncores` and `computevar_numderiv`.
 #' @param start A vector of starting values in lavaan's free-parameter order.
-#' @param control Control object from [set_saqn_control()], [set_sa_control()] or [set_qn_control()], or `NULL`.
+#' @param control Control object from [set_control()], which also selects the method.
 #' @param verbose If `TRUE`, print additional information during the estimation
 #'   process.
-#' @param ... Additional arguments for [lavaan::lavaan()], including `optim.method` (`"SA-QN"`, `"SA"` or `"QN"`),
-#'   and, for faster fits in simulations, `test = "none"`, which skips the mean and variance adjusted test, and
+#' @param ... Additional arguments for [lavaan::lavaan()], including
+#'   for faster fits in simulations, `test = "none"`, which skips the mean and variance adjusted test, and
 #'   `samplestats = FALSE`, which skips lavaan's sample statistics.
 #' @return An object of class [`lavaan.pl`][lavaan.pl-class].
 #' @seealso [lavaan.pl-class]
@@ -64,7 +64,7 @@ lavaan.pl <- function(
     estimator = "PML",
     estimator.args = list(ncores = 1, computevar_numderiv = FALSE),
     start = NULL,
-    control = NULL,
+    control = set_control(),
     verbose = FALSE,
     ...
 ) {
@@ -81,20 +81,13 @@ lavaan.pl <- function(
   if (!is.null(lavargs$std.lv)) std.lv <- lavargs$std.lv
   unknown <- setdiff(names(estimator.args), c("ncores", "computevar_numderiv"))
   if (length(unknown)) {
-    stop("Unsupported `estimator.args`: ", paste(unknown, collapse = ", "), "; use `optim.method` for the method and `start` for starting values.", call. = FALSE)
+    stop("Unsupported `estimator.args`: ", paste(unknown, collapse = ", "), "; use `control = set_control()` for the method and `start` for starting values.", call. = FALSE)
   }
-  method <- lavargs$optim.method
-  if (!is.null(method) && !(length(method) == 1 && method %in% c("SA-QN", "SA", "QN"))) {
-    stop("`optim.method` must be \"SA-QN\", \"SA\" or \"QN\".", call. = FALSE)
-  }
-  if (is.null(control)) {
-    control <- switch(if (is.null(method)) "SA-QN" else method, `SA-QN` = set_saqn_control(), SA = set_sa_control(), QN = set_qn_control())
+  if (!is.null(lavargs$optim.method)) {
+    stop("`optim.method` is not supported: choose the method with `control = set_control()`.", call. = FALSE)
   }
   if (!inherits(control, c("lavaanpl_qn_control", "lavaanpl_sa_control"))) {
-    stop("`control` must be created with `set_saqn_control()`, `set_sa_control()` or `set_qn_control()`.", call. = FALSE)
-  }
-  if (!is.null(method) && !identical(method, control_method(control))) {
-    stop("`control` is for ", control_method(control), ", but `optim.method` is ", method, ".", call. = FALSE)
+    stop("`control` must be created with `set_control()`.", call. = FALSE)
   }
   ncores <- estimator.args$ncores
   if (is.null(ncores)) ncores <- 1
@@ -118,7 +111,6 @@ lavaan.pl <- function(
   lavargs$ordered <- if (isFALSE(ordered)) NULL else ordered
   lavargs$estimator <- "PML"
   lavargs$do.fit <- FALSE
-  lavargs$optim.method <- NULL
   if ("information" %in% names(lavargs)) {
     if (lavargs$information != "observed") {
       stop("Only 'observed' information is currently supported.", call. = FALSE)
@@ -176,7 +168,7 @@ pmlcfa <- function(
     estimator = "PML",
     estimator.args = list(ncores = 1, computevar_numderiv = FALSE),
     start = NULL,
-    control = NULL,
+    control = set_control(),
     verbose = FALSE,
     ...
 ) {
@@ -196,7 +188,7 @@ pmlsem <- function(
     estimator = "PML",
     estimator.args = list(ncores = 1, computevar_numderiv = FALSE),
     start = NULL,
-    control = NULL,
+    control = set_control(),
     verbose = FALSE,
     ...
 ) {

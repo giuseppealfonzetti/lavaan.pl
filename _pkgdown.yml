@@ -38,9 +38,7 @@ reference:
 
   - title: Controls
     contents:
-      - set_qn_control
-      - set_sa_control
-      - set_saqn_control
+      - set_control
 
   - title: Data
     contents:

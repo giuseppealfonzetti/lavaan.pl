@@ -168,7 +168,7 @@ engine_only <- function(data, model) {
   suppressWarnings(lavaan.pl:::fit_lavaanpl(
     data,
     model,
-    CONTROL = set_qn_control(maxeval = 1)
+    CONTROL = set_control("QN", maxeval = 1)
   ))
 }
 
@@ -481,14 +481,14 @@ local({
       WEIGHTS_TYPE = "frequency"
     ),
     model,
-    CONTROL = set_qn_control()
+    CONTROL = set_control("QN")
   )
   fit_replicated <- lavaan.pl:::fit_lavaanpl(
     lavaan.pl:::lavaanpl_data(items_complete[
       rep(seq_len(nrow(items_complete)), weights),
     ]),
     model,
-    CONTROL = set_qn_control()
+    CONTROL = set_control("QN")
   )
   theta <- fit_weighted$parameter_vector + 0.05
   hj_weighted <- lavaan.pl:::cpp_sandwich(
@@ -512,11 +512,11 @@ local({
   set.seed(2)
   weights <- sample(1:3, nrow(items_complete), replace = TRUE)
   clusters <- rep(1:30, length.out = nrow(items_complete))
-  fit_unweighted <- lavaan.pl:::fit_lavaanpl(lavaan.pl:::lavaanpl_data(items_complete), model, CONTROL = set_qn_control())
+  fit_unweighted <- lavaan.pl:::fit_lavaanpl(lavaan.pl:::lavaanpl_data(items_complete), model, CONTROL = set_control("QN"))
   fit_clustered <- lavaan.pl:::fit_lavaanpl(
     lavaan.pl:::lavaanpl_data(items_complete, WEIGHTS = weights, CLUSTER = clusters),
     model,
-    CONTROL = set_qn_control()
+    CONTROL = set_control("QN")
   )
   theta <- fit_unweighted$parameter_vector + 0.05
   hj <- lavaan.pl:::cpp_sandwich(
@@ -542,12 +542,12 @@ local({
   fit_unclustered <- lavaan.pl:::fit_lavaanpl(
     lavaan.pl:::lavaanpl_data(items_complete, GROUP = group),
     model_two_groups,
-    CONTROL = set_qn_control()
+    CONTROL = set_control("QN")
   )
   fit_clustered <- lavaan.pl:::fit_lavaanpl(
     lavaan.pl:::lavaanpl_data(items_complete, CLUSTER = clusters, GROUP = group),
     model_two_groups,
-    CONTROL = set_qn_control()
+    CONTROL = set_control("QN")
   )
   theta <- fit_unclustered$parameter_vector + 0.05
   hj <- lavaan.pl:::cpp_sandwich(

@@ -16,11 +16,11 @@ one_factor <- lavaan.pl:::lavaanpl_model(matrix(NA, 5, 1))
 items_two_factors <- items[1:300, 4:9]
 two_factors <- lavaan.pl:::lavaanpl_model(build_constr_mat(6, 2, "simple"))
 
-#### lavaan.pl:::fit_lavaanpl(, CONTROL = set_qn_control()) validates its inputs ####
+#### lavaan.pl:::fit_lavaanpl(, CONTROL = set_control("QN")) validates its inputs ####
 local({
-  expect_error(lavaan.pl:::fit_lavaanpl(items, lavaan.pl:::lavaanpl_model(three_factors), CONTROL = set_qn_control()), "inherits")
+  expect_error(lavaan.pl:::fit_lavaanpl(items, lavaan.pl:::lavaanpl_model(three_factors), CONTROL = set_control("QN")), "inherits")
   expect_error(
-    lavaan.pl:::fit_lavaanpl(data, lavaan.pl:::lavaanpl_model(matrix(NA, 5, 1)), CONTROL = set_qn_control()),
+    lavaan.pl:::fit_lavaanpl(data, lavaan.pl:::lavaanpl_model(matrix(NA, 5, 1)), CONTROL = set_control("QN")),
     "DATA\\$p == MODEL\\$p"
   )
   expect_error(
@@ -28,7 +28,7 @@ local({
       data,
       lavaan.pl:::lavaanpl_model(three_factors),
       START = rep(0, 3),
-      CONTROL = set_qn_control()
+      CONTROL = set_control("QN")
     ),
     "length"
   )
@@ -38,10 +38,10 @@ local({
   )
 })
 
-#### lavaan.pl:::fit_lavaanpl(, CONTROL = set_qn_control()) stores its inputs and lavaan.pl:::compute_var() covers the free parameters ####
+#### lavaan.pl:::fit_lavaanpl(, CONTROL = set_control("QN")) stores its inputs and lavaan.pl:::compute_var() covers the free parameters ####
 local({
   model <- lavaan.pl:::lavaanpl_model(three_factors)
-  fit <- lavaan.pl:::fit_lavaanpl(data, model, CONTROL = set_qn_control())
+  fit <- lavaan.pl:::fit_lavaanpl(data, model, CONTROL = set_control("QN"))
   vars <- lavaan.pl:::compute_var(fit)
   expect_identical(fit$data, data)
   expect_identical(fit$model$MODELS[[1]], model)
@@ -56,12 +56,12 @@ local({
   fit_sa <- lavaan.pl:::fit_lavaanpl(
     lsat_data,
     one_factor,
-    CONTROL = set_sa_control(average_epochs = 1, pairs_per_iteration = 2)
+    CONTROL = set_control("SA", average_epochs = 1, pairs_per_iteration = 2)
   )
   fit_short <- lavaan.pl:::fit_lavaanpl(
     lsat_data,
     one_factor,
-    CONTROL = set_qn_control(maxeval = 5)
+    CONTROL = set_control("QN", maxeval = 5)
   )
   expect_identical(fit_sa$method, "SA")
   expect_true(fit_short$numFit$info[["neval"]] <= 5)
@@ -69,7 +69,7 @@ local({
 
 #### Numerical and analytic Hessians agree ####
 local({
-  fit <- lavaan.pl:::fit_lavaanpl(lsat_data, one_factor, CONTROL = set_qn_control())
+  fit <- lavaan.pl:::fit_lavaanpl(lsat_data, one_factor, CONTROL = set_control("QN"))
   expect_equal(
     lavaan.pl:::compute_var(fit, NUMDERIV = TRUE)$H,
     lavaan.pl:::compute_var(fit)$H,
@@ -94,7 +94,7 @@ local({
       three_factors,
       CONSTRAINTS = list(A = constraints, b = c(0, 0.25))
     ),
-    CONTROL = set_qn_control()
+    CONTROL = set_control("QN")
   )
   free_to_full <- fit$lincon$K
   negative_gradient <- function(theta) {
@@ -142,7 +142,7 @@ local({
           b = 0
         )
       ),
-      CONTROL = set_qn_control()
+      CONTROL = set_control("QN")
     ),
     "LATCOV"
   )
@@ -153,7 +153,7 @@ local({
         three_factors,
         CONSTRAINTS = list(A = constraint(c(1, 28), c(1, -1)), b = 0)
       ),
-      CONTROL = set_qn_control()
+      CONTROL = set_control("QN")
     ),
     "either thresholds"
   )
@@ -167,7 +167,7 @@ local({
           b = c(0, 1)
         )
       ),
-      CONTROL = set_qn_control()
+      CONTROL = set_control("QN")
     ),
     "inconsistent"
   )
@@ -177,14 +177,14 @@ local({
 local({
   set.seed(2)
   weights <- sample(1:3, nrow(items_two_factors), replace = TRUE)
-  fit <- lavaan.pl:::fit_lavaanpl(lavaan.pl:::lavaanpl_data(items_two_factors), two_factors, CONTROL = set_qn_control())
+  fit <- lavaan.pl:::fit_lavaanpl(lavaan.pl:::lavaanpl_data(items_two_factors), two_factors, CONTROL = set_control("QN"))
   fit_constant <- lavaan.pl:::fit_lavaanpl(
     lavaan.pl:::lavaanpl_data(
       items_two_factors,
       WEIGHTS = rep(2, nrow(items_two_factors))
     ),
     two_factors,
-    CONTROL = set_qn_control()
+    CONTROL = set_control("QN")
   )
   fit_weighted <- lavaan.pl:::fit_lavaanpl(
     lavaan.pl:::lavaanpl_data(
@@ -193,14 +193,14 @@ local({
       WEIGHTS_TYPE = "frequency"
     ),
     two_factors,
-    CONTROL = set_qn_control()
+    CONTROL = set_control("QN")
   )
   fit_replicated <- lavaan.pl:::fit_lavaanpl(
     lavaan.pl:::lavaanpl_data(items_two_factors[
       rep(seq_len(nrow(items_two_factors)), weights),
     ]),
     two_factors,
-    CONTROL = set_qn_control()
+    CONTROL = set_control("QN")
   )
   expect_equal(fit_constant$parameter_vector, fit$parameter_vector)
   expect_equal(fit_weighted$parameter_vector, fit_replicated$parameter_vector, tolerance = 1e-6)
@@ -208,16 +208,16 @@ local({
 
 #### Complete data give the same estimates under every missing-data option ####
 local({
-  fit_listwise <- lavaan.pl:::fit_lavaanpl(lavaan.pl:::lavaanpl_data(items_two_factors), two_factors, CONTROL = set_qn_control())
+  fit_listwise <- lavaan.pl:::fit_lavaanpl(lavaan.pl:::lavaanpl_data(items_two_factors), two_factors, CONTROL = set_control("QN"))
   fit_pairwise <- lavaan.pl:::fit_lavaanpl(
     lavaan.pl:::lavaanpl_data(items_two_factors, MISSING = "pairwise"),
     two_factors,
-    CONTROL = set_qn_control()
+    CONTROL = set_control("QN")
   )
   fit_available <- lavaan.pl:::fit_lavaanpl(
     lavaan.pl:::lavaanpl_data(items_two_factors, MISSING = "available.cases"),
     two_factors,
-    CONTROL = set_qn_control()
+    CONTROL = set_control("QN")
   )
   expect_equal(fit_pairwise$parameter_vector, fit_listwise$parameter_vector)
   expect_equal(fit_available$parameter_vector, fit_listwise$parameter_vector)
@@ -227,8 +227,8 @@ local({
 local({
   items_first <- items[1:150, 4:9]
   items_second <- items[151:300, 4:9]
-  fit_first <- lavaan.pl:::fit_lavaanpl(lavaan.pl:::lavaanpl_data(items_first), two_factors, CONTROL = set_qn_control())
-  fit_second <- lavaan.pl:::fit_lavaanpl(lavaan.pl:::lavaanpl_data(items_second), two_factors, CONTROL = set_qn_control())
+  fit_first <- lavaan.pl:::fit_lavaanpl(lavaan.pl:::lavaanpl_data(items_first), two_factors, CONTROL = set_control("QN"))
+  fit_second <- lavaan.pl:::fit_lavaanpl(lavaan.pl:::lavaanpl_data(items_second), two_factors, CONTROL = set_control("QN"))
   data_two_groups <- lavaan.pl:::lavaanpl_data(
     rbind(items_first, items_second),
     GROUP = rep(c("b", "a"), each = 150)
@@ -236,7 +236,7 @@ local({
   fit_two_groups <- lavaan.pl:::fit_lavaanpl(
     data_two_groups,
     lavaan.pl:::lavaanpl_groups(list(two_factors, two_factors)),
-    CONTROL = set_qn_control()
+    CONTROL = set_control("QN")
   )
   pl <- function(fit) {
     lavaan.pl:::cpp_pl(fit$parameter_vector, fit$cpp_inputs$model, fit$cpp_inputs$data)$pl
@@ -282,14 +282,14 @@ local({
     1,
     -1
   )
-  fit_free <- lavaan.pl:::fit_lavaanpl(data_two_groups, model_two_groups, CONTROL = set_qn_control())
+  fit_free <- lavaan.pl:::fit_lavaanpl(data_two_groups, model_two_groups, CONTROL = set_control("QN"))
   fit_equal <- lavaan.pl:::fit_lavaanpl(
     data_two_groups,
     lavaan.pl:::lavaanpl_groups(
       list(two_factors, two_factors),
       list(A = equal_loadings, b = 0)
     ),
-    CONTROL = set_qn_control()
+    CONTROL = set_control("QN")
   )
   expect_equal(
     fit_equal$parameter_vector[match("lambda[1,1]", names_free)],
@@ -304,12 +304,12 @@ local({
     items_two_factors,
     GROUP = rep(1:2, each = 150)
   )
-  expect_error(lavaan.pl:::fit_lavaanpl(data_two_groups, two_factors, CONTROL = set_qn_control()), "groups")
+  expect_error(lavaan.pl:::fit_lavaanpl(data_two_groups, two_factors, CONTROL = set_control("QN")), "groups")
   expect_error(
     lavaan.pl:::fit_lavaanpl(
       lavaan.pl:::lavaanpl_data(items_two_factors),
       lavaan.pl:::lavaanpl_groups(list(two_factors, two_factors)),
-      CONTROL = set_qn_control()
+      CONTROL = set_control("QN")
     ),
     "groups"
   )
@@ -329,7 +329,7 @@ local({
       GROUP = group
     ),
     model_two_groups,
-    CONTROL = set_qn_control()
+    CONTROL = set_control("QN")
   )
   fit_replicated <- lavaan.pl:::fit_lavaanpl(
     lavaan.pl:::lavaanpl_data(
@@ -337,7 +337,7 @@ local({
       GROUP = group[rep(1:300, weights)]
     ),
     model_two_groups,
-    CONTROL = set_qn_control()
+    CONTROL = set_control("QN")
   )
   expect_equal(fit_weighted$parameter_vector, fit_replicated$parameter_vector, tolerance = 1e-6)
 })
@@ -369,7 +369,7 @@ local({
       GROUP = group,
       WEIGHTS_NORMALIZATION = normalization
     )
-    lavaan.pl:::fit_lavaanpl(data, model_equal, CONTROL = set_qn_control())$parameter_vector
+    lavaan.pl:::fit_lavaanpl(data, model_equal, CONTROL = set_control("QN"))$parameter_vector
   }
   expect_equal(estimates(rescaled, "group"), estimates(weights, "group"))
   expect_false(isTRUE(all.equal(

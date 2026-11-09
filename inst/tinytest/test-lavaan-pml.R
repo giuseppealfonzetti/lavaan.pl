@@ -282,8 +282,8 @@ local({
 #### Under SA every case returns, and a converged fit is as close to the exact estimate as its noise explains ####
 local({
   stochastic <- list(
-    cfa = function(...) lavaan.pl::pmlcfa(..., ordered = FALSE, control = set_sa_control()),
-    sem = function(...) lavaan.pl::pmlsem(..., ordered = FALSE, control = set_sa_control())
+    cfa = function(...) lavaan.pl::pmlcfa(..., ordered = FALSE, control = set_control("SA")),
+    sem = function(...) lavaan.pl::pmlsem(..., ordered = FALSE, control = set_control("SA"))
   )
   for (name in names(lavaan_pml_cases)) {
     fit <- suppressWarnings(lavaan_pml_cases[[name]](stochastic))
@@ -311,7 +311,7 @@ local({
     paste(two_factors_four_items, "\nA3 | t*t3\nA4 | t*t3"),
     bfi_600,
     std.lv = TRUE,
-    control = set_qn_control()
+    control = set_control("QN")
   )
   gradient <- lavaan::lavTech(fit, "gradient")
   constraints_jacobian <- fit@Model@ceq.JAC
@@ -340,7 +340,7 @@ expect_true(
 
 #### Several starts reach the higher bifactor optimum and warn of the other ####
 local({
-  several <- function(...) lavaan.pl::pmlcfa(..., ordered = FALSE, control = set_saqn_control(seed = 1, nstarts = 8))
+  several <- function(...) lavaan.pl::pmlcfa(..., ordered = FALSE, control = set_control(seed = 1, nstarts = 8))
   expect_warning(
     fit <- lavaan_pml_cases[["bifactor"]](list(cfa = several)),
     "several optima"

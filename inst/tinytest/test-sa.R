@@ -20,8 +20,8 @@ items <- sim_data(
 )
 data <- lavaan.pl:::lavaanpl_data(items)
 model <- lavaan.pl:::lavaanpl_model(loadings_structure)
-fit_pml <- lavaan.pl:::fit_lavaanpl(data, model, CONTROL = set_qn_control())
-fit_sa <- lavaan.pl:::fit_lavaanpl(data, model, CONTROL = set_sa_control())
+fit_pml <- lavaan.pl:::fit_lavaanpl(data, model, CONTROL = set_control("QN"))
+fit_sa <- lavaan.pl:::fit_lavaanpl(data, model, CONTROL = set_control("SA"))
 epoch_length <- fit_sa$stoFit$epoch_length
 
 #### Helpers ####
@@ -39,12 +39,12 @@ local({
   fit_marker_pml <- lavaan.pl:::fit_lavaanpl(
     data,
     lavaan.pl:::lavaanpl_model(loadings_markers, PSI = matrix(NA, q, q)),
-    CONTROL = set_qn_control()
+    CONTROL = set_control("QN")
   )
   fit_marker_sa <- lavaan.pl:::fit_lavaanpl(
     data,
     lavaan.pl:::lavaanpl_model(loadings_markers, PSI = matrix(NA, q, q)),
-    CONTROL = set_sa_control()
+    CONTROL = set_control("SA")
   )
   for (fits in list(
     list(fit_sa, fit_pml),
@@ -61,7 +61,7 @@ local({
   fit_diagonal <- lavaan.pl:::fit_lavaanpl(
     data,
     model,
-    CONTROL = set_sa_control(gain = "diagonal")
+    CONTROL = set_control("SA", gain = "diagonal")
   )
   expect_identical(fit_diagonal$stoFit$gain, "diagonal")
   expect_identical(fit_diagonal$stoFit$precondition_epochs, 0L)
@@ -71,11 +71,11 @@ local({
 #### SA is reproducible with a fixed seed and changes with another seed ####
 local({
   expect_identical(
-    lavaan.pl:::fit_lavaanpl(data, model, CONTROL = set_sa_control())$parameter_vector,
+    lavaan.pl:::fit_lavaanpl(data, model, CONTROL = set_control("SA"))$parameter_vector,
     fit_sa$parameter_vector
   )
   expect_false(identical(
-    lavaan.pl:::fit_lavaanpl(data, model, CONTROL = set_sa_control(seed = 7))$parameter_vector,
+    lavaan.pl:::fit_lavaanpl(data, model, CONTROL = set_control("SA", seed = 7))$parameter_vector,
     fit_sa$parameter_vector
   ))
 })
@@ -131,12 +131,12 @@ local({
 local({
   data_two_groups <- lavaan.pl:::lavaanpl_data(items, GROUP = rep(1:2, each = n / 2))
   model_two_groups <- lavaan.pl:::lavaanpl_groups(list(model, model))
-  optimum <- lavaan.pl:::fit_lavaanpl(data_two_groups, model_two_groups, CONTROL = set_qn_control())$parameter_vector
+  optimum <- lavaan.pl:::fit_lavaanpl(data_two_groups, model_two_groups, CONTROL = set_control("QN"))$parameter_vector
   fits <- lapply(1:10, function(seed) {
     lavaan.pl:::fit_lavaanpl(
       data_two_groups,
       model_two_groups,
-      CONTROL = set_sa_control(seed = seed)
+      CONTROL = set_control("SA", seed = seed)
     )
   })
   deviations <- t(vapply(
@@ -167,11 +167,11 @@ local({
   fit_constrained <- lavaan.pl:::fit_lavaanpl(
     data,
     model_constrained,
-    CONTROL = set_sa_control()
+    CONTROL = set_control("SA")
   )
   expect_equal(as.vector(constraints %*% fit_constrained$parameter_vector), c(0, 0.25))
   expect_true(
-    distance_in_se(fit_constrained, lavaan.pl:::fit_lavaanpl(data, model_constrained, CONTROL = set_qn_control())) < 1
+    distance_in_se(fit_constrained, lavaan.pl:::fit_lavaanpl(data, model_constrained, CONTROL = set_control("QN"))) < 1
   )
 })
 
@@ -193,8 +193,8 @@ local({
   )) {
     expect_true(
       distance_in_se(
-        lavaan.pl:::fit_lavaanpl(data, other_model, CONTROL = set_sa_control()),
-        lavaan.pl:::fit_lavaanpl(data, other_model, CONTROL = set_qn_control())
+        lavaan.pl:::fit_lavaanpl(data, other_model, CONTROL = set_control("SA")),
+        lavaan.pl:::fit_lavaanpl(data, other_model, CONTROL = set_control("QN"))
       ) <
         1
     )
@@ -211,13 +211,13 @@ local({
   fit_two_groups <- lavaan.pl:::fit_lavaanpl(
     data_two_groups,
     model_two_groups,
-    CONTROL = set_sa_control()
+    CONTROL = set_control("SA")
   )
   expect_true(fit_two_groups$stoFit$converged)
   expect_true(
     distance_in_se(
       fit_two_groups,
-      lavaan.pl:::fit_lavaanpl(data_two_groups, model_two_groups, CONTROL = set_qn_control())
+      lavaan.pl:::fit_lavaanpl(data_two_groups, model_two_groups, CONTROL = set_control("QN"))
     ) <
       1
   )
@@ -233,13 +233,13 @@ local({
   fit_two_groups <- lavaan.pl:::fit_lavaanpl(
     data_two_groups,
     model_two_groups,
-    CONTROL = set_sa_control()
+    CONTROL = set_control("SA")
   )
   expect_true(fit_two_groups$stoFit$converged)
   expect_true(
     distance_in_se(
       fit_two_groups,
-      lavaan.pl:::fit_lavaanpl(data_two_groups, model_two_groups, CONTROL = set_qn_control())
+      lavaan.pl:::fit_lavaanpl(data_two_groups, model_two_groups, CONTROL = set_control("QN"))
     ) <
       1
   )
@@ -251,7 +251,7 @@ local({
     lavaan.pl:::fit_lavaanpl(
       data,
       model,
-      CONTROL = set_sa_control(),
+      CONTROL = set_control("SA"),
       START = replace(fit_pml$parameter_vector, 121, 5)
     ),
     "outside the parameter space"
@@ -273,7 +273,7 @@ local({
     }),
     collapse = "\n"
   )
-  fit <- pmlcfa(syntax, items_ordered, std.lv = TRUE, control = set_sa_control())
+  fit <- pmlcfa(syntax, items_ordered, std.lv = TRUE, control = set_control("SA"))
   template <- lavaan::cfa(
     syntax,
     items_ordered,
@@ -315,8 +315,8 @@ local({
   data_missing <- lavaan.pl:::lavaanpl_data(items_missing, MISSING = "available.cases")
   expect_true(
     distance_in_se(
-      lavaan.pl:::fit_lavaanpl(data_missing, model, CONTROL = set_sa_control()),
-      lavaan.pl:::fit_lavaanpl(data_missing, model, CONTROL = set_qn_control())
+      lavaan.pl:::fit_lavaanpl(data_missing, model, CONTROL = set_control("SA")),
+      lavaan.pl:::fit_lavaanpl(data_missing, model, CONTROL = set_control("QN"))
     ) <
       1
   )
@@ -358,7 +358,7 @@ local({
 #### The noise vanishes when every iteration uses all the pairs ####
 local({
   small <- lavaan.pl:::lavaanpl_data(items[, 1:5])
-  fit_all <- lavaan.pl:::fit_lavaanpl(small, lavaan.pl:::lavaanpl_model(build_constr_mat(5, 1, "simple")), CONTROL = set_sa_control())
+  fit_all <- lavaan.pl:::fit_lavaanpl(small, lavaan.pl:::lavaanpl_model(build_constr_mat(5, 1, "simple")), CONTROL = set_control("SA"))
   expect_equal(fit_all$stoFit$epoch_length, 1)
   expect_equal(lavaan.pl:::compute_var(fit_all)$optimisation_noise, rep(0, length(fit_all$parameter_vector)))
 })
@@ -367,37 +367,37 @@ local({
 local({
   small <- lavaan.pl:::lavaanpl_data(items[, 1:6])
   model_small <- lavaan.pl:::lavaanpl_model(build_constr_mat(6, 1, "simple"))
-  start <- suppressWarnings(lavaan.pl:::fit_lavaanpl(small, model_small, CONTROL = set_qn_control(maxeval = 1)))$init
+  start <- suppressWarnings(lavaan.pl:::fit_lavaanpl(small, model_small, CONTROL = set_control("QN", maxeval = 1)))$init
   start[lavaan.pl:::parameter_blocks(model_small, sum(small$cat - 1)) == "lambda"] <- .01
-  fit_default <- lavaan.pl:::fit_lavaanpl(small, model_small, CONTROL = set_sa_control(tol = 1e-8), START = start)
+  fit_default <- lavaan.pl:::fit_lavaanpl(small, model_small, CONTROL = set_control("SA", tol = 1e-8), START = start)
   expect_equal(fit_default$stoFit$pairs_per_iteration, 15)
   expect_equal(fit_default$stoFit$epoch_length, 1)
   expect_equal(fit_default$stoFit$adam_epochs, 150)
   fit_capped <- suppressWarnings(lavaan.pl:::fit_lavaanpl(
     small,
     model_small,
-    CONTROL = set_sa_control(adam_epochs = 2, precondition_epochs = 1, max_precondition_epochs = 1, average_epochs = 2, tol = 1e-8),
+    CONTROL = set_control("SA", adam_epochs = 2, precondition_epochs = 1, max_precondition_epochs = 1, average_epochs = 2, tol = 1e-8),
     START = start
   ))
   expect_equal(fit_capped$stoFit$adam_epochs, 2)
   expect_equal(fit_capped$stoFit$precondition_epochs, 1)
   expect_equal(sum(fit_capped$stoFit$path$phase == 3), 2)
-  fit_large <- lavaan.pl:::fit_lavaanpl(data, model, CONTROL = set_sa_control(tol = 1e-8))
+  fit_large <- lavaan.pl:::fit_lavaanpl(data, model, CONTROL = set_control("SA", tol = 1e-8))
   expect_equal(fit_large$stoFit$adam_epochs, 5)
   fit_none <- suppressWarnings(lavaan.pl:::fit_lavaanpl(
     data,
     model,
-    CONTROL = set_sa_control(precondition_epochs = 0)
+    CONTROL = set_control("SA", precondition_epochs = 0)
   ))
   expect_equal(fit_none$stoFit$precondition_epochs, 0)
   expect_identical(fit_none$stoFit$gain, "hessian")
   expect_true(fit_none$stoFit$converged)
-  flat <- lavaan.pl:::fit_lavaanpl(small, model_small, CONTROL = set_qn_control())$parameter_vector
+  flat <- lavaan.pl:::fit_lavaanpl(small, model_small, CONTROL = set_control("QN"))$parameter_vector
   flat[lavaan.pl:::parameter_blocks(model_small, sum(small$cat - 1)) == "lambda"] <- 0
   still <- function(cap) suppressWarnings(lavaan.pl:::fit_lavaanpl(
     small,
     model_small,
-    CONTROL = set_sa_control(
+    CONTROL = set_control("SA",
       alpha = 1e-4, adam_epochs = 1, precondition_epochs = 0, max_precondition_epochs = cap, average_epochs = 1
     ),
     START = flat
@@ -411,10 +411,10 @@ local({
 local({
   small <- lavaan.pl:::lavaanpl_data(items[, 1:6])
   model_small <- lavaan.pl:::lavaanpl_model(build_constr_mat(6, 1, "simple"))
-  start <- suppressWarnings(lavaan.pl:::fit_lavaanpl(small, model_small, CONTROL = set_qn_control(maxeval = 1)))$init
+  start <- suppressWarnings(lavaan.pl:::fit_lavaanpl(small, model_small, CONTROL = set_control("QN", maxeval = 1)))$init
   start[lavaan.pl:::parameter_blocks(model_small, sum(small$cat - 1)) == "lambda"] <- 0
   expect_warning(
-    fit_saddle <- lavaan.pl:::fit_lavaanpl(small, model_small, CONTROL = set_sa_control(), START = start),
+    fit_saddle <- lavaan.pl:::fit_lavaanpl(small, model_small, CONTROL = set_control("SA"), START = start),
     "not positive definite"
   )
   expect_false(fit_saddle$stoFit$converged)
@@ -427,7 +427,7 @@ local({
   template <- lavaan::cfa(syntax, frame, estimator = "PML", std.lv = TRUE, do.fit = FALSE)
   zero_loadings <- replace(lavaan::coef(template), grepl("=~", names(lavaan::coef(template))), 0)
   expect_warning(
-    fit_lavaan <- lavaan.pl::pmlcfa(syntax, frame, std.lv = TRUE, start = zero_loadings, test = "mean.var.adjusted", optim.method = "SA"),
+    fit_lavaan <- lavaan.pl::pmlcfa(syntax, frame, std.lv = TRUE, start = zero_loadings, test = "mean.var.adjusted", control = set_control("SA")),
     "not positive definite"
   )
   expect_false(lavaan::lavInspect(fit_lavaan, "converged"))
@@ -441,15 +441,15 @@ local({
   data_reversed <- lavaan.pl:::lavaanpl_data(reversed)
   structure_one <- build_constr_mat(8, 1, "simple")
   block <- lavaan.pl:::parameter_blocks(lavaan.pl:::lavaanpl_model(structure_one), sum(data_reversed$cat - 1))
-  start_std <- lavaan.pl:::fit_lavaanpl(data_reversed, lavaan.pl:::lavaanpl_model(structure_one), CONTROL = set_qn_control())$init
+  start_std <- lavaan.pl:::fit_lavaanpl(data_reversed, lavaan.pl:::lavaanpl_model(structure_one), CONTROL = set_control("QN"))$init
   expect_equal(sign(start_std[block == "lambda"]), c(1, -1, 1, 1, -1, 1, 1, 1))
   model_marker <- lavaan.pl:::lavaanpl_model(replace(structure_one, 1, 1), PSI = matrix(NA))
   block_marker <- lavaan.pl:::parameter_blocks(model_marker, sum(data_reversed$cat - 1))
-  start_marker <- lavaan.pl:::fit_lavaanpl(data_reversed, model_marker, CONTROL = set_qn_control())$init
+  start_marker <- lavaan.pl:::fit_lavaanpl(data_reversed, model_marker, CONTROL = set_control("QN"))$init
   expect_equal(sign(start_marker[block_marker == "lambda"]), c(-1, 1, 1, -1, 1, 1, 1))
   expect_true(start_marker[block_marker == "logsd"] > log(.25))
-  fit_exact <- lavaan.pl:::fit_lavaanpl(data_reversed, lavaan.pl:::lavaanpl_model(structure_one), CONTROL = set_qn_control())
-  fit_stochastic <- lavaan.pl:::fit_lavaanpl(data_reversed, lavaan.pl:::lavaanpl_model(structure_one), CONTROL = set_sa_control())
+  fit_exact <- lavaan.pl:::fit_lavaanpl(data_reversed, lavaan.pl:::lavaanpl_model(structure_one), CONTROL = set_control("QN"))
+  fit_stochastic <- lavaan.pl:::fit_lavaanpl(data_reversed, lavaan.pl:::lavaanpl_model(structure_one), CONTROL = set_control("SA"))
   expect_true(fit_stochastic$stoFit$converged)
   expect_equal(sign(fit_stochastic$parameter_vector[block == "lambda"]), sign(fit_exact$parameter_vector[block == "lambda"]))
 })
@@ -466,7 +466,7 @@ local({
     suppressWarnings(lavaan.pl:::fit_lavaanpl(
       data_misfit,
       lavaan.pl:::lavaanpl_model(structure_many),
-      CONTROL = set_sa_control(seed = seed, average_epochs = 2)
+      CONTROL = set_control("SA", seed = seed, average_epochs = 2)
     ))
   })
   for (fit in fits) {
@@ -485,14 +485,14 @@ local({
   )
   small <- lavaan.pl:::lavaanpl_data(items[, 1:8])
   model_small <- lavaan.pl:::lavaanpl_model(build_constr_mat(8, 1, "simple"))
-  far <- lavaan.pl:::fit_lavaanpl(small, model_small, CONTROL = set_qn_control())$parameter_vector
+  far <- lavaan.pl:::fit_lavaanpl(small, model_small, CONTROL = set_control("QN"))$parameter_vector
   thresholds <- lavaan.pl:::parameter_blocks(model_small, sum(small$cat - 1)) == "tau"
   far[thresholds] <- far[thresholds] + .3
   expect_warning(
     fit_far <- lavaan.pl:::fit_lavaanpl(
       small,
       model_small,
-      CONTROL = set_sa_control(alpha = 1e-4, adam_epochs = 1, precondition_epochs = 0, average_epochs = 1),
+      CONTROL = set_control("SA", alpha = 1e-4, adam_epochs = 1, precondition_epochs = 0, average_epochs = 1),
       START = far
     ),
     "more than the optimisation noise explains"
@@ -502,24 +502,24 @@ local({
 
 #### SA-QN starts the exact optimiser from the burn-in and its curvature ####
 local({
-  fit_saqn <- lavaan.pl:::fit_lavaanpl(data, model, CONTROL = set_saqn_control())
+  fit_saqn <- lavaan.pl:::fit_lavaanpl(data, model, CONTROL = set_control())
   expect_identical(fit_saqn$method, "SA-QN")
   expect_equal(fit_saqn$parameter_vector, fit_pml$parameter_vector, tolerance = 1e-4)
-  expect_equal(lavaan.pl:::fit_lavaanpl(data, model, CONTROL = set_saqn_control(seed = 7))$parameter_vector, fit_saqn$parameter_vector, tolerance = 1e-4)
+  expect_equal(lavaan.pl:::fit_lavaanpl(data, model, CONTROL = set_control(seed = 7))$parameter_vector, fit_saqn$parameter_vector, tolerance = 1e-4)
   expect_null(lavaan.pl:::compute_var(fit_saqn)$noise)
   expect_null(fit_saqn$stoFit$invh)
-  burn <- lavaan.pl:::run_sa(fit_saqn$init, data, fit_saqn$cpp_inputs, fit_saqn$lincon, set_saqn_control(), FALSE)
+  burn <- lavaan.pl:::run_sa(fit_saqn$init, data, fit_saqn$cpp_inputs, fit_saqn$lincon, set_control(), FALSE)
   expect_equal(dim(burn$invh), rep(length(fit_saqn$parameter_vector), 2))
-  fit_flat <- lavaan.pl:::fit_lavaanpl(data, model, CONTROL = set_qn_control(), START = burn$parameter_vector)
+  fit_flat <- lavaan.pl:::fit_lavaanpl(data, model, CONTROL = set_control("QN"), START = burn$parameter_vector)
   expect_true(fit_saqn$numFit$info[["neval"]] < fit_flat$numFit$info[["neval"]])
-  expect_equal(length(lavaan.pl:::run_sa(fit_saqn$init, data, fit_saqn$cpp_inputs, fit_saqn$lincon, set_sa_control(average_epochs = 1), FALSE)$invh), 0)
+  expect_equal(length(lavaan.pl:::run_sa(fit_saqn$init, data, fit_saqn$cpp_inputs, fit_saqn$lincon, set_control("SA", average_epochs = 1), FALSE)$invh), 0)
 })
 
 #### Several SA-QN starts keep the highest pairwise log-likelihood of the runs with those seeds ####
 local({
   logl <- function(fit) lavaan.pl:::cpp_pl(fit$parameter_vector, fit$cpp_inputs$model, fit$cpp_inputs$data)$pl
-  runs <- lapply(5:7, function(seed) lavaan.pl:::fit_lavaanpl(data, model, CONTROL = set_saqn_control(seed = seed)))
-  fit_three <- lavaan.pl:::fit_lavaanpl(data, model, CONTROL = set_saqn_control(seed = 5, nstarts = 3))
+  runs <- lapply(5:7, function(seed) lavaan.pl:::fit_lavaanpl(data, model, CONTROL = set_control(seed = seed)))
+  fit_three <- lavaan.pl:::fit_lavaanpl(data, model, CONTROL = set_control(seed = 5, nstarts = 3))
   expect_equal(fit_three$stoFit$start_logl, vapply(runs, logl, numeric(1)))
   expect_equal(logl(fit_three), max(vapply(runs, logl, numeric(1))))
   expect_equal(fit_three$parameter_vector, runs[[which.max(vapply(runs, logl, numeric(1)))]]$parameter_vector)
@@ -528,5 +528,5 @@ local({
 
 #### SA needs the averaged phase, whose noise enters the variance ####
 local({
-  expect_error(lavaan.pl:::fit_lavaanpl(data, model, CONTROL = set_sa_control(average_epochs = 0)), "average_epochs")
+  expect_error(lavaan.pl:::fit_lavaanpl(data, model, CONTROL = set_control("SA", average_epochs = 0)), "average_epochs")
 })

@@ -28,7 +28,7 @@ datasets <- list(
   ),
   complete = lavaan.pl:::lavaanpl_data(items)
 )
-fits <- lapply(datasets, function(x) lavaan.pl:::fit_lavaanpl(x, lavaan.pl:::lavaanpl_model(two_factors), CONTROL = set_qn_control()))
+fits <- lapply(datasets, function(x) lavaan.pl:::fit_lavaanpl(x, lavaan.pl:::lavaanpl_model(two_factors), CONTROL = set_control("QN")))
 vars <- lapply(fits, lavaan.pl:::compute_var)
 tests <- Map(lavaan.pl:::compute_plrt, fits, vars)
 
@@ -173,7 +173,7 @@ local({
   fit_orthogonal <- lavaan.pl:::fit_lavaanpl(
     datasets$complete,
     lavaan.pl:::lavaanpl_model(two_factors, PSI = diag(2)),
-    CONTROL = set_qn_control()
+    CONTROL = set_control("QN")
   )
   nested <- lavaan.pl:::compute_plrt(fit_orthogonal, H1 = fit_correlated)$model
   hj <- lavaan.pl:::cpp_sandwich(
@@ -215,7 +215,7 @@ local({
       two_factors,
       CONSTRAINTS = list(A = fixed_threshold, b = -1)
     ),
-    CONTROL = set_qn_control()
+    CONTROL = set_control("QN")
   )
   model_vars <- lavaan.pl:::compute_var(fit)
   test <- lavaan.pl:::compute_plrt(fit, model_vars)
@@ -290,13 +290,13 @@ local({
       lavaan.pl:::lavaanpl_model(two_factors),
       lavaan.pl:::lavaanpl_model(two_factors)
     )),
-    CONTROL = set_qn_control()
+    CONTROL = set_control("QN")
   )
   test_separate <- lapply(1:2, function(g) {
     lavaan.pl:::compute_plrt(lavaan.pl:::fit_lavaanpl(
       lavaan.pl:::lavaanpl_data(items[data_two_groups$group == g - 1, ]),
       lavaan.pl:::lavaanpl_model(two_factors),
-      CONTROL = set_qn_control()
+      CONTROL = set_control("QN")
     ))
   })
   test_two_groups <- lavaan.pl:::compute_plrt(fit_two_groups)
@@ -325,7 +325,7 @@ local({
     lavaan.pl:::lavaanpl_model(two_factors),
     lavaan.pl:::lavaanpl_model(two_factors)
   ))
-  fit_free <- lavaan.pl:::fit_lavaanpl(data_two_groups, model_two_groups, CONTROL = set_qn_control())
+  fit_free <- lavaan.pl:::fit_lavaanpl(data_two_groups, model_two_groups, CONTROL = set_control("QN"))
   names_free <- lavaan.pl:::parameter_names(data_two_groups, model_two_groups)
   equal_loadings <- matrix(0, 1, length(names_free))
   equal_loadings[1, match(c("lambda[2,1]", "lambda[2,1].g2"), names_free)] <- c(
@@ -335,7 +335,7 @@ local({
   fit_equal <- lavaan.pl:::fit_lavaanpl(
     data_two_groups,
     lavaan.pl:::lavaanpl_groups(model_two_groups$MODELS, list(A = equal_loadings, b = 0)),
-    CONTROL = set_qn_control()
+    CONTROL = set_control("QN")
   )
   nested <- lavaan.pl:::compute_plrt(fit_equal, H1 = fit_free)$model
   pl <- function(fit) {

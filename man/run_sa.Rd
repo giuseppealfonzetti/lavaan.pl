@@ -15,7 +15,7 @@ run_sa(START, DATA, CPP_INPUTS, LINCON, CONTROL, VERBOSE)
 
 \item{LINCON}{Output of \code{\link[=lincon]{lincon()}}.}
 
-\item{CONTROL}{Control object from \code{\link[=set_sa_control]{set_sa_control()}} or \code{\link[=set_saqn_control]{set_saqn_control()}}.}
+\item{CONTROL}{Control object from \code{\link[=set_control]{set_control()}}.}
 
 \item{VERBOSE}{If \code{TRUE}, print progress.}
 }
@@ -27,6 +27,6 @@ length and phase counts, the rejected and skipped steps, the trajectory \code{pa
 Stochastic approximation
 }
 \seealso{
-\code{\link[=fit_lavaanpl]{fit_lavaanpl()}}, \code{\link[=set_sa_control]{set_sa_control()}}
+\code{\link[=fit_lavaanpl]{fit_lavaanpl()}}, \code{\link[=set_control]{set_control()}}
 }
 \keyword{internal}

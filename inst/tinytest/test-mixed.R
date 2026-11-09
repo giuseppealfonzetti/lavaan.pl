@@ -17,14 +17,14 @@ for (j in 3:p) responses[, j] <- findInterval(latent[, j], c(-.8, 0, .8))
 loadings_structure <- matrix(NA, p, 1)
 data_mixed <- lavaan.pl:::lavaanpl_data(responses, NUMERIC = numeric_items)
 model_mixed <- lavaan.pl:::lavaanpl_model(loadings_structure, NUMERIC = numeric_items)
-fit_mixed <- lavaan.pl:::fit_lavaanpl(data_mixed, model_mixed, CONTROL = set_qn_control())
+fit_mixed <- lavaan.pl:::fit_lavaanpl(data_mixed, model_mixed, CONTROL = set_control("QN"))
 data_both <- lavaan.pl:::lavaanpl_data(responses, NUMERIC = numeric_items, X = covariates)
 model_both <- lavaan.pl:::lavaanpl_model(
   loadings_structure,
   GAMMA = matrix(NA, 1, 2),
   NUMERIC = numeric_items
 )
-fit_both <- lavaan.pl:::fit_lavaanpl(data_both, model_both, CONTROL = set_qn_control())
+fit_both <- lavaan.pl:::fit_lavaanpl(data_both, model_both, CONTROL = set_control("QN"))
 frame <- as.data.frame(responses)
 names(frame) <- paste0("y", seq_len(p))
 for (j in 3:p) frame[[j]] <- ordered(frame[[j]])
@@ -66,7 +66,7 @@ local({
 local({
   rescaled <- responses
   rescaled[, 1] <- 100 * rescaled[, 1] + 7
-  fit_rescaled <- lavaan.pl:::fit_lavaanpl(lavaan.pl:::lavaanpl_data(rescaled, NUMERIC = numeric_items), model_mixed, CONTROL = set_qn_control())
+  fit_rescaled <- lavaan.pl:::fit_lavaanpl(lavaan.pl:::lavaanpl_data(rescaled, NUMERIC = numeric_items), model_mixed, CONTROL = set_control("QN"))
   par <- lavaan.pl:::vector_to_matrices(fit_mixed$model, fit_mixed$parameter_vector)[[1]]
   par_rescaled <- lavaan.pl:::vector_to_matrices(fit_rescaled$model, fit_rescaled$parameter_vector)[[1]]
   expect_equal(par_rescaled$lambda[1], 100 * par$lambda[1], tolerance = 1e-3)
@@ -89,7 +89,7 @@ local({
   theta <- suppressWarnings(lavaan.pl:::fit_lavaanpl(
     data_discrete,
     model_discrete,
-    CONTROL = set_qn_control(maxeval = 1)
+    CONTROL = set_control("QN", maxeval = 1)
   ))$init + 0.02
   with_tables <- lavaan.pl:::cpp_inputs(data_discrete, lavaan.pl:::lavaanpl_groups(list(model_discrete)), TRUE)
   with_units <- lavaan.pl:::cpp_inputs(data_discrete, lavaan.pl:::lavaanpl_groups(list(model_discrete)), FALSE)
@@ -106,7 +106,7 @@ local({
 
 #### Mixed items with covariates: the objective is lavaan's, at the optimum of its gradient ####
 local({
-  fit <- pmlsem(paste(syntax, "f ~ x1 + x2", sep = "\n"), frame, std.lv = TRUE, ordered = FALSE, optim.method = "QN")
+  fit <- pmlsem(paste(syntax, "f ~ x1 + x2", sep = "\n"), frame, std.lv = TRUE, ordered = FALSE, control = set_control("QN"))
   engine_fit <- fit@external$lavaanpl_internal
   lavaan_logl <- function(x) {
     table <- lavaan::parTable(x)
@@ -144,7 +144,7 @@ local({
   fit_nested <- lavaan.pl:::fit_lavaanpl(
     data_both,
     lavaan.pl:::lavaanpl_model(loadings_structure, GAMMA = matrix(c(NA, 0), 1, 2), NUMERIC = numeric_items),
-    CONTROL = set_qn_control()
+    CONTROL = set_control("QN")
   )
   difference <- lavaan.pl:::compute_plrt(fit_nested, H1 = fit_both)$model
   expect_equal(difference$df, 1)
@@ -157,7 +157,7 @@ local({
     fit_sa <- lavaan.pl:::fit_lavaanpl(
       fit$data,
       fit$model,
-      CONTROL = set_sa_control(pairs_per_iteration = 4)
+      CONTROL = set_control("SA", pairs_per_iteration = 4)
     )
     se <- sqrt(lavaan.pl:::compute_var(fit)$asymptotic_variance / n)
     expect_true(fit_sa$stoFit$converged)
@@ -196,7 +196,7 @@ local({
   )
   expect_error(lavaan.pl:::lavaanpl_data(responses, NUMERIC = c(TRUE, FALSE)))
   expect_error(
-    lavaan.pl:::fit_lavaanpl(data_mixed, lavaan.pl:::lavaanpl_model(loadings_structure), CONTROL = set_qn_control()),
+    lavaan.pl:::fit_lavaanpl(data_mixed, lavaan.pl:::lavaanpl_model(loadings_structure), CONTROL = set_control("QN")),
     "same numeric items"
   )
   expect_error(pmlsem(paste(syntax, "f ~ x1", sep = "\n"), frame, ordered = FALSE, missing = "available.cases"), "available.cases")

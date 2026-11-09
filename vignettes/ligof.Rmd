@@ -40,7 +40,7 @@ all_tests(fit)
 As a comparison, we can look at the output from using the `cfa()` function in the `{lavaan}` package.
 
 ```{r, eval = FALSE}
-fit1 <- lavaan.pl::pmlcfa(mod, dat, std.lv = TRUE, control = set_qn_control())
+fit1 <- lavaan.pl::pmlcfa(mod, dat, std.lv = TRUE, control = set_control("QN"))
 fit2 <- lavaan::cfa(mod, dat, std.lv = TRUE, estimator = "PML")
 
 # Test equality of coefficients and standard errors

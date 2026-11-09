@@ -7,8 +7,8 @@ two_factors[4:6, 2] <- NA
 
 #### Control constructors return classed lists with defaults ####
 local({
-  ucminf_control <- set_qn_control()
-  sa_control <- set_sa_control()
+  ucminf_control <- set_control("QN")
+  sa_control <- set_control("SA")
   expect_inherits(ucminf_control, "lavaanpl_qn_control")
   expect_inherits(sa_control, "lavaanpl_sa_control")
   expect_equal(
@@ -21,18 +21,21 @@ local({
 
 #### Control constructors validate their arguments ####
 local({
-  expect_error(set_qn_control(maxeval = 0))
-  expect_error(set_qn_control(grtol = -1))
-  expect_error(set_sa_control(precondition_epochs = -1))
-  expect_error(set_sa_control(max_precondition_epochs = -1))
-  expect_error(set_saqn_control(maxeval = 0))
-  expect_error(set_saqn_control(alpha = 0))
-  expect_error(set_saqn_control(nstarts = 0))
-  expect_identical(set_saqn_control(nstarts = 2)$nstarts, 2L)
-  expect_identical(lavaan.pl:::control_method(set_saqn_control()), "SA-QN")
-  expect_error(set_sa_control(decay = 0.4))
-  expect_error(set_sa_control(avg_from = 1))
-  expect_error(set_sa_control(gain = "full"))
+  expect_error(set_control("QN", maxeval = 0))
+  expect_error(set_control("QN", grtol = -1))
+  expect_error(set_control("SA", precondition_epochs = -1))
+  expect_error(set_control("SA", max_precondition_epochs = -1))
+  expect_error(set_control(maxeval = 0))
+  expect_error(set_control(alpha = 0))
+  expect_error(set_control(nstarts = 0))
+  expect_identical(set_control(nstarts = 2)$nstarts, 2L)
+  expect_identical(lavaan.pl:::control_method(set_control()), "SA-QN")
+  expect_error(set_control("SA", decay = 0.4))
+  expect_error(set_control("SA", avg_from = 1))
+  expect_error(set_control("SA", gain = "full"))
+  for (method in c("SA-QN", "SA", "QN")) expect_identical(lavaan.pl:::control_method(set_control(method)), method)
+  expect_error(set_control("nope"))
+  expect_error(set_control("QN", average_epochs = 5), "unused argument")
 })
 
 #### lavaan.pl:::lavaanpl_data() computes the frequencies and validates the data ####

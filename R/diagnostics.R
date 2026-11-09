@@ -42,9 +42,9 @@ fit_parameters <- function(object) {
 #'   for quasi-Newton, one epoch per evaluation of the pairwise likelihood), the table of the checks `checks` (`check`,
 #'   `value` and `ok`, `NA` without a rule), and the table of the free parameters `parameters`, with their distance from
 #'   the optimum and, for stochastic approximation, their optimisation noise, in standard errors.
-#' @seealso [plot.lavaan.pl()], [set_sa_control()]
+#' @seealso [plot.lavaan.pl()], [set_control()]
 #' @examples
-#' fit <- pmlcfa("eta =~ y1 + y2 + y3 + y4 + y5", LSAT, std.lv = TRUE, control = set_sa_control(average_epochs = 20))
+#' fit <- pmlcfa("eta =~ y1 + y2 + y3 + y4 + y5", LSAT, std.lv = TRUE, control = set_control("SA", average_epochs = 20))
 #' diagnostics(fit)
 #' @export
 diagnostics <- function(object) {

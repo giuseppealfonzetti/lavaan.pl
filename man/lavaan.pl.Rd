@@ -15,7 +15,7 @@ lavaan.pl(
   estimator = "PML",
   estimator.args = list(ncores = 1, computevar_numderiv = FALSE),
   start = NULL,
-  control = NULL,
+  control = set_control(),
   verbose = FALSE,
   ...
 )
@@ -28,7 +28,7 @@ pmlcfa(
   estimator = "PML",
   estimator.args = list(ncores = 1, computevar_numderiv = FALSE),
   start = NULL,
-  control = NULL,
+  control = set_control(),
   verbose = FALSE,
   ...
 )
@@ -41,7 +41,7 @@ pmlsem(
   estimator = "PML",
   estimator.args = list(ncores = 1, computevar_numderiv = FALSE),
   start = NULL,
-  control = NULL,
+  control = set_control(),
   verbose = FALSE,
   ...
 )
@@ -72,13 +72,13 @@ categories are an error.}
 
 \item{start}{A vector of starting values in lavaan's free-parameter order.}
 
-\item{control}{Control object from \code{\link[=set_saqn_control]{set_saqn_control()}}, \code{\link[=set_sa_control]{set_sa_control()}} or \code{\link[=set_qn_control]{set_qn_control()}}, or \code{NULL}.}
+\item{control}{Control object from \code{\link[=set_control]{set_control()}}, which also selects the method.}
 
 \item{verbose}{If \code{TRUE}, print additional information during the estimation
 process.}
 
-\item{...}{Additional arguments for \code{\link[lavaan:lavaan]{lavaan::lavaan()}}, including \code{optim.method} (\code{"SA-QN"}, \code{"SA"} or \code{"QN"}),
-and, for faster fits in simulations, \code{test = "none"}, which skips the mean and variance adjusted test, and
+\item{...}{Additional arguments for \code{\link[lavaan:lavaan]{lavaan::lavaan()}}, including
+for faster fits in simulations, \code{test = "none"}, which skips the mean and variance adjusted test, and
 \code{samplestats = FALSE}, which skips lavaan's sample statistics.}
 }
 \value{

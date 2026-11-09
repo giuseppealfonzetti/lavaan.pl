@@ -19,9 +19,9 @@ items <- sim_data(
 frame <- as.data.frame(lapply(as.data.frame(items), ordered))
 names(frame) <- paste0("y", seq_len(p))
 syntax <- "f1 =~ y1 + y2 + y3 + y4 + y5 + y6\nf2 =~ y7 + y8 + y9 + y10 + y11 + y12"
-fit_lavaan <- lavaan.pl::pmlcfa(syntax, frame, std.lv = TRUE, optim.method = "SA")
+fit_lavaan <- lavaan.pl::pmlcfa(syntax, frame, std.lv = TRUE, control = set_control("SA"))
 fit_saqn <- lavaan.pl::pmlcfa(syntax, frame, std.lv = TRUE)
-fit_qn <- lavaan.pl::pmlcfa(syntax, frame, std.lv = TRUE, optim.method = "QN")
+fit_qn <- lavaan.pl::pmlcfa(syntax, frame, std.lv = TRUE, control = set_control("QN"))
 
 #### diagnostics() reports the phases and checks of each method ####
 local({
@@ -57,14 +57,14 @@ local({
 local({
   start <- lavaan::coef(fit_lavaan)
   start[grepl("=~", names(start))] <- 0
-  saddle <- suppressWarnings(lavaan.pl::pmlcfa(syntax, frame, std.lv = TRUE, optim.method = "SA", start = start))
+  saddle <- suppressWarnings(lavaan.pl::pmlcfa(syntax, frame, std.lv = TRUE, control = set_control("SA"), start = start))
   d <- diagnostics(saddle)
   expect_false(d$converged)
   expect_true(all(is.na(d$parameters$ratio)))
   expect_false(d$checks$ok[d$checks$check == "Observed information positive definite"])
   expect_stdout(print(d), "NOT converged")
 
-  short <- suppressWarnings(lavaan.pl::pmlcfa(syntax, frame, std.lv = TRUE, optim.method = "QN", se = "none", test = "none", control = set_qn_control(maxeval = 5)))
+  short <- suppressWarnings(lavaan.pl::pmlcfa(syntax, frame, std.lv = TRUE, se = "none", test = "none", control = set_control("QN", maxeval = 5)))
   d <- diagnostics(short)
   expect_false(d$converged)
   expect_false(d$checks$ok[d$checks$check == "QN evaluations"])

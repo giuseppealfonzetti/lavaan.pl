@@ -7,7 +7,7 @@
 fit_lavaanpl(
   DATA,
   MODEL,
-  CONTROL = set_saqn_control(),
+  CONTROL = set_control(),
   START = NULL,
   NCORES = 1,
   VERBOSE = FALSE
@@ -18,8 +18,7 @@ fit_lavaanpl(
 
 \item{MODEL}{Model object from \code{\link[=lavaanpl_model]{lavaanpl_model()}}, or from \code{\link[=lavaanpl_groups]{lavaanpl_groups()}} for several groups.}
 
-\item{CONTROL}{Control object, which selects the method: \code{\link[=set_saqn_control]{set_saqn_control()}} for \code{SA-QN}, \code{\link[=set_sa_control]{set_sa_control()}} for
-\code{SA}, \code{\link[=set_qn_control]{set_qn_control()}} for \code{QN}.}
+\item{CONTROL}{Control object from \code{\link[=set_control]{set_control()}}, which selects the method.}
 
 \item{START}{Starting parameter vector, in the order of \code{\link[=parameter_names]{parameter_names()}}. If \code{NULL}, default values.}
 
