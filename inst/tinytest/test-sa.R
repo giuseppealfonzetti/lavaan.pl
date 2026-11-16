@@ -51,11 +51,11 @@ local({
 #### SA evaluates no Hessian: Adam's diagonal gain, and a burn-in of three levels with the step halved twice ####
 local({
   expect_identical(fit_sa$stoFit$halvings, 2L)
-  expect_identical(fit_sa$stoFit$adam_epochs, 9L)
+  expect_identical(fit_sa$stoFit$adam_epochs, 15L)
   expect_false(fit_sa$stoFit$plateau)
   fit_constant <- lavaan.pl:::fit_lavaanpl(data, model, CONTROL = set_control("SA", halvings = 0))
   expect_identical(fit_constant$stoFit$halvings, 0L)
-  expect_identical(fit_constant$stoFit$adam_epochs, 3L)
+  expect_identical(fit_constant$stoFit$adam_epochs, 5L)
   fit_long <- lavaan.pl:::fit_lavaanpl(data, model, CONTROL = set_control("SA", adam_epochs = 7))
   expect_identical(fit_long$stoFit$adam_epochs, 7L)
   expect_identical(fit_long$stoFit$halvings, 2L)

@@ -316,7 +316,7 @@ lavaanpl_groups <- function(MODELS, CONSTRAINTS = NULL) {
 #'     \item{`alpha`}{Step length of the Adam phase. Default `0.2`.}
 #'     \item{`adam_epochs`}{Number of epochs (passes over the item pairs) of the Adam phase. With `"SA"`, the phase is
 #'       split into `halvings + 1` levels of equal length, and the step is halved after each level but the last, from
-#'       the best point so far. If `NULL`, the default, 3 epochs and at least 50 iterations per level.}
+#'       the best point so far. If `NULL`, the default, 5 epochs and at least 50 iterations per level.}
 #'     \item{`halvings`}{Number of halvings of the Adam step. Default `2`.}
 #'     \item{`average_epochs`}{Number of epochs of the averaged phase, at least 1. If `NULL`, the default, one epoch and
 #'       at least 150 iterations. The averaged phase uses Adam's diagonal preconditioner, frozen.}

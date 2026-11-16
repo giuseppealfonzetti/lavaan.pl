@@ -728,7 +728,7 @@ run_sa <- function(START, DATA, CPP_INPUTS, LINCON, CONTROL, VERBOSE) {
   epoch_length <- ceiling(DATA$pairs / min(CONTROL$pairs_per_iteration, DATA$pairs))
   adam_epochs <- CONTROL$adam_epochs
   if (is.null(adam_epochs)) {
-    adam_epochs <- if (saqn) max(5L, ceiling(150 / epoch_length)) else (CONTROL$halvings + 1L) * max(3L, ceiling(50 / epoch_length))
+    adam_epochs <- if (saqn) max(5L, ceiling(150 / epoch_length)) else (CONTROL$halvings + 1L) * max(5L, ceiling(50 / epoch_length))
   }
   average_epochs <- CONTROL$average_epochs
   if (is.null(average_epochs)) {
