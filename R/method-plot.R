@@ -1,7 +1,7 @@
 #' Plots of the optimisation
 #'
-#' Traces of the optimisation across epochs, a pass over all pairs, with a background band for each phase: Adam,
-#' preconditioning and averaging of the stochastic approximation, and quasi-Newton, where each evaluation of the pairwise
+#' Traces of the optimisation across epochs, a pass over all pairs, with a background band for each phase: Adam, then
+#' averaging for `SA` or preconditioning and quasi-Newton for `SA-QN`, where each evaluation of the pairwise
 #' likelihood counts as one epoch and only accepted steps are shown.
 #'
 #' @param x A `lavaan.pl` object from [lavaan.pl()].

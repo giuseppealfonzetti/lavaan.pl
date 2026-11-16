@@ -141,7 +141,8 @@ lavaan.pl <- function(
     CONTROL = control,
     START = spec$START,
     NCORES = ncores,
-    VERBOSE = verbose
+    VERBOSE = verbose,
+    CHECK = lavargs$se != "none" || !identical(lavargs$test, "none")
   )
 
   # Compute standard errors ----------------------------------------------------

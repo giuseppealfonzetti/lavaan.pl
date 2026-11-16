@@ -8,7 +8,7 @@
 #' @seealso [diagnostics()]
 #' @keywords internal
 fit_parameters <- function(object) {
-  fit <- get_lavaanpl_internal(object)
+  fit <- check_sa(get_lavaanpl_internal(object))
   vars <- object@external$vars
   if (is.null(vars)) {
     vars <- tryCatch(compute_var(fit), lavaanpl_not_pd = function(e) NULL)
@@ -44,7 +44,7 @@ fit_parameters <- function(object) {
 #'   the optimum and, for stochastic approximation, their optimisation noise, in standard errors.
 #' @seealso [plot.lavaan.pl()], [set_control()]
 #' @examples
-#' fit <- pmlcfa("eta =~ y1 + y2 + y3 + y4 + y5", LSAT, std.lv = TRUE, control = set_control("SA", average_epochs = 20))
+#' fit <- pmlcfa("eta =~ y1 + y2 + y3 + y4 + y5", LSAT, std.lv = TRUE, control = set_control("SA"))
 #' diagnostics(fit)
 #' @export
 diagnostics <- function(object) {
@@ -54,7 +54,7 @@ diagnostics <- function(object) {
   qn <- fit$numFit
   sa <- fit$method != "QN"
   num <- fit$method != "SA"
-  burn <- if (sa) unname(st$time[c("adam", "precondition")]) else NULL
+  burn <- if (sa) unname(st$time[c("adam", if (num) "precondition")]) else NULL
   last <- if (num) {
     fit$RTime - sum(burn, if (sa) st$time[["monitor"]])
   } else {
@@ -62,12 +62,14 @@ diagnostics <- function(object) {
   }
   phases <- data.frame(
     phase = c(
-      if (sa) c("Adam", "Preconditioning"),
+      if (sa) "Adam",
+      if (sa && num) "Preconditioning",
       if (num) "QN" else "Averaged"
     ),
     epochs = c(
-      if (sa) c(st$adam_epochs, st$precondition_epochs),
-      if (num) qn$info[["neval"]] else fit$control$average_epochs
+      if (sa) st$adam_epochs,
+      if (sa && num) st$precondition_epochs,
+      if (num) qn$info[["neval"]] else st$average_epochs
     ),
     seconds = c(burn, last)
   )
@@ -94,7 +96,6 @@ diagnostics <- function(object) {
     checks <- rbind(
       checks,
       check("Largest optimisation noise / standard error", worst(pars$ratio)),
-      check("Burn-in ended at a plateau", st$plateau),
       check(
         "Skipped steps in the averaged phase",
         st$skipped_averaging,

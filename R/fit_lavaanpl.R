@@ -6,6 +6,7 @@
 #' @param START Starting parameter vector, in the order of [parameter_names()]. If `NULL`, default values.
 #' @param NCORES Number of threads.
 #' @param VERBOSE If `TRUE`, print progress.
+#' @param CHECK If `FALSE`, the `SA` method skips the checks that need the observed information. See [check_sa()].
 #'
 #' @return An object of class `lavaanpl_internal`: a list with the inputs `data`, `model` and `control`, the
 #'   dimensions `dims`, the `method`, the constraints `lincon`, the parameter blocks `blocks`, the [cpp_inputs()]
@@ -19,7 +20,8 @@ fit_lavaanpl <- function(
   CONTROL = set_control(),
   START = NULL,
   NCORES = 1,
-  VERBOSE = FALSE
+  VERBOSE = FALSE,
+  CHECK = TRUE
 ) {
   start_time <- Sys.time()
   stopifnot(
@@ -48,9 +50,10 @@ fit_lavaanpl <- function(
   nthr <- sum(DATA$cat - 1)
   block <- parameter_blocks(MODEL, nthr)
   METHOD <- control_method(CONTROL)
-  if (METHOD == "SA" && CONTROL$average_epochs == 0) {
-    stop(
-      "The SA method needs average_epochs of at least 1: use set_control(\"SA-QN\") to skip the averaged phase."
+  if (METHOD == "SA" && any(vapply(models, function(x) anyNA(diag(x$PSI)), logical(1)))) {
+    warning(
+      "The SA method is not reliable with latent variables scaled by a marker loading: use std.lv = TRUE, or set_control(\"SA-QN\").",
+      call. = FALSE
     )
   }
   dims <- model_dims(DATA, MODEL)
@@ -302,7 +305,7 @@ fit_lavaanpl <- function(
       all(is.finite(opt$parameter_vector))
     fit$stoFit <- opt[setdiff(names(opt), c("parameter_vector", "invh"))]
     fit$parameter_vector <- opt$parameter_vector
-    fit <- check_sa(fit)
+    fit <- check_sa(fit, CHECK)
   }
   fit$RTime <- as.numeric(difftime(Sys.time(), start_time, units = "secs"))
   if (VERBOSE) {
@@ -315,21 +318,15 @@ fit_lavaanpl <- function(
 #' End-of-run check of the stochastic approximation
 #'
 #' @param FIT Object of class `lavaanpl_internal`.
-#' @return `FIT`, with the variance `vars` and, in `stoFit`, the `check` and the updated `converged`.
+#' @param INFERENCE If `FALSE`, skip the checks that need the observed information.
+#' @return `FIT`, with the variance `vars` and, in `stoFit`, the `check` and the updated `converged`. Unchanged unless
+#'   the method is `SA` and the check is still to be done.
 #' @seealso [fit_lavaanpl()], [compute_var()]
 #' @keywords internal
-check_sa <- function(FIT) {
+check_sa <- function(FIT, INFERENCE = TRUE) {
+  if (FIT$method != "SA" || isTRUE(FIT$stoFit$check$done)) return(FIT)
   FIT$stoFit$check <- list(done = FALSE, pd = NA, distance = NA, noise = NA)
-  if (FIT$dims$npar > 2000) {
-    if (!FIT$stoFit$plateau) {
-      FIT$stoFit$converged <- FALSE
-      warning(
-        "The Adam phase did not reach a plateau of the pairwise likelihood: increase adam_epochs.",
-        call. = FALSE
-      )
-    }
-    return(FIT)
-  }
+  if (FIT$dims$npar > 2000 || !INFERENCE) return(FIT)
   vars <- tryCatch(compute_var(FIT), lavaanpl_not_pd = function(e) NULL)
   FIT$stoFit$check$done <- TRUE
   FIT$stoFit$check$pd <- !is.null(vars)
@@ -727,21 +724,17 @@ implied_variance <- function(MODEL, PARAMETER_VECTOR) {
 run_sa <- function(START, DATA, CPP_INPUTS, LINCON, CONTROL, VERBOSE) {
   npar <- length(LINCON$free_idx)
   free <- npar < length(START)
+  saqn <- control_method(CONTROL) == "SA-QN"
+  epoch_length <- ceiling(DATA$pairs / min(CONTROL$pairs_per_iteration, DATA$pairs))
   adam_epochs <- CONTROL$adam_epochs
   if (is.null(adam_epochs)) {
-    adam_epochs <- max(
-      5L,
-      ceiling(
-        150 / ceiling(DATA$pairs / min(CONTROL$pairs_per_iteration, DATA$pairs))
-      )
-    )
+    adam_epochs <- if (saqn) max(5L, ceiling(150 / epoch_length)) else (CONTROL$halvings + 1L) * max(3L, ceiling(50 / epoch_length))
   }
-  hessian_gain <- switch(
-    CONTROL$gain,
-    auto = npar <= 2000,
-    hessian = TRUE,
-    diagonal = FALSE
-  )
+  average_epochs <- CONTROL$average_epochs
+  if (is.null(average_epochs)) {
+    average_epochs <- max(1L, ceiling(150 / epoch_length))
+  }
+  hessian_gain <- saqn && npar <= 2000
   out <- cpp_sa(
     START = START[LINCON$free_idx],
     K = if (free) LINCON$K else matrix(0, 0, 0),
@@ -751,16 +744,19 @@ run_sa <- function(START, DATA, CPP_INPUTS, LINCON, CONTROL, VERBOSE) {
     PAIRS_PER_ITERATION = CONTROL$pairs_per_iteration,
     ALPHA = CONTROL$alpha,
     ADAM_EPOCHS = as.integer(adam_epochs),
-    PRECONDITION_EPOCHS = CONTROL$precondition_epochs,
-    MAX_PRECONDITION_EPOCHS = CONTROL$max_precondition_epochs,
-    AVERAGE_EPOCHS = CONTROL$average_epochs,
-    TOL = CONTROL$tol,
+    PRECONDITION_EPOCHS = if (saqn) CONTROL$precondition_epochs else 0L,
+    MAX_PRECONDITION_EPOCHS = if (saqn) CONTROL$max_precondition_epochs else 0L,
+    AVERAGE_EPOCHS = as.integer(average_epochs),
+    TOL = if (saqn) CONTROL$tol else 0,
     DECAY = CONTROL$decay,
     AVG_FROM = CONTROL$avg_from,
     HESSIAN_GAIN = hessian_gain,
+    LEVEL_EPOCHS = if (saqn) 0L else as.integer(max(1, adam_epochs %/% (CONTROL$halvings + 1))),
+    HALVINGS = if (saqn) 0L else CONTROL$halvings,
     SEED = CONTROL$seed,
     VERBOSE = VERBOSE
   )
   out$path$nll <- c(out$path$nll, rep(NA, sum(out$path$phase == 3)))
+  out$average_epochs <- as.integer(average_epochs)
   out
 }

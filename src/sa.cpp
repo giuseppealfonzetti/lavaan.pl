@@ -19,6 +19,8 @@ Rcpp::List cpp_sa(
     const double DECAY,
     const double AVG_FROM,
     const bool HESSIAN_GAIN,
+    const int LEVEL_EPOCHS,
+    const int HALVINGS,
     const int SEED,
     const bool VERBOSE = false
 ){
@@ -36,7 +38,9 @@ Rcpp::List cpp_sa(
   const int P = groups.npairs, batch = std::min(PAIRS_PER_ITERATION, P), epoch_length = (P + batch - 1) / batch, df = START.size();
   const bool constrained = K.size() > 0;
   const Eigen::SparseMatrix<double> K_sparse = K.sparseView();
-  const double beta1 = .9, beta2 = .999, alpha = ALPHA / std::sqrt(static_cast<double>(epoch_length));
+  const double beta1 = .9, beta2 = .999;
+  const double alpha_start = ALPHA / std::sqrt(static_cast<double>(epoch_length));
+  double alpha = alpha_start;
 
   auto expand = [&](const Eigen::VectorXd &X){ return constrained ? Eigen::VectorXd(K_sparse * X + C) : X; };
 
@@ -221,7 +225,7 @@ Rcpp::List cpp_sa(
   };
 
   double t_adam = 0, t_precondition = 0, t_hess = 0, t_avg = 0, t_mon = 0, prev_f = 0, best_f = 0;
-  Eigen::VectorXd best;
+  Eigen::VectorXd best, epoch_mean;
   int calm_epochs = 0;
   bool plateau = false;
   auto burn_epoch = [&](auto &&DIRECTION, const int PHASE){
@@ -232,6 +236,7 @@ Rcpp::List cpp_sa(
       Rcpp::checkUserInterrupt();
     }
     clk::time_point tm = clk::now();
+    epoch_mean = epoch_average;
     const double f = objective(epoch_average);
     t_mon += secs(tm);
     record_path(epoch_average, f, PHASE);
@@ -262,10 +267,30 @@ Rcpp::List cpp_sa(
   record_path(x, prev_f, 0);
   best = x;
   best_f = prev_f;
-  for(int e = 0; e < ADAM_EPOCHS && !plateau; e++){
+  const bool schedule = LEVEL_EPOCHS > 0;
+  Eigen::VectorXd level = Eigen::VectorXd::Zero(df);
+  int halvings = 0;
+  for(int e = 0; e < ADAM_EPOCHS && (schedule || !plateau); e++){
     plateau = burn_epoch(adam, 1);
     adam_epochs++;
+    if(!schedule) continue;
+    level += epoch_mean / LEVEL_EPOCHS;
+    if(adam_epochs % LEVEL_EPOCHS != 0) continue;
+    clk::time_point tc = clk::now();
+    const double f = objective(level);
+    t_mon += secs(tc);
+    if(f < best_f){
+      best = level;
+      best_f = f;
+    }
+    move_to(best);
+    level.setZero();
+    if(halvings < HALVINGS){
+      alpha /= 2;
+      halvings++;
+    }
   }
+  if(schedule) plateau = false;
   move_to(best);
   prev_f = best_f;
   t_adam = secs(t0) - t_mon;
@@ -298,7 +323,7 @@ Rcpp::List cpp_sa(
     shuffled = false;
   }
   if(!hessian){
-    diagonal_gain = alpha * (1 - beta1) * ((adam_v / (1 - std::pow(beta2, std::max(adam_t, 1)))).array().sqrt() + 1e-8).inverse();
+    diagonal_gain = alpha_start * (1 - beta1) * ((adam_v / (1 - std::pow(beta2, std::max(adam_t, 1)))).array().sqrt() + 1e-8).inverse();
     gain_scale = 1;
   }
   t_precondition = secs(t0) - (t_mon - mon0);
@@ -336,6 +361,7 @@ Rcpp::List cpp_sa(
     Rcpp::Named("adam_epochs") = adam_epochs,
     Rcpp::Named("precondition_epochs") = precondition_epochs,
     Rcpp::Named("plateau") = plateau,
+    Rcpp::Named("halvings") = halvings,
     Rcpp::Named("iterations") = iter,
     Rcpp::Named("averaged") = T2 - T0,
     Rcpp::Named("gain") = hessian ? "hessian" : "diagonal",

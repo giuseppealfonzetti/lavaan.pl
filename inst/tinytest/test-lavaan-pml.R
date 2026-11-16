@@ -298,7 +298,9 @@ local({
       se <- sqrt(lavaan.pl:::compute_var(exact_fit)$asymptotic_variance / exact_fit$data$n)
       gap <- abs(lavaan.pl:::transform_parameters(engine_fit$model, engine_fit$parameter_vector) - lavaan.pl:::transform_parameters(exact_fit$model, exact_fit$parameter_vector))
       engine_distance <- max((gap / se)[se > 0])
-      expect_true(abs(engine_fit$stoFit$check$distance - engine_distance) < .1 + .1 * engine_distance, info = name)
+      if (!any(vapply(engine_fit$model$MODELS, function(x) anyNA(diag(x$PSI)), logical(1)))) {
+        expect_true(abs(engine_fit$stoFit$check$distance - engine_distance) < .1 + .1 * engine_distance, info = name)
+      }
     } else {
       expect_false(lavaan::lavInspect(fit, "converged"), info = name)
     }

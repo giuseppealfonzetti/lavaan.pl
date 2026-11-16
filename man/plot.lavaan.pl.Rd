@@ -21,8 +21,8 @@ error of each parameter, with stochastic approximation only.}
 The plotted data, invisibly. Without the tinyplot package, a warning and the data.
 }
 \description{
-Traces of the optimisation across epochs, a pass over all pairs, with a background band for each phase: Adam,
-preconditioning and averaging of the stochastic approximation, and quasi-Newton, where each evaluation of the pairwise
+Traces of the optimisation across epochs, a pass over all pairs, with a background band for each phase: Adam, then
+averaging for \code{SA} or preconditioning and quasi-Newton for \code{SA-QN}, where each evaluation of the pairwise
 likelihood counts as one epoch and only accepted steps are shown.
 }
 \seealso{

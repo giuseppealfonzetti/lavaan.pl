@@ -10,7 +10,8 @@ fit_lavaanpl(
   CONTROL = set_control(),
   START = NULL,
   NCORES = 1,
-  VERBOSE = FALSE
+  VERBOSE = FALSE,
+  CHECK = TRUE
 )
 }
 \arguments{
@@ -25,6 +26,8 @@ fit_lavaanpl(
 \item{NCORES}{Number of threads.}
 
 \item{VERBOSE}{If \code{TRUE}, print progress.}
+
+\item{CHECK}{If \code{FALSE}, the \code{SA} method skips the checks that need the observed information. See \code{\link[=check_sa]{check_sa()}}.}
 }
 \value{
 An object of class \code{lavaanpl_internal}: a list with the inputs \code{data}, \code{model} and \code{control}, the

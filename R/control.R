@@ -297,9 +297,10 @@ lavaanpl_groups <- function(MODELS, CONSTRAINTS = NULL) {
 #' Control options of the estimation
 #'
 #' @param method Estimation method: `"SA-QN"` (quasi-Newton from the burn-in of stochastic approximation), `"SA"`
-#'   (pairwise stochastic approximation) or `"QN"` (quasi-Newton).
+#'   (pairwise stochastic approximation, which needs latent variables scaled by `std.lv = TRUE`) or `"QN"`
+#'   (quasi-Newton).
 #' @param ... Options of `method`, each with a default. `"QN"` takes the quasi-Newton options, `"SA"` the stochastic
-#'   approximation options, and `"SA-QN"` both, except `average_epochs`, `decay`, `avg_from` and `gain`, plus `nstarts`.
+#'   approximation options, and `"SA-QN"` both, except `halvings`, `average_epochs`, `decay` and `avg_from`, plus its own options.
 #'
 #'   Quasi-Newton options:
 #'   \describe{
@@ -313,25 +314,29 @@ lavaanpl_groups <- function(MODELS, CONSTRAINTS = NULL) {
 #'   \describe{
 #'     \item{`pairs_per_iteration`}{Number of item pairs drawn at each iteration. Default `16`.}
 #'     \item{`alpha`}{Step length of the Adam phase. Default `0.2`.}
-#'     \item{`adam_epochs`}{Maximum number of epochs (passes over the item pairs) of the Adam phase. If `NULL`, the
-#'       default, enough for 5 epochs and 150 iterations.}
-#'     \item{`precondition_epochs`}{Number of epochs of the preconditioning phase. With `0`, the gain is computed at the
-#'       end of the Adam phase. Default `3`.}
-#'     \item{`max_precondition_epochs`}{Maximum number of preconditioning epochs while the observed information is not
-#'       positive definite. Default `20`.}
-#'     \item{`average_epochs`}{Number of epochs of the averaged phase, at least 1. Default `50`.}
-#'     \item{`tol`}{Change of the pairwise log-likelihood between epochs, per free parameter, below which the Adam and
-#'       preconditioning phases stop early. Default `0.05`.}
+#'     \item{`adam_epochs`}{Number of epochs (passes over the item pairs) of the Adam phase. With `"SA"`, the phase is
+#'       split into `halvings + 1` levels of equal length, and the step is halved after each level but the last, from
+#'       the best point so far. If `NULL`, the default, 3 epochs and at least 50 iterations per level.}
+#'     \item{`halvings`}{Number of halvings of the Adam step. Default `2`.}
+#'     \item{`average_epochs`}{Number of epochs of the averaged phase, at least 1. If `NULL`, the default, one epoch and
+#'       at least 150 iterations. The averaged phase uses Adam's diagonal preconditioner, frozen.}
 #'     \item{`decay`}{Exponent of the step length decay in the averaged phase, between 0.5 and 1. Default `0.75`.}
 #'     \item{`avg_from`}{Fraction of the averaged phase discarded before averaging. Default `0.25`.}
-#'     \item{`gain`}{Gain of the preconditioning and averaged phases: `"hessian"` (inverse observed information),
-#'       `"diagonal"` (Adam's diagonal preconditioner, no preconditioning phase), or `"auto"`, the default (`"hessian"`
-#'       up to 2000 free parameters).}
 #'     \item{`seed`}{Seed of the pair sampling. Default `123`.}
 #'   }
 #'
 #'   `"SA-QN"` also takes:
 #'   \describe{
+#'     \item{`adam_epochs`}{With `"SA-QN"`, the maximum number of epochs of the Adam phase, which stops early when the
+#'       pairwise log-likelihood changes by less than `tol` per free parameter in two consecutive epochs. If `NULL`, the
+#'       default, enough for 5 epochs and 150 iterations.}
+#'     \item{`tol`}{Change of the pairwise log-likelihood, per free parameter, below which the burn-in phases stop
+#'       early. Default `0.05`.}
+#'     \item{`precondition_epochs`}{Number of epochs of the Newton preconditioning phase after Adam, up to 2000 free
+#'       parameters. With `0`, the inverse observed information is computed at the end of the Adam phase and starts
+#'       quasi-Newton. Default `3`.}
+#'     \item{`max_precondition_epochs`}{Maximum number of preconditioning epochs while the observed information is not
+#'       positive definite. Default `20`.}
 #'     \item{`nstarts`}{Number of runs, with seeds `seed`, `seed + 1` and so on. The highest pairwise log-likelihood is
 #'       kept, with a warning if the runs disagree. Default `1`.}
 #'   }
@@ -369,34 +374,27 @@ set_sa_control <- function(
   pairs_per_iteration = 16,
   alpha = 0.2,
   adam_epochs = NULL,
-  precondition_epochs = 3,
-  max_precondition_epochs = 20,
-  average_epochs = 50,
-  tol = 0.05,
+  halvings = 2,
+  average_epochs = NULL,
   decay = 0.75,
   avg_from = 0.25,
-  gain = c("auto", "hessian", "diagonal"),
   seed = 123
 ) {
-  gain <- match.arg(gain)
   num <- function(x) is.numeric(x) && length(x) == 1 && is.finite(x)
   stopifnot(
     num(pairs_per_iteration), pairs_per_iteration >= 1,
     num(alpha), alpha > 0,
     is.null(adam_epochs) || (num(adam_epochs) && adam_epochs >= 1),
-    num(precondition_epochs), precondition_epochs >= 0,
-    num(max_precondition_epochs), max_precondition_epochs >= 0,
-    num(average_epochs), average_epochs >= 0,
-    num(tol), tol > 0,
+    num(halvings), halvings >= 0, halvings == round(halvings),
+    is.null(average_epochs) || (num(average_epochs) && average_epochs >= 1),
     num(decay), decay > 0.5, decay < 1,
     num(avg_from), avg_from >= 0, avg_from < 1,
     num(seed), seed > 0
   )
   out <- list(pairs_per_iteration = as.integer(pairs_per_iteration), alpha = alpha,
-              adam_epochs = if (!is.null(adam_epochs)) as.integer(adam_epochs), precondition_epochs = as.integer(precondition_epochs),
-              max_precondition_epochs = as.integer(max_precondition_epochs), average_epochs = as.integer(average_epochs),
-              tol = tol, decay = decay, avg_from = avg_from, gain = gain,
-              seed = as.integer(seed))
+              adam_epochs = if (!is.null(adam_epochs)) as.integer(adam_epochs), halvings = as.integer(halvings),
+              average_epochs = if (!is.null(average_epochs)) as.integer(average_epochs),
+              decay = decay, avg_from = avg_from, seed = as.integer(seed))
   class(out) <- "lavaanpl_sa_control"
   out
 }
@@ -416,11 +414,20 @@ set_saqn_control <- function(
   stepmax = 1,
   maxeval = 500
 ) {
-  stopifnot(is.numeric(nstarts), length(nstarts) == 1, is.finite(nstarts), nstarts >= 1)
+  stopifnot(
+    is.numeric(precondition_epochs), length(precondition_epochs) == 1, is.finite(precondition_epochs), precondition_epochs >= 0,
+    is.numeric(max_precondition_epochs), length(max_precondition_epochs) == 1, is.finite(max_precondition_epochs),
+    max_precondition_epochs >= 0,
+    is.numeric(tol), length(tol) == 1, is.finite(tol), tol > 0,
+    is.numeric(nstarts), length(nstarts) == 1, is.finite(nstarts), nstarts >= 1
+  )
+  burn <- set_sa_control(pairs_per_iteration = pairs_per_iteration, alpha = alpha, adam_epochs = adam_epochs, seed = seed)
+  burn$halvings <- NULL
+  burn$average_epochs <- 0L
+  burn$tol <- tol
   out <- c(
-    set_sa_control(pairs_per_iteration = pairs_per_iteration, alpha = alpha, adam_epochs = adam_epochs,
-                   precondition_epochs = precondition_epochs, max_precondition_epochs = max_precondition_epochs,
-                   average_epochs = 0, tol = tol, seed = seed),
+    burn,
+    list(precondition_epochs = as.integer(precondition_epochs), max_precondition_epochs = as.integer(max_precondition_epochs)),
     set_qn_control(grtol = grtol, xtol = xtol, stepmax = stepmax, maxeval = maxeval),
     list(nstarts = as.integer(nstarts))
   )

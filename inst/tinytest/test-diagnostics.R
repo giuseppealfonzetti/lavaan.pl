@@ -36,10 +36,19 @@ local({
     expect_stdout(print(d), "converged")
   }
   sa <- diagnostics(fit_lavaan)
-  expect_equal(sa$phases$phase, c("Adam", "Preconditioning", "Averaged"))
+  expect_equal(sa$phases$phase, c("Adam", "Averaged"))
   expect_equal(sa$parameters$ratio, sa$parameters$noise / sa$parameters$se)
   expect_equal(max(sa$parameters$distance), fit_lavaan@external$lavaanpl_internal$stoFit$check$distance)
   expect_true("Skipped steps in the averaged phase" %in% sa$checks$check)
+
+  unchecked <- lavaan.pl::pmlcfa(syntax, frame, std.lv = TRUE, se = "none", test = "none", control = set_control("SA"))
+  expect_false(unchecked@external$lavaanpl_internal$stoFit$check$done)
+  expect_null(unchecked@external$lavaanpl_internal$vars)
+  expect_stdout(print(unchecked@external$lavaanpl_internal), "not computed")
+  expect_equal(
+    max(suppressWarnings(diagnostics(unchecked))$parameters$distance),
+    fit_lavaan@external$lavaanpl_internal$stoFit$check$distance
+  )
 
   saqn <- diagnostics(fit_saqn)
   expect_equal(saqn$phases$phase, c("Adam", "Preconditioning", "QN"))
@@ -79,7 +88,7 @@ local({
   trace <- plot(fit_lavaan)
   expect_equal(nrow(trace), length(internal$parameter_vector) * length(internal$stoFit$path$iter))
   expect_equal(unique(trace$epoch), internal$stoFit$path$iter / internal$stoFit$epoch_length)
-  expect_equal(levels(droplevels(trace$phase)), c("Adam", "Preconditioning", "Averaged"))
+  expect_equal(levels(droplevels(trace$phase)), c("Adam", "Averaged"))
   expect_equal(unique(plot(fit_lavaan, "trace", blocks = "lambda")$block), "lambda")
   objective <- plot(fit_lavaan, "objective")
   expect_true(all(is.finite(objective$objective)))

@@ -20,7 +20,7 @@ the optimum and, for stochastic approximation, their optimisation noise, in stan
 Diagnostics of the optimisation
 }
 \examples{
-fit <- pmlcfa("eta =~ y1 + y2 + y3 + y4 + y5", LSAT, std.lv = TRUE, control = set_control("SA", average_epochs = 20))
+fit <- pmlcfa("eta =~ y1 + y2 + y3 + y4 + y5", LSAT, std.lv = TRUE, control = set_control("SA"))
 diagnostics(fit)
 }
 \seealso{

@@ -34,38 +34,35 @@ distance_in_se <- function(fit_sa, fit_pml) {
   max((difference / se)[se > 0])
 }
 
-#### SA estimates are within one standard error of PML ####
+#### SA estimates are within one standard error of PML, and marker scaling warns ####
 local({
-  fit_marker_pml <- lavaan.pl:::fit_lavaanpl(
-    data,
-    lavaan.pl:::lavaanpl_model(loadings_markers, PSI = matrix(NA, q, q)),
-    CONTROL = set_control("QN")
+  expect_warning(
+    lavaan.pl:::fit_lavaanpl(
+      data,
+      lavaan.pl:::lavaanpl_model(loadings_markers, PSI = matrix(NA, q, q)),
+      CONTROL = set_control("SA")
+    ),
+    "marker loading"
   )
-  fit_marker_sa <- lavaan.pl:::fit_lavaanpl(
-    data,
-    lavaan.pl:::lavaanpl_model(loadings_markers, PSI = matrix(NA, q, q)),
-    CONTROL = set_control("SA")
-  )
-  for (fits in list(
-    list(fit_sa, fit_pml),
-    list(fit_marker_sa, fit_marker_pml)
-  )) {
-    expect_true(fits[[1]]$stoFit$converged)
-    expect_identical(fits[[1]]$stoFit$gain, "hessian")
-    expect_true(distance_in_se(fits[[1]], fits[[2]]) < 1)
-  }
+  expect_true(fit_sa$stoFit$converged)
+  expect_true(distance_in_se(fit_sa, fit_pml) < 1)
 })
 
-#### The diagonal gain skips the Newton phase ####
+#### SA evaluates no Hessian: Adam's diagonal gain, and a burn-in of three levels with the step halved twice ####
 local({
-  fit_diagonal <- lavaan.pl:::fit_lavaanpl(
-    data,
-    model,
-    CONTROL = set_control("SA", gain = "diagonal")
-  )
-  expect_identical(fit_diagonal$stoFit$gain, "diagonal")
-  expect_identical(fit_diagonal$stoFit$precondition_epochs, 0L)
-  expect_true(distance_in_se(fit_diagonal, fit_pml) < 1)
+  expect_identical(fit_sa$stoFit$halvings, 2L)
+  expect_identical(fit_sa$stoFit$adam_epochs, 9L)
+  expect_false(fit_sa$stoFit$plateau)
+  fit_constant <- lavaan.pl:::fit_lavaanpl(data, model, CONTROL = set_control("SA", halvings = 0))
+  expect_identical(fit_constant$stoFit$halvings, 0L)
+  expect_identical(fit_constant$stoFit$adam_epochs, 3L)
+  fit_long <- lavaan.pl:::fit_lavaanpl(data, model, CONTROL = set_control("SA", adam_epochs = 7))
+  expect_identical(fit_long$stoFit$adam_epochs, 7L)
+  expect_identical(fit_long$stoFit$halvings, 2L)
+  expect_identical(fit_sa$stoFit$gain, "diagonal")
+  expect_identical(fit_sa$stoFit$n_hessian, 0L)
+  expect_identical(fit_sa$stoFit$precondition_epochs, 0L)
+  expect_identical(fit_sa$stoFit$average_epochs, as.integer(ceiling(150 / epoch_length)))
 })
 
 #### SA is reproducible with a fixed seed and changes with another seed ####
@@ -85,12 +82,11 @@ local({
   expect_equal(epoch_length, ceiling(fit_sa$data$pairs / 16))
   expect_equal(
     fit_sa$stoFit$averaged,
-    fit_sa$control$average_epochs * epoch_length - floor(0.25 * fit_sa$control$average_epochs * epoch_length)
+    fit_sa$stoFit$average_epochs * epoch_length - floor(0.25 * fit_sa$stoFit$average_epochs * epoch_length)
   )
   expect_equal(
     fit_sa$stoFit$iterations,
-    (fit_sa$stoFit$adam_epochs + fit_sa$stoFit$precondition_epochs + fit_sa$control$average_epochs) *
-      epoch_length
+    (fit_sa$stoFit$adam_epochs + fit_sa$stoFit$average_epochs) * epoch_length
   )
   expect_equal(tail(fit_sa$stoFit$path$phase, 1), 3)
 })
@@ -127,26 +123,25 @@ local({
   expect_null(lavaan.pl:::compute_var(fit_pml)$noise)
 })
 
-#### The optimisation noise matches the spread of SA estimates across seeds in two groups ####
+#### The optimisation noise matches the spread of SA estimates across seeds in two groups, and is not overconfident by default ####
 local({
   data_two_groups <- lavaan.pl:::lavaanpl_data(items, GROUP = rep(1:2, each = n / 2))
   model_two_groups <- lavaan.pl:::lavaanpl_groups(list(model, model))
   optimum <- lavaan.pl:::fit_lavaanpl(data_two_groups, model_two_groups, CONTROL = set_control("QN"))$parameter_vector
-  fits <- lapply(1:10, function(seed) {
-    lavaan.pl:::fit_lavaanpl(
-      data_two_groups,
-      model_two_groups,
-      CONTROL = set_control("SA", seed = seed)
-    )
-  })
-  deviations <- t(vapply(
-    fits,
-    function(fit) fit$parameter_vector - optimum,
-    numeric(length(optimum))
-  ))
-  trace_ratio <- sum(colMeans(deviations^2)) /
-    sum(diag(lavaan.pl:::compute_var(fits[[1]])$noise))
-  expect_true(trace_ratio > 0.6 && trace_ratio < 1.5)
+  trace_ratio <- function(average_epochs) {
+    fits <- lapply(1:10, function(seed) {
+      suppressWarnings(lavaan.pl:::fit_lavaanpl(
+        data_two_groups,
+        model_two_groups,
+        CONTROL = set_control("SA", seed = seed, average_epochs = average_epochs)
+      ))
+    })
+    deviations <- t(vapply(fits, function(fit) fit$parameter_vector - optimum, numeric(length(optimum))))
+    sum(colMeans(deviations^2)) / sum(diag(lavaan.pl:::compute_var(fits[[1]])$noise))
+  }
+  long <- trace_ratio(20)
+  expect_true(long > 0.6 && long < 1.5)
+  expect_true(trace_ratio(NULL) < 1.5)
 })
 
 #### Linear constraints hold exactly ####
@@ -175,7 +170,7 @@ local({
   )
 })
 
-#### Direct covariances, structural models and the theta parameterization are within one standard error ####
+#### Direct covariances, structural models and the theta parameterization are as close to PML as their noise explains ####
 local({
   regressions <- matrix(0, q, q)
   regressions[2, 1] <- regressions[3, 2] <- NA
@@ -191,12 +186,11 @@ local({
     ),
     lavaan.pl:::lavaanpl_model(loadings_structure, PARAMETERIZATION = "theta")
   )) {
+    fit_other <- suppressWarnings(lavaan.pl:::fit_lavaanpl(data, other_model, CONTROL = set_control("SA")))
+    expect_true(fit_other$stoFit$converged)
     expect_true(
-      distance_in_se(
-        lavaan.pl:::fit_lavaanpl(data, other_model, CONTROL = set_control("SA")),
-        lavaan.pl:::fit_lavaanpl(data, other_model, CONTROL = set_control("QN"))
-      ) <
-        1
+      distance_in_se(fit_other, lavaan.pl:::fit_lavaanpl(data, other_model, CONTROL = set_control("QN"))) <=
+        max(1, 4 * fit_other$stoFit$check$noise)
     )
   }
 })
@@ -369,39 +363,34 @@ local({
   model_small <- lavaan.pl:::lavaanpl_model(build_constr_mat(6, 1, "simple"))
   start <- suppressWarnings(lavaan.pl:::fit_lavaanpl(small, model_small, CONTROL = set_control("QN", maxeval = 1)))$init
   start[lavaan.pl:::parameter_blocks(model_small, sum(small$cat - 1)) == "lambda"] <- .01
-  fit_default <- lavaan.pl:::fit_lavaanpl(small, model_small, CONTROL = set_control("SA", tol = 1e-8), START = start)
+  fit_default <- lavaan.pl:::fit_lavaanpl(small, model_small, CONTROL = set_control("SA"), START = start)
   expect_equal(fit_default$stoFit$pairs_per_iteration, 15)
   expect_equal(fit_default$stoFit$epoch_length, 1)
   expect_equal(fit_default$stoFit$adam_epochs, 150)
   fit_capped <- suppressWarnings(lavaan.pl:::fit_lavaanpl(
     small,
     model_small,
-    CONTROL = set_control("SA", adam_epochs = 2, precondition_epochs = 1, max_precondition_epochs = 1, average_epochs = 2, tol = 1e-8),
+    CONTROL = set_control("SA", adam_epochs = 2, average_epochs = 2),
     START = start
   ))
   expect_equal(fit_capped$stoFit$adam_epochs, 2)
-  expect_equal(fit_capped$stoFit$precondition_epochs, 1)
   expect_equal(sum(fit_capped$stoFit$path$phase == 3), 2)
-  fit_large <- lavaan.pl:::fit_lavaanpl(data, model, CONTROL = set_control("SA", tol = 1e-8))
-  expect_equal(fit_large$stoFit$adam_epochs, 5)
-  fit_none <- suppressWarnings(lavaan.pl:::fit_lavaanpl(
-    data,
-    model,
-    CONTROL = set_control("SA", precondition_epochs = 0)
-  ))
-  expect_equal(fit_none$stoFit$precondition_epochs, 0)
-  expect_identical(fit_none$stoFit$gain, "hessian")
-  expect_true(fit_none$stoFit$converged)
-  flat <- lavaan.pl:::fit_lavaanpl(small, model_small, CONTROL = set_control("QN"))$parameter_vector
+  fit_small <- lavaan.pl:::fit_lavaanpl(small, model_small, CONTROL = set_control("QN"))
+  burn <- function(control, start) {
+    suppressWarnings(lavaan.pl:::run_sa(start, small, fit_small$cpp_inputs, fit_small$lincon, control, FALSE))
+  }
+  burn_capped <- burn(set_control(adam_epochs = 2, precondition_epochs = 1, max_precondition_epochs = 1, tol = 1e-8), start)
+  expect_equal(burn_capped$adam_epochs, 2)
+  expect_equal(burn_capped$precondition_epochs, 1)
+  expect_equal(sum(burn_capped$path$phase == 3), 0)
+  burn_none <- burn(set_control(precondition_epochs = 0), fit_small$init)
+  expect_equal(burn_none$precondition_epochs, 0)
+  expect_identical(burn_none$gain, "hessian")
+  flat <- fit_small$parameter_vector
   flat[lavaan.pl:::parameter_blocks(model_small, sum(small$cat - 1)) == "lambda"] <- 0
-  still <- function(cap) suppressWarnings(lavaan.pl:::fit_lavaanpl(
-    small,
-    model_small,
-    CONTROL = set_control("SA",
-      alpha = 1e-4, adam_epochs = 1, precondition_epochs = 0, max_precondition_epochs = cap, average_epochs = 1
-    ),
-    START = flat
-  ))$stoFit$precondition_epochs
+  still <- function(cap) {
+    burn(set_control(alpha = 1e-4, adam_epochs = 1, precondition_epochs = 0, max_precondition_epochs = cap), flat)$precondition_epochs
+  }
   expect_equal(still(0), 0)
   expect_true(still(20) > 0)
   expect_true(still(20) <= 20)
@@ -492,7 +481,7 @@ local({
     fit_far <- lavaan.pl:::fit_lavaanpl(
       small,
       model_small,
-      CONTROL = set_control("SA", alpha = 1e-4, adam_epochs = 1, precondition_epochs = 0, average_epochs = 1),
+      CONTROL = set_control("SA", alpha = 1e-4, adam_epochs = 1, average_epochs = 1),
       START = far
     ),
     "more than the optimisation noise explains"
@@ -510,6 +499,7 @@ local({
   expect_null(fit_saqn$stoFit$invh)
   burn <- lavaan.pl:::run_sa(fit_saqn$init, data, fit_saqn$cpp_inputs, fit_saqn$lincon, set_control(), FALSE)
   expect_equal(dim(burn$invh), rep(length(fit_saqn$parameter_vector), 2))
+  expect_identical(burn$halvings, 0L)
   fit_flat <- lavaan.pl:::fit_lavaanpl(data, model, CONTROL = set_control("QN"), START = burn$parameter_vector)
   expect_true(fit_saqn$numFit$info[["neval"]] < fit_flat$numFit$info[["neval"]])
   expect_equal(length(lavaan.pl:::run_sa(fit_saqn$init, data, fit_saqn$cpp_inputs, fit_saqn$lincon, set_control("SA", average_epochs = 1), FALSE)$invh), 0)

@@ -8,10 +8,11 @@ set_control(method = c("SA-QN", "SA", "QN"), ...)
 }
 \arguments{
 \item{method}{Estimation method: \code{"SA-QN"} (quasi-Newton from the burn-in of stochastic approximation), \code{"SA"}
-(pairwise stochastic approximation) or \code{"QN"} (quasi-Newton).}
+(pairwise stochastic approximation, which needs latent variables scaled by \code{std.lv = TRUE}) or \code{"QN"}
+(quasi-Newton).}
 
 \item{...}{Options of \code{method}, each with a default. \code{"QN"} takes the quasi-Newton options, \code{"SA"} the stochastic
-approximation options, and \code{"SA-QN"} both, except \code{average_epochs}, \code{decay}, \code{avg_from} and \code{gain}, plus \code{nstarts}.
+approximation options, and \code{"SA-QN"} both, except \code{halvings}, \code{average_epochs}, \code{decay} and \code{avg_from}, plus its own options.
 
 Quasi-Newton options:
 \describe{
@@ -25,25 +26,29 @@ Stochastic approximation options:
 \describe{
 \item{\code{pairs_per_iteration}}{Number of item pairs drawn at each iteration. Default \code{16}.}
 \item{\code{alpha}}{Step length of the Adam phase. Default \code{0.2}.}
-\item{\code{adam_epochs}}{Maximum number of epochs (passes over the item pairs) of the Adam phase. If \code{NULL}, the
-default, enough for 5 epochs and 150 iterations.}
-\item{\code{precondition_epochs}}{Number of epochs of the preconditioning phase. With \code{0}, the gain is computed at the
-end of the Adam phase. Default \code{3}.}
-\item{\code{max_precondition_epochs}}{Maximum number of preconditioning epochs while the observed information is not
-positive definite. Default \code{20}.}
-\item{\code{average_epochs}}{Number of epochs of the averaged phase, at least 1. Default \code{50}.}
-\item{\code{tol}}{Change of the pairwise log-likelihood between epochs, per free parameter, below which the Adam and
-preconditioning phases stop early. Default \code{0.05}.}
+\item{\code{adam_epochs}}{Number of epochs (passes over the item pairs) of the Adam phase. With \code{"SA"}, the phase is
+split into \code{halvings + 1} levels of equal length, and the step is halved after each level but the last, from
+the best point so far. If \code{NULL}, the default, 3 epochs and at least 50 iterations per level.}
+\item{\code{halvings}}{Number of halvings of the Adam step. Default \code{2}.}
+\item{\code{average_epochs}}{Number of epochs of the averaged phase, at least 1. If \code{NULL}, the default, one epoch and
+at least 150 iterations. The averaged phase uses Adam's diagonal preconditioner, frozen.}
 \item{\code{decay}}{Exponent of the step length decay in the averaged phase, between 0.5 and 1. Default \code{0.75}.}
 \item{\code{avg_from}}{Fraction of the averaged phase discarded before averaging. Default \code{0.25}.}
-\item{\code{gain}}{Gain of the preconditioning and averaged phases: \code{"hessian"} (inverse observed information),
-\code{"diagonal"} (Adam's diagonal preconditioner, no preconditioning phase), or \code{"auto"}, the default (\code{"hessian"}
-up to 2000 free parameters).}
 \item{\code{seed}}{Seed of the pair sampling. Default \code{123}.}
 }
 
 \code{"SA-QN"} also takes:
 \describe{
+\item{\code{adam_epochs}}{With \code{"SA-QN"}, the maximum number of epochs of the Adam phase, which stops early when the
+pairwise log-likelihood changes by less than \code{tol} per free parameter in two consecutive epochs. If \code{NULL}, the
+default, enough for 5 epochs and 150 iterations.}
+\item{\code{tol}}{Change of the pairwise log-likelihood, per free parameter, below which the burn-in phases stop
+early. Default \code{0.05}.}
+\item{\code{precondition_epochs}}{Number of epochs of the Newton preconditioning phase after Adam, up to 2000 free
+parameters. With \code{0}, the inverse observed information is computed at the end of the Adam phase and starts
+quasi-Newton. Default \code{3}.}
+\item{\code{max_precondition_epochs}}{Maximum number of preconditioning epochs while the observed information is not
+positive definite. Default \code{20}.}
 \item{\code{nstarts}}{Number of runs, with seeds \code{seed}, \code{seed + 1} and so on. The highest pairwise log-likelihood is
 kept, with a warning if the runs disagree. Default \code{1}.}
 }}

@@ -4,13 +4,16 @@
 \alias{check_sa}
 \title{End-of-run check of the stochastic approximation}
 \usage{
-check_sa(FIT)
+check_sa(FIT, INFERENCE = TRUE)
 }
 \arguments{
 \item{FIT}{Object of class \code{lavaanpl_internal}.}
+
+\item{INFERENCE}{If \code{FALSE}, skip the checks that need the observed information.}
 }
 \value{
-\code{FIT}, with the variance \code{vars} and, in \code{stoFit}, the \code{check} and the updated \code{converged}.
+\code{FIT}, with the variance \code{vars} and, in \code{stoFit}, the \code{check} and the updated \code{converged}. Unchanged unless
+the method is \code{SA} and the check is still to be done.
 }
 \description{
 End-of-run check of the stochastic approximation

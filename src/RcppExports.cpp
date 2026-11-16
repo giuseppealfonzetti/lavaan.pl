@@ -100,8 +100,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // cpp_sa
-Rcpp::List cpp_sa(const Eigen::Map<Eigen::VectorXd> START, const Eigen::Map<Eigen::MatrixXd> K, const Eigen::Map<Eigen::VectorXd> C, const Rcpp::List MODEL, const Rcpp::List DATA, const int PAIRS_PER_ITERATION, const double ALPHA, const int ADAM_EPOCHS, const int PRECONDITION_EPOCHS, const int MAX_PRECONDITION_EPOCHS, const int AVERAGE_EPOCHS, const double TOL, const double DECAY, const double AVG_FROM, const bool HESSIAN_GAIN, const int SEED, const bool VERBOSE);
-RcppExport SEXP _lavaan_pl_cpp_sa(SEXP STARTSEXP, SEXP KSEXP, SEXP CSEXP, SEXP MODELSEXP, SEXP DATASEXP, SEXP PAIRS_PER_ITERATIONSEXP, SEXP ALPHASEXP, SEXP ADAM_EPOCHSSEXP, SEXP PRECONDITION_EPOCHSSEXP, SEXP MAX_PRECONDITION_EPOCHSSEXP, SEXP AVERAGE_EPOCHSSEXP, SEXP TOLSEXP, SEXP DECAYSEXP, SEXP AVG_FROMSEXP, SEXP HESSIAN_GAINSEXP, SEXP SEEDSEXP, SEXP VERBOSESEXP) {
+Rcpp::List cpp_sa(const Eigen::Map<Eigen::VectorXd> START, const Eigen::Map<Eigen::MatrixXd> K, const Eigen::Map<Eigen::VectorXd> C, const Rcpp::List MODEL, const Rcpp::List DATA, const int PAIRS_PER_ITERATION, const double ALPHA, const int ADAM_EPOCHS, const int PRECONDITION_EPOCHS, const int MAX_PRECONDITION_EPOCHS, const int AVERAGE_EPOCHS, const double TOL, const double DECAY, const double AVG_FROM, const bool HESSIAN_GAIN, const int LEVEL_EPOCHS, const int HALVINGS, const int SEED, const bool VERBOSE);
+RcppExport SEXP _lavaan_pl_cpp_sa(SEXP STARTSEXP, SEXP KSEXP, SEXP CSEXP, SEXP MODELSEXP, SEXP DATASEXP, SEXP PAIRS_PER_ITERATIONSEXP, SEXP ALPHASEXP, SEXP ADAM_EPOCHSSEXP, SEXP PRECONDITION_EPOCHSSEXP, SEXP MAX_PRECONDITION_EPOCHSSEXP, SEXP AVERAGE_EPOCHSSEXP, SEXP TOLSEXP, SEXP DECAYSEXP, SEXP AVG_FROMSEXP, SEXP HESSIAN_GAINSEXP, SEXP LEVEL_EPOCHSSEXP, SEXP HALVINGSSEXP, SEXP SEEDSEXP, SEXP VERBOSESEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -120,9 +120,11 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< const double >::type DECAY(DECAYSEXP);
     Rcpp::traits::input_parameter< const double >::type AVG_FROM(AVG_FROMSEXP);
     Rcpp::traits::input_parameter< const bool >::type HESSIAN_GAIN(HESSIAN_GAINSEXP);
+    Rcpp::traits::input_parameter< const int >::type LEVEL_EPOCHS(LEVEL_EPOCHSSEXP);
+    Rcpp::traits::input_parameter< const int >::type HALVINGS(HALVINGSSEXP);
     Rcpp::traits::input_parameter< const int >::type SEED(SEEDSEXP);
     Rcpp::traits::input_parameter< const bool >::type VERBOSE(VERBOSESEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_sa(START, K, C, MODEL, DATA, PAIRS_PER_ITERATION, ALPHA, ADAM_EPOCHS, PRECONDITION_EPOCHS, MAX_PRECONDITION_EPOCHS, AVERAGE_EPOCHS, TOL, DECAY, AVG_FROM, HESSIAN_GAIN, SEED, VERBOSE));
+    rcpp_result_gen = Rcpp::wrap(cpp_sa(START, K, C, MODEL, DATA, PAIRS_PER_ITERATION, ALPHA, ADAM_EPOCHS, PRECONDITION_EPOCHS, MAX_PRECONDITION_EPOCHS, AVERAGE_EPOCHS, TOL, DECAY, AVG_FROM, HESSIAN_GAIN, LEVEL_EPOCHS, HALVINGS, SEED, VERBOSE));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -134,7 +136,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_lavaan_pl_cpp_saturated", (DL_FUNC) &_lavaan_pl_cpp_saturated, 5},
     {"_lavaan_pl_cpp_saturated_traces", (DL_FUNC) &_lavaan_pl_cpp_saturated_traces, 8},
     {"_lavaan_pl_cpp_pairs_freq", (DL_FUNC) &_lavaan_pl_cpp_pairs_freq, 4},
-    {"_lavaan_pl_cpp_sa", (DL_FUNC) &_lavaan_pl_cpp_sa, 17},
+    {"_lavaan_pl_cpp_sa", (DL_FUNC) &_lavaan_pl_cpp_sa, 19},
     {NULL, NULL, 0}
 };
 
