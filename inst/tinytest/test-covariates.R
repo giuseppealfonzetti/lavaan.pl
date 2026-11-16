@@ -412,6 +412,7 @@ local({
   expect_equal(fit_direct@external$lavaanpl_internal$dims$q, 1)
   expect_true(is.finite(coef(fit_direct)["f=~y2"]))
   expect_error(pmlsem(syntax, mimic, conditional.x = FALSE), "conditional.x")
+  expect_true(pmlsem("f =~ t1 + t2 + t3 + t4\nf ~ x1", lavaan::Demo.growth, ordered = FALSE)@Options$conditional.x)
   expect_error(pmlsem(syntax, mimic, fixed.x = FALSE), "fixed.x")
   expect_error(
     pmlsem("f =~ y1 + y2 + y3 + y4 + y5 + y6\ny5 ~ y6", mimic),

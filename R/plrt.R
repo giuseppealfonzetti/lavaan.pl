@@ -220,7 +220,8 @@ plrt_fit <- function(OBJ, VARS) {
       tau_ind <- tau_ind + step * dt
     }
     tau <- tau_ind
-    rho <- rep(0, P)
+    R <- stats::cor(Y[rows, ], use = "pairwise")
+    rho <- R[upper.tri(R)]
     o <- sat(g, tau, rho, 2)
     for (iter in 1:100) {
       if (max(abs(o$gradient)) / n < 1e-8) {

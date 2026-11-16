@@ -1,11 +1,13 @@
 #### Fitting functions ####
 lavaan_pl_fitters <- list(
   cfa = function(...) lavaan.pl::pmlcfa(..., ordered = FALSE, control = set_control("QN")),
-  sem = function(...) lavaan.pl::pmlsem(..., ordered = FALSE, control = set_control("QN"))
+  sem = function(...) lavaan.pl::pmlsem(..., ordered = FALSE, control = set_control("QN")),
+  growth = function(...) lavaan.pl::pmlgrowth(..., ordered = FALSE, control = set_control("QN"))
 )
 lavaan_pml_fitters <- list(
   cfa = function(...) lavaan::cfa(..., estimator = "PML"),
-  sem = function(...) lavaan::sem(..., estimator = "PML")
+  sem = function(...) lavaan::sem(..., estimator = "PML"),
+  growth = function(...) lavaan::growth(..., estimator = "PML")
 )
 
 #### Data ####
@@ -124,12 +126,23 @@ mixed_numeric <- mixed_data
 for (j in 3:4) {
   mixed_numeric[[paste0("y", j)]] <- as.numeric(mixed_numeric[[paste0("y", j)]]) + rnorm(mimic_n)
 }
+growth_data <- lavaan::Demo.growth
+for (t in paste0("t", 1:4)) {
+  growth_data[[t]] <- ordered(findInterval(growth_data[[t]], c(-1, 1, 3)))
+}
 
 #### Models ####
 two_factors_three_items <- "A =~ A1 + A2 + A3\nC =~ C1 + C2 + C3"
 two_factors_four_items <- "A =~ A1 + A2 + A3 + A4\nC =~ C1 + C2 + C3 + C4"
 two_factors_five_items <- "A =~ A1 + A2 + A3 + A4 + A5\nC =~ C1 + C2 + C3 + C4 + C5"
 three_factors_four_items <- "A =~ A1 + A2 + A3 + A4\nC =~ C1 + C2 + C3 + C4\nE =~ E1 + E2 + E3 + E4"
+growth_model <- "i =~ 1*t1 + 1*t2 + 1*t3 + 1*t4
+s =~ 0*t1 + 1*t2 + 2*t3 + 3*t4
+t1 | a*t1 + b*t2 + c*t3
+t2 | a*t1 + b*t2 + c*t3
+t3 | a*t1 + b*t2 + c*t3
+t4 | a*t1 + b*t2 + c*t3
+i ~ 0*1"
 simulated_model <- "f1 =~ y1 + y2 + y3 + y4 + y5 + y6\nf2 =~ y7 + y8 + y9 + y10 + y11 + y12"
 grid <- list(
   "binary, one factor" = list(
@@ -369,6 +382,9 @@ lavaan_pml_cases <- c(
     "mixed/mostly numeric" = function(fit) {
       fit$cfa(mimic_items, mixed_numeric, std.lv = TRUE, test = "mean.var.adjusted")
     },
+    "mixed/all numeric" = function(fit) {
+      fit$cfa("f =~ t1 + t2 + t3 + t4", lavaan::Demo.growth, std.lv = TRUE, test = "mean.var.adjusted")
+    },
     "covariates/binary, marker" = covariate_case("f ~ x1 + x2"),
     "covariates/binary, std.lv" = covariate_case("f ~ x1 + x2", std.lv = TRUE),
     "covariates/continuous" = covariate_case("f ~ x1 + z1"),
@@ -395,6 +411,12 @@ lavaan_pml_cases <- c(
       missing = "pairwise",
       data = mimic_missing
     ),
+    "growth/linear" = function(fit) {
+      fit$growth(growth_model, growth_data, test = "mean.var.adjusted")
+    },
+    "growth/covariates" = function(fit) {
+      fit$growth(paste(growth_model, "i + s ~ x1 + x2", sep = "\n"), growth_data, test = "mean.var.adjusted")
+    },
     "covariates/clusters" = function(fit) {
       fit$sem(
         paste(mimic_items, "f ~ x1 + x2", sep = "\n"),

@@ -4,12 +4,13 @@
 \alias{lavaan.pl}
 \alias{pmlcfa}
 \alias{pmlsem}
-\title{Fit CFA and SEM Models by Pairwise Likelihood}
+\alias{pmlgrowth}
+\title{Fit CFA, SEM and Growth Models by Pairwise Likelihood}
 \usage{
 lavaan.pl(
   model,
   data,
-  model.type = c("sem", "cfa"),
+  model.type = c("sem", "cfa", "growth"),
   std.lv = FALSE,
   ordered = TRUE,
   estimator = "PML",
@@ -45,6 +46,19 @@ pmlsem(
   verbose = FALSE,
   ...
 )
+
+pmlgrowth(
+  model,
+  data,
+  std.lv = FALSE,
+  ordered = TRUE,
+  estimator = "PML",
+  estimator.args = list(ncores = 1, computevar_numderiv = FALSE),
+  start = NULL,
+  control = set_control(),
+  verbose = FALSE,
+  ...
+)
 }
 \arguments{
 \item{model}{A description of the user-specified model. Typically, the model
@@ -55,7 +69,7 @@ the \code{\link[lavaan:lavaanify]{lavaan::lavaanify()}} function) is also accept
 \item{data}{A data frame containing the observed variables used in the model.
 Items are ordinal unless \code{ordered} says otherwise.}
 
-\item{model.type}{The lavaan function whose defaults are used, \code{"sem"} or \code{"cfa"}.}
+\item{model.type}{The lavaan function whose defaults are used, \code{"sem"}, \code{"cfa"} or \code{"growth"}.}
 
 \item{std.lv}{If \code{TRUE}, the metric of each latent variable is determined by
 fixing their (residual) variances to 1.0. If \code{FALSE}, the metric of each
@@ -94,6 +108,7 @@ interest are:
 \describe{
 \item{\code{information}}{The information matrix to use. Only \code{"observed"} is currently supported.}
 \item{\code{se}}{The standard error method to use. Only \code{"robust.huber.white"} is currently supported.}
+\item{\code{conditional.x}}{\code{TRUE} whenever the model has covariates, also for numeric items.}
 }
 }
 \examples{

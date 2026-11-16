@@ -39,6 +39,7 @@ local({
 local({
   expect_error(pmlcfa(lsat_model, LSAT, estimator = "DWLS"), "lavaan::cfa")
   expect_error(pmlsem(lsat_model, LSAT, estimator = "DWLS"), "lavaan::sem")
+  expect_error(pmlgrowth(lsat_model, LSAT, estimator = "DWLS"), "lavaan::growth")
   expect_false(is.null(pmlcfa(lsat_model, LSAT, estimator = "PML", se = "none")@external$lavaanpl_internal))
 })
 
@@ -130,13 +131,13 @@ local({
     ),
     "Unsupported `estimator.args`: init"
   )
-  fit <- pmlcfa(
+  expect_warning(fit <- pmlcfa(
     lsat_model,
     LSAT,
     std.lv = TRUE,
     se = "none",
     control = set_control("QN", maxeval = 5)
-  )
+  ), "ucminf stopped")
   expect_true(fit@external$lavaanpl_internal$numFit$info[["neval"]] <= 5)
 })
 

@@ -209,6 +209,10 @@ local({
   }
 })
 
+#### Growth curves ####
+expect_matches_reference("growth/linear", fit_measures_short)
+expect_matches_reference("growth/covariates", c("chisq", "df", "baseline.chisq", "baseline.df"))
+
 #### Linear equality constraints ####
 for (name in cases_in("constraints")) {
   expect_matches_reference(name, fit_measures_short)
@@ -263,7 +267,8 @@ local({
 local({
   default <- list(
     cfa = function(...) lavaan.pl::pmlcfa(..., ordered = FALSE),
-    sem = function(...) lavaan.pl::pmlsem(..., ordered = FALSE)
+    sem = function(...) lavaan.pl::pmlsem(..., ordered = FALSE),
+    growth = function(...) lavaan.pl::pmlgrowth(..., ordered = FALSE)
   )
   for (name in names(lavaan_pml_cases)) {
     fit <- suppressWarnings(lavaan_pml_cases[[name]](default))
@@ -283,7 +288,8 @@ local({
 local({
   stochastic <- list(
     cfa = function(...) lavaan.pl::pmlcfa(..., ordered = FALSE, control = set_control("SA")),
-    sem = function(...) lavaan.pl::pmlsem(..., ordered = FALSE, control = set_control("SA"))
+    sem = function(...) lavaan.pl::pmlsem(..., ordered = FALSE, control = set_control("SA")),
+    growth = function(...) lavaan.pl::pmlgrowth(..., ordered = FALSE, control = set_control("SA"))
   )
   for (name in names(lavaan_pml_cases)) {
     fit <- suppressWarnings(lavaan_pml_cases[[name]](stochastic))

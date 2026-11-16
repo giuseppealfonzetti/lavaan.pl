@@ -1,4 +1,4 @@
-#' Fit CFA and SEM Models by Pairwise Likelihood
+#' Fit CFA, SEM and Growth Models by Pairwise Likelihood
 #'
 #' Fit a Confirmatory Factor Analysis (CFA) model using the `lavaan.pl()` engine
 #' using the [`lavaan`] framework.
@@ -8,6 +8,7 @@
 #' \describe{
 #'   \item{\code{information}}{The information matrix to use. Only `"observed"` is currently supported.}
 #'   \item{\code{se}}{The standard error method to use. Only `"robust.huber.white"` is currently supported.}
+#'   \item{\code{conditional.x}}{`TRUE` whenever the model has covariates, also for numeric items.}
 #' }
 #'
 #' @param model A description of the user-specified model. Typically, the model
@@ -16,7 +17,7 @@
 #'   the [`lavaan::lavaanify()`] function) is also accepted.
 #' @param data A data frame containing the observed variables used in the model.
 #'   Items are ordinal unless `ordered` says otherwise.
-#' @param model.type The lavaan function whose defaults are used, `"sem"` or `"cfa"`.
+#' @param model.type The lavaan function whose defaults are used, `"sem"`, `"cfa"` or `"growth"`.
 #' @param std.lv If `TRUE`, the metric of each latent variable is determined by
 #'   fixing their (residual) variances to 1.0. If `FALSE`, the metric of each
 #'   latent variable is determined by fixing the factor loading of the first
@@ -58,7 +59,7 @@
 lavaan.pl <- function(
     model,
     data,
-    model.type = c("sem", "cfa"),
+    model.type = c("sem", "cfa", "growth"),
     std.lv = FALSE,
     ordered = TRUE,
     estimator = "PML",
@@ -74,7 +75,7 @@ lavaan.pl <- function(
 
   # Validate arguments ---------------------------------------------------------
   lavargs <- list(...)
-  names(lavargs) <- sub("^(std|optim|ceq|do)_", "\\1.", names(lavargs))
+  names(lavargs) <- sub("^(std|optim|ceq|do|conditional)_", "\\1.", names(lavargs))
   if (!identical(estimator, "PML")) {
     stop("`estimator` must be \"PML\"; use lavaan::", model.type, "() for other estimators.", call. = FALSE)
   }
@@ -94,8 +95,9 @@ lavaan.pl <- function(
   computevar_numderiv <- estimator.args$computevar_numderiv
   if (is.null(computevar_numderiv)) computevar_numderiv <- FALSE
 
+  pt <- if (is.character(model)) lavaan::lavaanify(model) else model
   if (isTRUE(ordered)) {
-    items <- intersect(lavaan::lavNames(if (is.character(model)) lavaan::lavaanify(model) else model, "ov.nox"), names(data))
+    items <- intersect(lavaan::lavNames(pt, "ov.nox"), names(data))
     values <- Filter(is.numeric, as.data.frame(data)[items])
     continuous <- names(values)[vapply(values, function(x) any(x != round(x), na.rm = TRUE) || length(unique(x[!is.na(x)])) > 10, logical(1))]
     if (length(continuous)) {
@@ -129,6 +131,7 @@ lavaan.pl <- function(
     lavargs$test <- "mean.var.adjusted"
   }
   if (is.null(lavargs$ceq.simple)) lavargs$ceq.simple <- FALSE
+  if (is.null(lavargs$conditional.x) && length(lavaan::lavNames(pt, "ov.x"))) lavargs$conditional.x <- TRUE
   if (isFALSE(lavargs$samplestats)) lavargs$slot_cache <- list()
   template <- do.call(get(model.type, envir = asNamespace("lavaan")), lavargs)
 
@@ -195,6 +198,26 @@ pmlsem <- function(
 ) {
   sc <- sys.call()
   sc[["model.type"]] <- "sem"
+  sc[[1L]] <- quote(lavaan.pl::lavaan.pl)
+  eval(sc, parent.frame())
+}
+
+#' @rdname lavaan.pl
+#' @export
+pmlgrowth <- function(
+    model,
+    data,
+    std.lv = FALSE,
+    ordered = TRUE,
+    estimator = "PML",
+    estimator.args = list(ncores = 1, computevar_numderiv = FALSE),
+    start = NULL,
+    control = set_control(),
+    verbose = FALSE,
+    ...
+) {
+  sc <- sys.call()
+  sc[["model.type"]] <- "growth"
   sc[[1L]] <- quote(lavaan.pl::lavaan.pl)
   eval(sc, parent.frame())
 }
