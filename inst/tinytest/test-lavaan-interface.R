@@ -190,11 +190,7 @@ local({
   )
   expect_error(
     pmlcfa("A =~ A1 + a*A2 + A3\nA1 | t*t1\na == t", bfi, std.lv = TRUE),
-    "either thresholds"
-  )
-  expect_error(
-    pmlsem("A =~ A1 + A2 + A3\nC =~ C1 + C2 + C3\nA1 ~ C", bfi, std.lv = TRUE),
-    "observed variables"
+    "must not involve other parameters"
   )
 })
 

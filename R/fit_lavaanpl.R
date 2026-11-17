@@ -117,7 +117,7 @@ fit_lavaanpl <- function(
     )
   }
 
-  if (METHOD == "QN" && any(direct) && pd(fit$init)) {
+  if (METHOD == "QN" && any(direct) && pd(fit$init) && all(is.na(unlist(lapply(models, function(x) x$IMPLIED))))) {
     uncov <- function(C, B) {
       keep <- rowSums(C$A[, B == "corr", drop = FALSE] != 0) == 0
       if (any(keep)) list(A = C$A[keep, , drop = FALSE], b = C$b[keep])
@@ -494,7 +494,8 @@ cpp_inputs <- function(DATA, MODEL, TABLES = NA) {
         LOGSCALE = log(item_scales(x)),
         PARAMETERIZATION = x$PARAMETERIZATION,
         GAMMA = if (ncol(x$GAMMA) == nx) x$GAMMA else matrix(0, x$q, nx),
-        KAPPA = if (ncol(x$KAPPA) == nx) x$KAPPA else matrix(0, x$p, nx)
+        KAPPA = if (ncol(x$KAPPA) == nx) x$KAPPA else matrix(0, x$p, nx),
+        IMPLIED = as.integer(ifelse(is.na(x$IMPLIED), -1, x$IMPLIED - 1))
       )
     }),
     data = lapply(seq_len(DATA$ngroups) - 1, function(g) {
@@ -701,7 +702,7 @@ implied_variance <- function(MODEL, PARAMETER_VECTOR) {
           return(0)
         }
         L <- par$lambda %*% solve(diag(m$q) - par$beta)
-        (rowSums((L %*% par$psi) * L) * par$delta^2)[!m$NUMERIC]
+        (rowSums((L %*% par$psi) * L) * par$delta^2)[setdiff(which(!m$NUMERIC), m$IMPLIED)]
       },
       MODEL$MODELS,
       vector_to_matrices(MODEL, PARAMETER_VECTOR)

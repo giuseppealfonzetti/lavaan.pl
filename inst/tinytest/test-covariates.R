@@ -414,10 +414,7 @@ local({
   expect_error(pmlsem(syntax, mimic, conditional.x = FALSE), "conditional.x")
   expect_true(pmlsem("f =~ t1 + t2 + t3 + t4\nf ~ x1", lavaan::Demo.growth, ordered = FALSE)@Options$conditional.x)
   expect_error(pmlsem(syntax, mimic, fixed.x = FALSE), "fixed.x")
-  expect_error(
-    pmlsem("f =~ y1 + y2 + y3 + y4 + y5 + y6\ny5 ~ y6", mimic),
-    "exogenous covariates"
-  )
+  expect_true(lavaan::lavInspect(pmlsem("f =~ y1 + y2 + y3 + y4 + y5 + y6\ny5 ~ y6", mimic), "converged"))
   fit_sa <- pmlsem(syntax, mimic, control = set_control("SA", pairs_per_iteration = 4))
   expect_true(lavaan::lavInspect(fit_sa, "converged"))
   with_missing <- mimic

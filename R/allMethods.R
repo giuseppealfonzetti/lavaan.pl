@@ -147,7 +147,7 @@ compute_var <- function(OBJ, NUMDERIV = FALSE) {
     ppi <- OBJ$stoFit$pairs_per_iteration
     n <- OBJ$data$n
     G <- crossprod(lc$K, HJ$gradient) / n
-    V <- (P - ppi) / (ppi * (P - 1)) * (P * crossprod(lc$K, HJ$pairvar %*% lc$K) / n^2 - tcrossprod(G))
+    V <- (P - ppi) / (ppi * max(P - 1, 1)) * (P * crossprod(lc$K, HJ$pairvar %*% lc$K) / n^2 - tcrossprod(G))
     noise <- invH %*% V %*% invH / OBJ$stoFit$averaged
     opt_noise <- diag(trJacob %*% noise %*% t(trJacob))
   }

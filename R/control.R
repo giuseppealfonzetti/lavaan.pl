@@ -180,7 +180,8 @@ use_tables <- function(STRATA, Y, CAT, STRATUM) {
 #'   effect of `j` on `i`. If `NULL`, none.
 #' @param THETA \eqn{p*p} symmetric matrix of residual covariances, `NA` where free. The diagonal is used for the
 #'   numeric items and, with `PARAMETERIZATION = "theta"`, for all items. If `NULL`, no residual covariances, free
-#'   residual variances of the numeric items and unit ones otherwise.
+#'   residual variances of the numeric items and unit ones otherwise. A zero diagonal makes the item its latent
+#'   variable, as lavaan does for observed variables in regressions.
 #' @param NU \eqn{p} vector of intercepts, `NA` where free. If `NULL`, free for the numeric items and zero otherwise.
 #' @param ALPHA \eqn{q} vector of latent means, `NA` where free. If `NULL`, all zero.
 #' @param DELTA \eqn{p} vector of scale factors, `NA` where free, used with `PARAMETERIZATION = "delta"` for the
@@ -189,8 +190,12 @@ use_tables <- function(STRATA, Y, CAT, STRATUM) {
 #' @param GAMMA \eqn{q*x} matrix of regressions of the latent variables on the covariates, `NA` where free. If `NULL`,
 #'   none.
 #' @param KAPPA \eqn{p*x} matrix of direct effects of the covariates on the items, `NA` where free. If `NULL`, none.
+#' @param IMPLIED \eqn{q} vector with, for each latent variable whose variance is implied, the ordinal item it is the
+#'   latent response of, `NA` otherwise. Under `PARAMETERIZATION = "delta"`, the variance is then set so that the item
+#'   has variance `1 / DELTA^2`, as lavaan does for ordinal observed variables in regressions. If `NULL`, none.
 #' @param CONSTRAINTS Linear equality constraints `A %*% parameter_vector = b`, as `list(A = , b = )`, with one column
-#'   of `A` per parameter of [parameter_names()]. Each constraint involves a single block of [parameter_blocks()].
+#'   of `A` per parameter of [parameter_names()]. A constraint on `tau`, `logsd` or `scale` parameters involves no other
+#'   block.
 #' @param LATCOV Parametrisation of the latent correlations: `"lkj"` (always positive definite, all covariances free)
 #'   or `"direct"` (the covariances themselves, which can be fixed or constrained).
 #' @param PARAMETERIZATION `"delta"` or `"theta"`, as in lavaan.
@@ -198,13 +203,13 @@ use_tables <- function(STRATA, Y, CAT, STRATUM) {
 #'
 #' @return An object of class `lavaanpl_model` with the matrices `LAMBDA`, `PSI`, `BETA`, `THETA`, `NU`, `ALPHA`,
 #'   `DELTA`, `TAU`, `GAMMA` and `KAPPA` (unused entries set to zero or one), `CONSTRAINTS`, `LATCOV` (`"none"` for
-#'   independent latent variables), `PARAMETERIZATION`, `NUMERIC`, and the numbers of items `p` and latent variables
-#'   `q`.
+#'   independent latent variables), `PARAMETERIZATION`, `NUMERIC`, `IMPLIED` (the item of each latent variable with
+#'   an implied variance, otherwise `NA`), and the numbers of items `p` and latent variables `q`.
 #'
 #' @keywords internal
 lavaanpl_model <- function(LAMBDA, PSI = NULL, BETA = NULL, THETA = NULL, NU = NULL, ALPHA = NULL, DELTA = NULL,
-                            TAU = NULL, GAMMA = NULL, KAPPA = NULL, CONSTRAINTS = NULL, LATCOV = c("lkj", "direct"),
-                            PARAMETERIZATION = c("delta", "theta"), NUMERIC = NULL) {
+                            TAU = NULL, GAMMA = NULL, KAPPA = NULL, IMPLIED = NULL, CONSTRAINTS = NULL,
+                            LATCOV = c("lkj", "direct"), PARAMETERIZATION = c("delta", "theta"), NUMERIC = NULL) {
   LATCOV <- match.arg(LATCOV)
   PARAMETERIZATION <- match.arg(PARAMETERIZATION)
   stopifnot(is.matrix(LAMBDA))
@@ -238,15 +243,25 @@ lavaanpl_model <- function(LAMBDA, PSI = NULL, BETA = NULL, THETA = NULL, NU = N
     if (!identical(is.na(M), t(is.na(M))) || !isSymmetric(unname(M))) stop("PSI and THETA must be symmetric.")
   }
   if (any(diag(PSI) <= 0, na.rm = TRUE)) stop("Fixed latent variances must be positive.")
+  if (is.null(IMPLIED)) IMPLIED <- rep(NA, q)
+  stopifnot(length(IMPLIED) == q)
+  for (h in which(!is.na(IMPLIED))) {
+    j <- IMPLIED[h]
+    if (rsd[j] || !identical(which(is.na(LAMBDA[j, ]) | LAMBDA[j, ] != 0), h) || is.na(LAMBDA[j, h])) {
+      stop("IMPLIED items must be ordinal, with PARAMETERIZATION = \"delta\" and a single fixed loading on their latent variable.")
+    }
+  }
+  diag(PSI)[!is.na(IMPLIED)] <- 1
   if (all(PSI[upper.tri(PSI)] %in% 0)) {
     LATCOV <- "none"
   } else if (LATCOV == "lkj" && !all(is.na(PSI[upper.tri(PSI)]))) {
     stop("Fixed latent covariances require LATCOV = \"direct\".")
   }
+  if (LATCOV == "lkj" && !all(is.na(IMPLIED))) LATCOV <- "direct"
   if (any(is.na(diag(BETA)) | diag(BETA) != 0)) stop("The diagonal of BETA must be zero.")
   if (!anyNA(BETA) && abs(det(diag(q) - BETA)) < 1e-8) stop("diag(q) - BETA must be invertible.")
   if (anyNA(diag(THETA)[!rsd])) stop("Free residual variances require PARAMETERIZATION = \"theta\".")
-  if (any(diag(THETA)[rsd] <= 0, na.rm = TRUE)) stop("Residual variances must be positive.")
+  if (any(diag(THETA)[rsd] < 0, na.rm = TRUE)) stop("Residual variances cannot be negative.")
   if (any(DELTA[!rsd] <= 0, na.rm = TRUE)) stop("DELTA must be positive.")
   diag(THETA)[!rsd] <- 0
   DELTA[rsd] <- 1
@@ -261,7 +276,7 @@ lavaanpl_model <- function(LAMBDA, PSI = NULL, BETA = NULL, THETA = NULL, NU = N
   out <- list(LAMBDA = LAMBDA, PSI = PSI, BETA = BETA, THETA = THETA, NU = as.numeric(NU), ALPHA = as.numeric(ALPHA),
               DELTA = as.numeric(DELTA), TAU = if (!is.null(TAU)) as.numeric(TAU), GAMMA = GAMMA, KAPPA = KAPPA,
               CONSTRAINTS = CONSTRAINTS, LATCOV = LATCOV, PARAMETERIZATION = PARAMETERIZATION, NUMERIC = NUMERIC,
-              p = p, q = q)
+              IMPLIED = as.integer(IMPLIED), p = p, q = q)
   class(out) <- "lavaanpl_model"
   out
 }

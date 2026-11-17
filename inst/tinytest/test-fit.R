@@ -155,7 +155,7 @@ local({
       ),
       CONTROL = set_control("QN")
     ),
-    "either thresholds"
+    "must not involve other parameters"
   )
   expect_error(
     lavaan.pl:::fit_lavaanpl(

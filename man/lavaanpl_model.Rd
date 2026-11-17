@@ -18,6 +18,7 @@ lavaanpl_model(
   TAU = NULL,
   GAMMA = NULL,
   KAPPA = NULL,
+  IMPLIED = NULL,
   CONSTRAINTS = NULL,
   LATCOV = c("lkj", "direct"),
   PARAMETERIZATION = c("delta", "theta"),
@@ -40,7 +41,8 @@ effect of \code{j} on \code{i}. If \code{NULL}, none.}
 
 \item{THETA}{\eqn{p*p} symmetric matrix of residual covariances, \code{NA} where free. The diagonal is used for the
 numeric items and, with \code{PARAMETERIZATION = "theta"}, for all items. If \code{NULL}, no residual covariances, free
-residual variances of the numeric items and unit ones otherwise.}
+residual variances of the numeric items and unit ones otherwise. A zero diagonal makes the item its latent
+variable, as lavaan does for observed variables in regressions.}
 
 \item{NU}{\eqn{p} vector of intercepts, \code{NA} where free. If \code{NULL}, free for the numeric items and zero otherwise.}
 
@@ -56,8 +58,13 @@ none.}
 
 \item{KAPPA}{\eqn{p*x} matrix of direct effects of the covariates on the items, \code{NA} where free. If \code{NULL}, none.}
 
+\item{IMPLIED}{\eqn{q} vector with, for each latent variable whose variance is implied, the ordinal item it is the
+latent response of, \code{NA} otherwise. Under \code{PARAMETERIZATION = "delta"}, the variance is then set so that the item
+has variance \code{1 / DELTA^2}, as lavaan does for ordinal observed variables in regressions. If \code{NULL}, none.}
+
 \item{CONSTRAINTS}{Linear equality constraints \code{A \%*\% parameter_vector = b}, as \code{list(A = , b = )}, with one column
-of \code{A} per parameter of \code{\link[=parameter_names]{parameter_names()}}. Each constraint involves a single block of \code{\link[=parameter_blocks]{parameter_blocks()}}.}
+of \code{A} per parameter of \code{\link[=parameter_names]{parameter_names()}}. A constraint on \code{tau}, \code{logsd} or \code{scale} parameters involves no other
+block.}
 
 \item{LATCOV}{Parametrisation of the latent correlations: \code{"lkj"} (always positive definite, all covariances free)
 or \code{"direct"} (the covariances themselves, which can be fixed or constrained).}
@@ -69,8 +76,8 @@ or \code{"direct"} (the covariances themselves, which can be fixed or constraine
 \value{
 An object of class \code{lavaanpl_model} with the matrices \code{LAMBDA}, \code{PSI}, \code{BETA}, \code{THETA}, \code{NU}, \code{ALPHA},
 \code{DELTA}, \code{TAU}, \code{GAMMA} and \code{KAPPA} (unused entries set to zero or one), \code{CONSTRAINTS}, \code{LATCOV} (\code{"none"} for
-independent latent variables), \code{PARAMETERIZATION}, \code{NUMERIC}, and the numbers of items \code{p} and latent variables
-\code{q}.
+independent latent variables), \code{PARAMETERIZATION}, \code{NUMERIC}, \code{IMPLIED} (the item of each latent variable with
+an implied variance, otherwise \code{NA}), and the numbers of items \code{p} and latent variables \code{q}.
 }
 \description{
 Print method for \code{lavaanpl_model} objects

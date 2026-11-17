@@ -213,6 +213,12 @@ local({
 expect_matches_reference("growth/linear", fit_measures_short)
 expect_matches_reference("growth/covariates", c("chisq", "df", "baseline.chisq", "baseline.df"))
 
+#### Mediation ####
+for (name in cases_in("mediation")) {
+  expect_matches_reference(name, c("chisq", "df", "baseline.chisq", "baseline.df"))
+}
+expect_equal(ours[["mediation/serial"]]@optim$logl, ours[["mediation/serial, theta"]]@optim$logl, tolerance = 1e-8)
+
 #### Linear equality constraints ####
 for (name in cases_in("constraints")) {
   expect_matches_reference(name, fit_measures_short)

@@ -30,6 +30,7 @@ model::Structure::Structure(const Rcpp::List MODEL, const Eigen::Ref<const Eigen
   logscale = Rcpp::as<Eigen::VectorXd>(MODEL["LOGSCALE"]);
   gamma = Rcpp::as<Eigen::MatrixXd>(MODEL["GAMMA"]);
   kappa = Rcpp::as<Eigen::MatrixXd>(MODEL["KAPPA"]);
+  implied_item = Rcpp::as<std::vector<int>>(MODEL["IMPLIED"]);
   theta_parameterization = Rcpp::as<std::string>(MODEL["PARAMETERIZATION"]) == "theta";
   const std::string lc = Rcpp::as<std::string>(MODEL["LATCOV"]);
   latcov = lc == "direct" ? LatCov::direct : lc == "lkj" ? LatCov::lkj : LatCov::none;
@@ -60,7 +61,7 @@ model::Structure::Structure(const Rcpp::List MODEL, const Eigen::Ref<const Eigen
   ncorr = corr_row.size();
 
   first.logsd = first.corr + ncorr;
-  for(int h = 0; h < q; h++) if(!std::isfinite(logsd(h))) logsd_factor.push_back(h);
+  for(int h = 0; h < q; h++) if(!std::isfinite(logsd(h)) || implied_item[h] >= 0) logsd_factor.push_back(h);
   nvar = logsd_factor.size();
 
   first.beta = first.logsd + nvar;
@@ -95,7 +96,7 @@ model::Structure::Structure(const Rcpp::List MODEL, const Eigen::Ref<const Eigen
   first.scale = first.alpha + nmean;
   scale_index.assign(p, -1);
   nscale = 0;
-  for(int j = 0; j < p; j++) if(!std::isfinite(logscale(j))) scale_index[j] = first.scale + nscale++;
+  for(int j = 0; j < p; j++) if(std::isnan(logscale(j))) scale_index[j] = first.scale + nscale++;
   first.gamma = first.scale + nscale;
   nx = gamma.cols();
   for(int c = 0; c < nx; c++){
@@ -120,6 +121,19 @@ model::Structure::Structure(const Rcpp::List MODEL, const Eigen::Ref<const Eigen
     }
   }
   d = first.kappa + nkap;
+  for(int s = 0; s < nvar; s++) if(implied_item[logsd_factor[s]] >= 0) implied_slot.push_back(first.logsd + s);
+  nimplied = implied_slot.size();
+  d_user = d - nimplied;
+  ext_to_user.assign(d, -1);
+  for(int i = 0, a = 0; i < d; i++){
+    if(a < nimplied && implied_slot[a] == i){
+      a++;
+    }else{
+      ext_to_user[i] = user_index.size();
+      user_index.push_back(i);
+    }
+  }
+  if(nimplied > 0 && latcov == LatCov::lkj && ncorr > 0) Rcpp::stop("Implied latent variances require LATCOV = \"direct\".");
   scale_from_rsd.assign(p, theta_parameterization);
   for(int j = 0; j < p; j++) if(items.cat(j) == 1) scale_from_rsd[j] = true;
   standardised = !theta_parameterization && items.nnum == 0 && nx == 0 && nint + nmean + nscale == 0 &&
@@ -128,9 +142,11 @@ model::Structure::Structure(const Rcpp::List MODEL, const Eigen::Ref<const Eigen
 
 model::Matrices::Matrices(const Eigen::Ref<const Eigen::VectorXd> PARAMETER_VECTOR, const Structure &STRUCTURE): structure(STRUCTURE){
   const Structure &S = structure;
-  const Eigen::Ref<const Eigen::VectorXd> x = PARAMETER_VECTOR;
   const int p = S.p, q = S.q;
-  if(x.size() != S.d) Rcpp::stop("PARAMETER_VECTOR has length %d, the model has %d parameters.", (int)x.size(), S.d);
+  if(PARAMETER_VECTOR.size() != S.d_user) Rcpp::stop("PARAMETER_VECTOR has length %d, the model has %d parameters.", (int)PARAMETER_VECTOR.size(), S.d_user);
+  user_vector = PARAMETER_VECTOR;
+  Eigen::VectorXd x = Eigen::VectorXd::Zero(S.d);
+  for(int i = 0; i < S.d_user; i++) x(S.user_index[i]) = user_vector(i);
 
   tau = x.head(S.items.nthr);
   lambda = S.lambda;
@@ -168,6 +184,48 @@ model::Matrices::Matrices(const Eigen::Ref<const Eigen::VectorXd> PARAMETER_VECT
   if(S.beta.size() > 0) B = S.beta;
   for(int b = 0; b < S.nreg; b++) B(S.beta_row[b], S.beta_col[b]) = x(S.first.beta + b);
   ib_inv = (Eigen::MatrixXd::Identity(q, q) - B).inverse();
+
+  const int ni = S.nimplied;
+  implied_jacobian = Eigen::MatrixXd::Zero(ni, S.d_user);
+  if(ni > 0){
+    std::vector<int> I(ni);
+    Eigen::VectorXd t(ni), r(ni);
+    for(int a = 0; a < ni; a++){
+      I[a] = S.logsd_factor[S.implied_slot[a] - S.first.logsd];
+      const int j = S.implied_item[I[a]];
+      t(a) = std::exp(-2 * (S.scale_index[j] >= 0 ? x(S.scale_index[j]) : S.logscale(j)));
+      psi(I[a], I[a]) = 0;
+    }
+    const Eigen::MatrixXd V0 = ib_inv * psi * ib_inv.transpose();
+    Eigen::MatrixXd M(ni, ni);
+    for(int a = 0; a < ni; a++){
+      r(a) = t(a) - V0(I[a], I[a]);
+      for(int b = 0; b < ni; b++) M(a, b) = ib_inv(I[a], I[b]) * ib_inv(I[a], I[b]);
+    }
+    const Eigen::PartialPivLU<Eigen::MatrixXd> lu(M);
+    const Eigen::VectorXd v = lu.solve(r);
+    for(int a = 0; a < ni; a++){
+      psi(I[a], I[a]) = v(a);
+      sd(I[a]) = std::sqrt(v(a));
+      x(S.implied_slot[a]) = std::log(sd(I[a]));
+    }
+    const Eigen::MatrixXd V = ib_inv * psi * ib_inv.transpose();
+    Eigen::MatrixXd rhs = Eigen::MatrixXd::Zero(ni, S.d_user);
+    for(int a = 0; a < ni; a++){
+      const int k = I[a], j = S.implied_item[k];
+      for(int b = 0; b < S.nreg; b++) rhs(a, S.ext_to_user[S.first.beta + b]) = -2 * ib_inv(k, S.beta_row[b]) * V(S.beta_col[b], k);
+      for(int c = 0; c < S.ncorr && S.latcov == LatCov::direct; c++){
+        rhs(a, S.ext_to_user[S.first.corr + c]) = -2 * ib_inv(k, S.corr_row[c]) * ib_inv(k, S.corr_col[c]);
+      }
+      for(int s = 0; s < S.nvar; s++){
+        const int h = S.logsd_factor[s], u = S.ext_to_user[S.first.logsd + s];
+        if(u >= 0) rhs(a, u) = -2 * sd(h) * sd(h) * ib_inv(k, h) * ib_inv(k, h);
+      }
+      if(S.scale_index[j] >= 0) rhs(a, S.ext_to_user[S.scale_index[j]]) = -2 * t(a);
+    }
+    implied_jacobian = lu.solve(rhs).array().colwise() / (2 * v.array());
+  }
+
   lambda_ib_inv = lambda * ib_inv;
   common_var = (lambda_ib_inv * psi).cwiseProduct(lambda_ib_inv).rowwise().sum();
 
@@ -219,6 +277,33 @@ model::Matrices::Matrices(const Eigen::Ref<const Eigen::VectorXd> PARAMETER_VECT
   }
 }
 
+Eigen::MatrixXd model::Matrices::to_user(const Eigen::Ref<const Eigen::MatrixXd> M) const{
+  const Structure &S = structure;
+  if(S.nimplied == 0) return M;
+  Eigen::MatrixXd out(S.d_user, M.cols());
+  for(int i = 0; i < S.d_user; i++) out.row(i) = M.row(S.user_index[i]);
+  for(int a = 0; a < S.nimplied; a++) out += implied_jacobian.row(a).transpose() * M.row(S.implied_slot[a]);
+  return out;
+}
+
+Eigen::MatrixXd model::Matrices::hessian_to_user(const Eigen::Ref<const Eigen::MatrixXd> H, const Eigen::Ref<const Eigen::VectorXd> G) const{
+  const Structure &S = structure;
+  Eigen::MatrixXd out = to_user(Eigen::MatrixXd(to_user(H).transpose()));
+  Eigen::VectorXd g(S.nimplied);
+  for(int a = 0; a < S.nimplied; a++) g(a) = G(S.implied_slot[a]);
+  for(int i = 0; i < S.d_user && S.nimplied > 0; i++){
+    const int e = S.user_index[i];
+    if(e < S.first.corr || (e >= S.first.rescov && e < S.first.scale) || e >= S.first.gamma) continue;
+    const double h = 1e-5 * std::max(1.0, std::abs(user_vector(i)));
+    Eigen::VectorXd up = user_vector, down = user_vector;
+    up(i) += h;
+    down(i) -= h;
+    const Matrices plus(up, S), minus(down, S);
+    out.row(i) -= g.transpose() * (plus.implied_jacobian - minus.implied_jacobian) / (2 * h);
+  }
+  return out;
+}
+
 model::Groups::Groups(const Rcpp::List MODEL, const Rcpp::List DATA): ngroups(MODEL.size()), d(0), npairs(0), n(0){
   structure.reserve(ngroups);
   for(int g = 0; g < ngroups; g++){
@@ -226,7 +311,7 @@ model::Groups::Groups(const Rcpp::List MODEL, const Rcpp::List DATA): ngroups(MO
     structure.emplace_back(Rcpp::as<Rcpp::List>(MODEL[g]), Rcpp::as<Eigen::VectorXd>(data["CAT"]));
     parameter_offset.push_back(d);
     pair_offset.push_back(npairs);
-    d += structure[g].d;
+    d += structure[g].d_user;
     npairs += structure[g].items.npairs;
     n += Rcpp::as<double>(data["N"]);
   }
@@ -236,6 +321,6 @@ std::vector<model::Matrices> model::Groups::matrices(const Eigen::Ref<const Eige
   if(PARAMETER_VECTOR.size() != d) Rcpp::stop("PARAMETER_VECTOR has length %d, the model has %d parameters.", (int)PARAMETER_VECTOR.size(), d);
   std::vector<Matrices> out;
   out.reserve(ngroups);
-  for(int g = 0; g < ngroups; g++) out.emplace_back(PARAMETER_VECTOR.segment(parameter_offset[g], structure[g].d), structure[g]);
+  for(int g = 0; g < ngroups; g++) out.emplace_back(PARAMETER_VECTOR.segment(parameter_offset[g], structure[g].d_user), structure[g]);
   return out;
 }

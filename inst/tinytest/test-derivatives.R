@@ -403,6 +403,30 @@ if (at_home()) local({
       lavaan.pl:::lavaanpl_model(loadings_structure, KAPPA = kappa, NUMERIC = numeric_items)
     ))
   ))
+  phantoms <- cbind(replace(loadings_markers, cbind(c(2, 5), c(1, 2)), 0), 0, 0)
+  phantoms[2, 4] <- phantoms[5, 5] <- 1
+  phantom_regressions <- matrix(0, 5, 5)
+  phantom_regressions[4, 1] <- phantom_regressions[4, 2] <- phantom_regressions[3, 4] <- phantom_regressions[5, 4] <- NA
+  phantom_covariances <- diag(c(NA, NA, NA, 1, NA))
+  phantom_covariances[1, 2] <- phantom_covariances[2, 1] <- NA
+  for (parameterization in c("delta", "theta")) {
+    expect_derivatives(engine_only(
+      data_covariates,
+      lavaan.pl:::lavaanpl_model(
+        phantoms,
+        PSI = phantom_covariances,
+        BETA = phantom_regressions,
+        THETA = diag(c(NA, 0, 1, 1, 0, 1, 1, 1, NA)),
+        DELTA = if (parameterization == "delta") replace(rep(1, 9), 2, NA),
+        IMPLIED = if (parameterization == "delta") c(NA, NA, NA, 2, NA),
+        GAMMA = rbind(gamma, c(NA, 0), 0),
+        KAPPA = replace(kappa, cbind(2, 1), 0),
+        LATCOV = "direct",
+        PARAMETERIZATION = parameterization,
+        NUMERIC = numeric_items
+      )
+    ))
+  }
 })
 
 #### Gradient, blocks of the Hessian and scores of the saturated model with covariates and numeric items ####

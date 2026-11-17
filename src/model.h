@@ -19,7 +19,7 @@ namespace model{
 
   struct Structure{
     Items items;
-    int p, q, nx, d, nload, ncorr, nvar, nreg, nres, nint, nmean, nscale, ngam, nkap;
+    int p, q, nx, d, d_user, nimplied, nload, ncorr, nvar, nreg, nres, nint, nmean, nscale, ngam, nkap;
     Blocks first;
     LatCov latcov;
     bool theta_parameterization, standardised;
@@ -28,7 +28,7 @@ namespace model{
     Eigen::VectorXd logsd, nu, alpha, logscale;
     std::vector<std::vector<int>> lambda_index, lambda_factor, kappa_index, kappa_covariate;
     std::vector<int> corr_row, corr_col, logsd_factor, beta_row, beta_col, nu_index, alpha_factor, scale_index,
-      gamma_factor, gamma_covariate;
+      gamma_factor, gamma_covariate, implied_item, implied_slot, user_index, ext_to_user;
     Eigen::MatrixXi rescov_index;
     Structure(const Rcpp::List MODEL, const Eigen::Ref<const Eigen::VectorXd> CAT);
   };
@@ -36,10 +36,14 @@ namespace model{
   struct Matrices{
     const Structure &structure;
     Eigen::VectorXd tau, sd, alpha, mu, common_var, residual_var, scale, tau_std, location;
-    Eigen::MatrixXd lambda, lkj_z, lkj_w, lkj_cumw, chol, dchol, psi, ib_inv, lambda_ib_inv, theta, gamma, pi, pi_std;
+    Eigen::VectorXd user_vector;
+    Eigen::MatrixXd lambda, lkj_z, lkj_w, lkj_cumw, chol, dchol, psi, ib_inv, lambda_ib_inv, theta, gamma, pi, pi_std,
+      implied_jacobian;
     std::vector<Eigen::MatrixXd> lambda_jacobian;
     Matrices(const Eigen::Ref<const Eigen::VectorXd> PARAMETER_VECTOR, const Structure &STRUCTURE);
     double rescov(const int K, const int L) const { return theta.size() > 0 ? theta(K, L) : 0; }
+    Eigen::MatrixXd to_user(const Eigen::Ref<const Eigen::MatrixXd> M) const;
+    Eigen::MatrixXd hessian_to_user(const Eigen::Ref<const Eigen::MatrixXd> H, const Eigen::Ref<const Eigen::VectorXd> G) const;
   };
 
   struct Groups{

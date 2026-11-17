@@ -201,3 +201,13 @@ local({
   )
   expect_error(pmlsem(paste(syntax, "f ~ x1", sep = "\n"), frame, ordered = FALSE, missing = "available.cases"), "available.cases")
 })
+
+#### Observed mediation with numeric variables equals ML when just identified ####
+local({
+  set.seed(11)
+  x <- rnorm(500)
+  m <- 0.5 * x + rnorm(500)
+  data <- data.frame(x, m, y = 0.7 * m + rnorm(500))
+  model <- "y ~ c*x\nm ~ a*x\ny ~ b*m\nab := a*b"
+  expect_equal(coef(pmlsem(model, data, ordered = FALSE)), coef(lavaan::sem(model, data, conditional.x = TRUE)), tolerance = 1e-5)
+})

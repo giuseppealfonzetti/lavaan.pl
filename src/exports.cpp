@@ -23,7 +23,7 @@ Rcpp::List cpp_pl(const Eigen::Map<Eigen::VectorXd> PARAMETER_VECTOR, const Rcpp
     Eigen::MatrixXd hd, ud;
     pairs::add_univariate(pars[g], data, order, w.ll, w.gradient, hd, ud);
     ll += w.ll;
-    if(order != Order::value) gradient.segment(groups.parameter_offset[g], groups.structure[g].d) = w.gradient;
+    if(order != Order::value) gradient.segment(groups.parameter_offset[g], groups.structure[g].d_user) = pars[g].to_user(w.gradient);
   }
   return Rcpp::List::create(Rcpp::Named("pl") = ll, Rcpp::Named("gradient") = gradient);
 }
@@ -59,9 +59,10 @@ Rcpp::List cpp_sandwich(const Eigen::Map<Eigen::VectorXd> PARAMETER_VECTOR, cons
     RcppParallel::parallelFor(0, data.responses.rows(), cw, 256);
     const Eigen::MatrixXd weighted = cluster_weights.size() > 0 ? Eigen::MatrixXd(case_scores * cluster_weights) :
       Eigen::MatrixXd(case_scores * jweights.asDiagonal());
-    H.block(off, off, S.d, S.d) = hw.hessian / groups.n;
-    J.block(off, off, S.d, S.d) = weighted * weighted.transpose() / groups.n;
-    gradient.segment(off, S.d) = hw.gradient;
+    const Eigen::MatrixXd weighted_user = pars[g].to_user(weighted);
+    H.block(off, off, S.d_user, S.d_user) = pars[g].hessian_to_user(hw.hessian, hw.gradient) / groups.n;
+    J.block(off, off, S.d_user, S.d_user) = weighted_user * weighted_user.transpose() / groups.n;
+    gradient.segment(off, S.d_user) = pars[g].to_user(hw.gradient);
     if(PAIRVAR){
       Eigen::MatrixXd univariate_items = Eigen::MatrixXd::Zero(S.d, S.p), pair_items = Eigen::MatrixXd::Zero(S.d, S.p);
       Eigen::MatrixXd pv = Eigen::MatrixXd::Zero(S.d, S.d);
@@ -84,7 +85,7 @@ Rcpp::List cpp_sandwich(const Eigen::Map<Eigen::VectorXd> PARAMETER_VECTOR, cons
       const Eigen::VectorXd u = univariate_items.rowwise().sum();
       const double m = S.p - 1.0;
       pv += (cross + cross.transpose()) / m + ((S.p - 2.0) * univariate_items * univariate_items.transpose() + u * u.transpose()) / (m * m);
-      pairvar.block(off, off, S.d, S.d) = pv;
+      pairvar.block(off, off, S.d_user, S.d_user) = pars[g].to_user(Eigen::MatrixXd(pars[g].to_user(pv).transpose()));
     }
   }
   return Rcpp::List::create(Rcpp::Named("H") = H, Rcpp::Named("J") = J, Rcpp::Named("gradient") = gradient,
@@ -99,37 +100,40 @@ Rcpp::List cpp_reduced_form(const Eigen::Map<Eigen::VectorXd> PARAMETER_VECTOR, 
   for(int g = 0; g < groups.ngroups; g++) nitem += pairs::ReducedIndex(groups.structure[g].items, groups.structure[g].nx).size;
   Eigen::VectorXd rho(groups.npairs), tau(nitem);
   Eigen::MatrixXd jacobian = Eigen::MatrixXd::Zero(groups.npairs, groups.d), tau_jacobian = Eigen::MatrixXd::Zero(nitem, groups.d);
-  auto put = [](const pairs::Pair &PAIR, const int ROW, const int OFFSET, const int E, Eigen::MatrixXd &OUT){
+  auto put = [](const pairs::Pair &PAIR, const int ROW, const int E, Eigen::MatrixXd &OUT){
     const std::vector<int> I = PAIR.parameter_indices();
     const Eigen::VectorXd v = PAIR.to_local(Eigen::VectorXd::Unit(PAIR.nreduced, E));
-    for(std::size_t a = 0; a < I.size(); a++) OUT(ROW, OFFSET + I[a]) += v(a);
+    for(std::size_t a = 0; a < I.size(); a++) OUT(ROW, I[a]) += v(a);
   };
   for(int g = 0, ot = 0; g < groups.ngroups; g++){
     const model::Structure &S = groups.structure[g];
     const model::Matrices &par = pars[g];
     const pairs::ReducedIndex index(S.items, S.nx);
     const int off = groups.parameter_offset[g];
+    Eigen::MatrixXd ext = Eigen::MatrixXd::Zero(groups.npairs, S.d), tau_ext = Eigen::MatrixXd::Zero(nitem, S.d);
     tau.segment(ot, S.items.nthr) = par.tau_std;
     for(int r = 0; r < S.items.npairs; r++){
       const pairs::Pair pair(par, r, true);
       rho(groups.pair_offset[g] + r) = pair.rho;
-      put(pair, groups.pair_offset[g] + r, off, pair.nloc, jacobian);
+      put(pair, groups.pair_offset[g] + r, pair.nloc, ext);
     }
     for(int k = 0; k < S.p; k++){
       const pairs::Pair item(par, -1, true, k);
-      for(int a = 0; a < item.cat_k - 1; a++) put(item, ot + S.items.tau_offset(k) + a, off, a, tau_jacobian);
+      for(int a = 0; a < item.cat_k - 1; a++) put(item, ot + S.items.tau_offset(k) + a, a, tau_ext);
       for(int c = 0; c < S.nx; c++){
         const int row = ot + index.slope(c, k);
         tau(row) = par.pi_std(k, c);
-        put(item, row, off, item.nloc + 1 + c, tau_jacobian);
+        put(item, row, item.nloc + 1 + c, tau_ext);
       }
       if(item.numeric_k){
         tau(ot + index.location(k)) = par.location(k);
         tau(ot + index.scale(k)) = par.scale(k);
-        put(item, ot + index.location(k), off, 0, tau_jacobian);
-        put(item, ot + index.scale(k), off, item.nloc + 1 + S.nx, tau_jacobian);
+        put(item, ot + index.location(k), 0, tau_ext);
+        put(item, ot + index.scale(k), item.nloc + 1 + S.nx, tau_ext);
       }
     }
+    jacobian.middleCols(off, S.d_user) = par.to_user(ext.transpose()).transpose();
+    tau_jacobian.middleCols(off, S.d_user) = par.to_user(tau_ext.transpose()).transpose();
     ot += index.size;
   }
   return Rcpp::List::create(Rcpp::Named("rho") = rho, Rcpp::Named("jacobian") = jacobian, Rcpp::Named("tau") = tau,

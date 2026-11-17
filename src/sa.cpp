@@ -128,7 +128,7 @@ Rcpp::List cpp_sa(
         pairs::add_univariate(PARS[g], data[g], Order::gradient, w.ll, w.gradient, hd, ud, item_weights);
       }
       ll += w.ll;
-      grad.segment(groups.parameter_offset[g], S.d) = w.gradient;
+      grad.segment(groups.parameter_offset[g], S.d_user) = PARS[g].to_user(w.gradient);
     }
     if(!std::isfinite(ll) || !grad.allFinite()) return false;
     GRADIENT = constrained ? Eigen::VectorXd(-K_sparse.transpose() * grad / n) : Eigen::VectorXd(-grad / n);
@@ -163,7 +163,8 @@ Rcpp::List cpp_sa(
       double ll = 0;
       Eigen::MatrixXd ud;
       pairs::add_univariate(pars[g], data[g], Order::hessian, ll, hw.gradient, hw.hessian, ud);
-      H.block(groups.parameter_offset[g], groups.parameter_offset[g], groups.structure[g].d, groups.structure[g].d) = hw.hessian / n;
+      const int du = groups.structure[g].d_user;
+      H.block(groups.parameter_offset[g], groups.parameter_offset[g], du, du) = pars[g].hessian_to_user(hw.hessian, hw.gradient) / n;
     }
     if(constrained) H = K_sparse.transpose() * H * K_sparse;
     if(!H.allFinite()) return false;

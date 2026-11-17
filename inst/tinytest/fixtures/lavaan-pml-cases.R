@@ -143,6 +143,7 @@ t2 | a*t1 + b*t2 + c*t3
 t3 | a*t1 + b*t2 + c*t3
 t4 | a*t1 + b*t2 + c*t3
 i ~ 0*1"
+serial_mediation <- "y1 ~ x1\ny2 ~ y1 + x1\ny3 ~ y2"
 simulated_model <- "f1 =~ y1 + y2 + y3 + y4 + y5 + y6\nf2 =~ y7 + y8 + y9 + y10 + y11 + y12"
 grid <- list(
   "binary, one factor" = list(
@@ -416,6 +417,21 @@ lavaan_pml_cases <- c(
     },
     "growth/covariates" = function(fit) {
       fit$growth(paste(growth_model, "i + s ~ x1 + x2", sep = "\n"), growth_data, test = "mean.var.adjusted")
+    },
+    "mediation/simple" = function(fit) {
+      fit$sem("y1 ~ a*x1\ny2 ~ b*y1 + c*x1\nab := a*b", mimic_data, test = "mean.var.adjusted")
+    },
+    "mediation/serial" = function(fit) {
+      fit$sem(serial_mediation, mimic_data, test = "mean.var.adjusted")
+    },
+    "mediation/serial, theta" = function(fit) {
+      fit$sem(serial_mediation, mimic_data, parameterization = "theta", test = "mean.var.adjusted")
+    },
+    "mediation/equal paths" = function(fit) {
+      fit$sem("y1 ~ x1\ny2 ~ b*y1\ny3 ~ b*y2 + x1", mimic_data, test = "mean.var.adjusted")
+    },
+    "mediation/latent" = function(fit) {
+      fit$sem("f =~ y4 + y5 + y6\ny1 ~ x1\nf ~ y1\ny2 ~ f + y1", mimic_data, test = "mean.var.adjusted")
     },
     "covariates/clusters" = function(fit) {
       fit$sem(

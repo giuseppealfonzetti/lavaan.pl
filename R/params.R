@@ -167,6 +167,12 @@ vector_to_matrices <- function(MODEL, PARAMETER_VECTOR) {
   diag(R)[rsd] <- exp(2 * ls[rsd])
   scales <- exp(ls)
   scales[MODEL$NUMERIC] <- 1
+  I <- which(!is.na(MODEL$IMPLIED))
+  if (length(I)) {
+    A <- solve(diag(q) - B)
+    diag(Psi)[I] <- 0
+    diag(Psi)[I] <- solve(A[I, I, drop = FALSE]^2, scales[MODEL$IMPLIED[I]]^-2 - diag(A %*% Psi %*% t(A))[I])
+  }
   Ga <- MODEL$GAMMA
   Ga[is.na(Ga)] <- PARAMETER_VECTOR[b == "gamma"]
   Ka <- MODEL$KAPPA
@@ -240,7 +246,7 @@ lincon <- function(MODEL, NTHR) {
   for (r in seq_len(nrow(A))) {
     blk <- unique(block[A[r, ] != 0])
     if (any(blk == "corr" & !direct[A[r, ] != 0])) stop("Constraints on the latent correlations require LATCOV = \"direct\".")
-    if (length(blk) > 1) stop("Each constraint must involve either thresholds, loadings, latent covariances, latent log standard deviations, regressions, residual covariances, intercepts, latent means, log scales, or effects of the covariates.")
+    if (length(blk) > 1 && any(blk %in% c("tau", "logsd", "scale"))) stop("Constraints on thresholds, latent log standard deviations or log scales must not involve other parameters.")
   }
   piv <- integer(0)
   for (j in seq_len(d)) {

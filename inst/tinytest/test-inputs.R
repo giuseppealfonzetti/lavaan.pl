@@ -139,6 +139,12 @@ local({
     CONSTRAINTS = list(A = matrix(1, 1, 2), b = c(0, 1))
   ))
   expect_error(lavaan.pl:::lavaanpl_model(two_factors, CONSTRAINTS = list(A = 1, b = 0)))
+  phantom <- lavaan.pl:::lavaanpl_model(cbind(replace(two_factors, 1, 0), c(1, rep(0, 5))), IMPLIED = c(NA, NA, 1))
+  expect_identical(phantom$IMPLIED, c(NA, NA, 1L))
+  expect_identical(phantom$LATCOV, "direct")
+  expect_error(lavaan.pl:::lavaanpl_model(two_factors, IMPLIED = c(1, NA)), "single fixed loading")
+  expect_inherits(lavaan.pl:::lavaanpl_model(two_factors, THETA = diag(c(0, rep(1, 5))), PARAMETERIZATION = "theta"), "lavaanpl_model")
+  expect_error(lavaan.pl:::lavaanpl_model(two_factors, THETA = diag(-1, 6), PARAMETERIZATION = "theta"), "negative")
 })
 
 #### lavaan.pl:::lavaanpl_model() takes the loadings and latent variances as given, with unit variances by default ####

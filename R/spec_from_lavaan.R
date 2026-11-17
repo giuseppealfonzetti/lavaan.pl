@@ -8,7 +8,6 @@
 #' @keywords internal
 spec_from_lavaan <- function(template, start = NULL) {
   pt <- lavaan::parTable(template)
-  lv <- lavaan::lavNames(template, "lv")
   ovx <- lavaan::lavNames(template, "ov.x")
 
   if (template@Data@nlevels > 1L) {
@@ -24,9 +23,6 @@ spec_from_lavaan <- function(template, start = NULL) {
   numeric_items <- template@Data@ov$type[match(template@Data@ov.names[[1]], template@Data@ov$name)] != "ordered"
   if (any(pt$op == "<~")) {
     stop("Composites (`<~`) are not currently supported.", call. = FALSE)
-  }
-  if (any(pt$op == "~" & !(pt$rhs %in% ovx | (pt$lhs %in% lv & pt$rhs %in% lv)))) {
-    stop("Regressions involving observed variables other than exogenous covariates are not currently supported.", call. = FALSE)
   }
   if (nrow(template@Model@cin.JAC) > 0L || any(is.finite(c(pt$lower[pt$free > 0], pt$upper[pt$free > 0])))) {
     stop("Inequality constraints and parameter bounds are not currently supported.", call. = FALSE)
@@ -79,6 +75,8 @@ spec_from_lavaan <- function(template, start = NULL) {
   frees <- lavaan_matrices(template, "free")
   ests <- lavaan_matrices(template, "est")
   jac <- template@Model@ceq.JAC
+  phantom_items <- match(colnames(frees[[1]]$lambda), template@Data@ov.names[[1]])
+  implied <- if (!thetapar) ifelse(numeric_items[phantom_items] %in% FALSE, phantom_items, NA)
   rhs <- template@Model@ceq.rhs
   models <- Map(function(free, est) {
     mask <- Map(function(f, e) unname(replace(e, f > 0, NA)), free, est)
@@ -98,6 +96,7 @@ spec_from_lavaan <- function(template, start = NULL) {
       TAU = as.vector(mask$tau),
       GAMMA = if (ncol(mask$gamma)) mask$gamma,
       KAPPA = if (ncol(mask$kappa)) mask$kappa,
+      IMPLIED = implied,
       LATCOV = if (!all(free$psi[off] > 0) || cov_con) "direct" else "lkj",
       PARAMETERIZATION = template@Options$parameterization,
       NUMERIC = numeric_items
@@ -180,31 +179,27 @@ spec_from_lavaan <- function(template, start = NULL) {
 lavaan_matrices <- function(template, WHAT) {
   groups <- if (is.character(WHAT)) lavaan::lavInspect(template, WHAT, drop.list.single.group = FALSE) else WHAT
   items <- template@Data@ov.names[[1]]
-  lv <- colnames(lavaan::lavInspect(template, "free", drop.list.single.group = FALSE)[[1]]$lambda)
+  masks <- c(lavaan::lavInspect(template, "free", drop.list.single.group = FALSE),
+             lavaan::lavInspect(template, "est", drop.list.single.group = FALSE))
+  lv <- colnames(masks[[1]]$lambda)
+  beta <- Reduce(`+`, lapply(masks, function(x) abs(if (is.null(x$beta)) diag(0, length(lv)) else unclass(x$beta))))
+  psi <- Reduce(`+`, lapply(masks, function(x) abs(unclass(x$psi))))
   ph <- which(lv %in% items)
-  keep <- setdiff(seq_along(lv), ph)
+  terminal <- ph[colSums(beta[, ph, drop = FALSE]) == 0]
+  fold <- terminal[rowSums(psi[terminal, setdiff(seq_along(lv), terminal), drop = FALSE]) == 0]
+  keep <- setdiff(seq_along(lv), fold)
+  i <- match(lv[fold], items)
   nx <- NCOL(template@Data@eXo[[1]])
   if (is.null(template@Data@eXo[[1]])) nx <- 0
   lapply(groups, function(x) {
     m <- lapply(x, unclass)
     if (is.null(m$gamma)) m$gamma <- matrix(0, length(lv), nx)
     m$kappa <- matrix(0, length(items), nx)
-    for (j in ph) {
-      i <- match(lv[j], items)
-      if (
-        any(m$beta[keep, j] != 0) ||
-          any(m$beta[ph, j] != 0) ||
-          any(m$beta[j, ph] != 0) ||
-          any(m$psi[j, -j] != 0)
-      ) {
-        stop("Regressions involving observed variables other than exogenous covariates are not currently supported.", call. = FALSE)
-      }
-      m$lambda[i, keep] <- m$beta[j, keep]
-      m$kappa[i, ] <- m$gamma[j, ]
-      m$theta[i, i] <- m$psi[j, j]
-      m$nu[i] <- m$nu[i] + m$alpha[j]
-    }
-    if (length(ph)) {
+    if (length(fold)) {
+      m$lambda[i, keep] <- m$beta[fold, keep]
+      m$kappa[i, ] <- m$gamma[fold, ]
+      m$theta[i, i] <- m$psi[fold, fold]
+      m$nu[i] <- m$nu[i] + m$alpha[fold]
       m$lambda <- m$lambda[, keep, drop = FALSE]
       m$psi <- m$psi[keep, keep, drop = FALSE]
       m$beta <- m$beta[keep, keep, drop = FALSE]
